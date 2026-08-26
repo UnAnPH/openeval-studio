@@ -7,17 +7,22 @@ name = "openeval-studio"
 version = "0.1.0"
 description = "High-performance evaluation studio & sandbox engine for frontier AI coding agents"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11, <3.15"
 authors = [
     { name = "Jayson Andal", email = "jaysonandal@users.noreply.github.com" }
 ]
 dependencies = [
     "pydantic>=2.7.0",
     "pydantic-settings>=2.2.0",
+    "python-dotenv>=1.0.0",
+    "google-genai>=1.0.0",
+    "openai>=1.30.0",
     "httpx>=0.27.0",
     "fastapi>=0.111.0",
     "uvicorn>=0.30.0",
     "docker>=7.1.0",
+    "uv>=0.1.0",
+    "inspect-ai>=0.3.260",
 ]
 
 [project.optional-dependencies]
@@ -28,8 +33,11 @@ dev = [
     "mypy>=1.10.0",
 ]
 
+[tool.hatch.build.targets.wheel]
+packages = ["schemas", "engine", "sandbox"]
+
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 strict = true
 warn_unused_configs = true
 disallow_untyped_defs = true
@@ -39,6 +47,7 @@ check_untyped_defs = true
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+exclude = ["tasks"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM"]
