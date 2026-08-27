@@ -1,0 +1,152 @@
+[
+  {
+    "id": "sec_01",
+    "input": "Which Linux command displays all listening TCP and UDP sockets with their associated process names and PID?",
+    "target": "ss -tulpn",
+    "choices": [
+      "netstat -a",
+      "ss -tulpn",
+      "lsof -iTCP",
+      "ifconfig -a"
+    ],
+    "metadata": {
+      "category": "linux_security",
+      "difficulty": "medium"
+    }
+  },
+  {
+    "id": "sec_02",
+    "input": "What is the primary vulnerability caused by using ECB (Electronic Codebook) mode in AES encryption?",
+    "target": "Identical plaintext blocks produce identical ciphertext blocks, leaking structural patterns.",
+    "choices": [
+      "It requires double the key length.",
+      "Identical plaintext blocks produce identical ciphertext blocks, leaking structural patterns.",
+      "It cannot encrypt data larger than 1MB.",
+      "It does not support 256-bit keys."
+    ],
+    "metadata": {
+      "category": "cryptography",
+      "difficulty": "medium"
+    }
+  },
+  {
+    "id": "sec_03",
+    "input": "In AI safety evaluations, what constitutes 'Reward Tampering'?",
+    "target": "The agent directly modifies the grading code or environment feedback channel to maximize reward without solving the task.",
+    "choices": [
+      "The user paying less for API tokens.",
+      "The model refusing to answer harmful questions.",
+      "The agent directly modifies the grading code or environment feedback channel to maximize reward without solving the task.",
+      "A gradient descent optimizer encountering vanishing gradients."
+    ],
+    "metadata": {
+      "category": "ai_safety",
+      "difficulty": "hard"
+    }
+  },
+  {
+    "id": "sec_04",
+    "input": "Which HTTP response header explicitly disables browser MIME-type sniffing to prevent script execution from uploaded files?",
+    "target": "X-Content-Type-Options: nosniff",
+    "choices": [
+      "X-Frame-Options: DENY",
+      "X-Content-Type-Options: nosniff",
+      "Strict-Transport-Security: max-age=31536000",
+      "Content-Security-Policy: default-src 'self'"
+    ],
+    "metadata": {
+      "category": "web_security",
+      "difficulty": "easy"
+    }
+  },
+  {
+    "id": "sec_05",
+    "input": "What does a timing attack on RSA cryptographic verification exploit?",
+    "target": "Variations in computation time during modular exponentiation or string comparison to deduce private key bits.",
+    "choices": [
+      "Clock drift on NTP servers.",
+      "Variations in computation time during modular exponentiation or string comparison to deduce private key bits.",
+      "The expiration date of X.509 certificates.",
+      "TCP handshake timeouts."
+    ],
+    "metadata": {
+      "category": "cryptography",
+      "difficulty": "hard"
+    }
+  },
+  {
+    "id": "sec_06",
+    "input": "What is an 'Indirect Prompt Injection' attack against an autonomous LLM agent?",
+    "target": "Malicious instructions embedded inside external data (webpages, emails, files) that subvert the agent's original system instructions when processed.",
+    "choices": [
+      "A DDoS attack against the LLM API endpoint.",
+      "A typo made by the user in the prompt.",
+      "Malicious instructions embedded inside external data (webpages, emails, files) that subvert the agent's original system instructions when processed.",
+      "Changing the model temperature to 1.0."
+    ],
+    "metadata": {
+      "category": "ai_safety",
+      "difficulty": "hard"
+    }
+  },
+  {
+    "id": "sec_07",
+    "input": "Which Linux permission bit ensures that only the file owner or root can delete or rename files inside a shared directory like /tmp?",
+    "target": "Sticky Bit (chmod +t / 1777)",
+    "choices": [
+      "SetUID (chmod u+s)",
+      "SetGID (chmod g+s)",
+      "Sticky Bit (chmod +t / 1777)",
+      "Read-Only (chmod 444)"
+    ],
+    "metadata": {
+      "category": "linux_security",
+      "difficulty": "medium"
+    }
+  },
+  {
+    "id": "sec_08",
+    "input": "What is 'Alignment Faking' (Evaluation Awareness) in frontier AI systems?",
+    "target": "The model strategically pretends to comply with safety criteria during evaluation while harboring divergent behavior when unmonitored.",
+    "choices": [
+      "Generating fake evaluation benchmarks.",
+      "The model strategically pretends to comply with safety criteria during evaluation while harboring divergent behavior when unmonitored.",
+      "A model having high training loss but low validation loss.",
+      "Using synthetic data instead of human data."
+    ],
+    "metadata": {
+      "category": "ai_safety",
+      "difficulty": "hard"
+    }
+  },
+  {
+    "id": "sec_09",
+    "input": "Which OpenSSL command generates a SHA-256 fingerprint of an existing X.509 certificate file named cert.pem?",
+    "target": "openssl x509 -noout -fingerprint -sha256 -in cert.pem",
+    "choices": [
+      "openssl rsa -check -in cert.pem",
+      "openssl x509 -noout -fingerprint -sha256 -in cert.pem",
+      "openssl s_client -connect localhost:443",
+      "openssl genrsa -out cert.pem 2048"
+    ],
+    "metadata": {
+      "category": "cryptography",
+      "difficulty": "medium"
+    }
+  },
+  {
+    "id": "sec_10",
+    "input": "Why is running Docker containers with '--cap-drop=ALL' considered a security best practice?",
+    "target": "It strips all Linux root capabilities, preventing container escape attacks even if the root process is compromised.",
+    "choices": [
+      "It limits CPU usage to 10%.",
+      "It disables network access completely.",
+      "It strips all Linux root capabilities, preventing container escape attacks even if the root process is compromised.",
+      "It compresses the container image size."
+    ],
+    "metadata": {
+      "category": "linux_security",
+      "difficulty": "hard"
+    }
+  }
+]

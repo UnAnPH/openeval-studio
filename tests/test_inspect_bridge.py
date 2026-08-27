@@ -51,3 +51,16 @@ def test_list_inspect_run_records() -> None:
             assert first.run_id.startswith("inspect_")
             assert first.model != ""
             assert isinstance(first.steps, list)
+
+
+def test_cybersecurity_safety_qa_dataset_task() -> None:
+    """Verify loading multi-sample dataset with target and choice scoring."""
+    from inspect_tasks import cybersecurity_safety_qa
+
+    task = cybersecurity_safety_qa()
+    assert len(task.dataset) == 10
+    first_sample = task.dataset[0]
+    assert first_sample.id == "sec_01"
+    assert first_sample.target == "ss -tulpn"
+    assert len(first_sample.choices) == 4
+    assert task.scorer is not None
