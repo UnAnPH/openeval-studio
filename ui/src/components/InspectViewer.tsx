@@ -1,150 +1,131 @@
-import React, { useEffect, useState } from 'react';
-import { CheckCircle2, ExternalLink, Layers, ShieldCheck, Sparkles, Terminal } from 'lucide-react';
+import React from 'react';
+import {
+  IonBadge,
+  IonButton,
+  IonCard,
+  IonCardContent,
+  IonCardHeader,
+  IonCardTitle,
+  IonChip,
+  IonIcon,
+} from '@ionic/react';
+import {
+  openOutline,
+  shieldCheckmarkOutline,
+  cubeOutline,
+  statsChartOutline,
+  sparklesOutline,
+} from 'ionicons/icons';
 
 interface InspectViewerProps {
   inspectPort?: number;
 }
 
 export const InspectViewer: React.FC<InspectViewerProps> = ({ inspectPort = 7575 }) => {
-  const [isServerLive, setIsServerLive] = useState<boolean>(false);
-  const inspectUrl = `http://127.0.0.1:${inspectPort}`;
+  const inspectUrl = `http://127.0.0.1:${inspectPort}/`;
 
-  useEffect(() => {
-    const checkLiveness = async () => {
-      try {
-        await fetch(inspectUrl, { mode: 'no-cors' });
-        setIsServerLive(true);
-      } catch {
-        setIsServerLive(false);
-      }
-    };
-    checkLiveness();
-    const interval = setInterval(checkLiveness, 3000);
-    return () => clearInterval(interval);
-  }, [inspectUrl]);
+  const handleOpenInspectWindow = () => {
+    window.open(inspectUrl, '_blank', 'noopener,noreferrer');
+  };
 
   return (
-    <div className="flex flex-col h-full bg-surface-elevated/40 rounded-2xl border border-border overflow-hidden">
+    <IonCard className="m-0 p-0 flex flex-col h-full bg-surface-elevated/40 rounded-2xl border border-border overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 bg-surface border-b border-border">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
-            <ShieldCheck className="w-5 h-5" />
-          </div>
+      <IonCardHeader className="flex flex-row items-center justify-between px-5 py-3 bg-surface border-b border-border">
+        <div className="flex items-center gap-2.5">
+          <IonIcon icon={shieldCheckmarkOutline} className="text-indigo-400 text-lg" />
           <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm font-bold text-white tracking-tight">
-                UK AI Safety Institute — Inspect AI Visualizer
-              </h2>
-              <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-bold">
-                Official Studio
-              </span>
-            </div>
-            <p className="text-xs text-slate-400">Frontier evaluation framework & trace visualizer</p>
+            <IonCardTitle className="text-sm font-bold text-white tracking-tight flex items-center gap-2">
+              UK AISI Inspect AI Visualizer
+              <IonBadge color="tertiary" className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5">
+                Official Log Viewer
+              </IonBadge>
+            </IonCardTitle>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface border border-border text-xs">
-          <span className={`w-2 h-2 rounded-full ${isServerLive ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
-          <span className="text-slate-300 font-mono text-[11px]">
-            {isServerLive ? `Live at 127.0.0.1:${inspectPort}` : `Port ${inspectPort} Standby`}
+        <div className="flex items-center gap-2">
+          <IonChip className="bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-xs">
+            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 mr-1 animate-pulse" />
+            Port {inspectPort}
+          </IonChip>
+          <IonButton
+            size="small"
+            color="primary"
+            onClick={handleOpenInspectWindow}
+            className="text-xs font-semibold"
+          >
+            <IonIcon icon={openOutline} slot="end" />
+            Open Visualizer
+          </IonButton>
+        </div>
+      </IonCardHeader>
+
+      {/* Main Hub Content */}
+      <IonCardContent className="flex-1 overflow-y-auto p-6 flex flex-col justify-center items-center text-center space-y-6">
+        <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-indigo-600 to-sky-500 flex items-center justify-center shadow-xl shadow-indigo-500/20">
+          <IonIcon icon={shieldCheckmarkOutline} className="text-3xl text-white" />
+        </div>
+
+        <div className="max-w-md space-y-2">
+          <h3 className="text-lg font-bold text-white tracking-tight">
+            Official UK AI Safety Institute Visualizer
+          </h3>
+          <p className="text-xs text-slate-300 leading-relaxed">
+            Inspect View runs as a dedicated server displaying sample message trees, solver actions,
+            model thoughts, token costs, and verifier scorecards from your <code className="text-indigo-300">logs/*.eval</code> archives.
+          </p>
+        </div>
+
+        {/* Feature Highlights Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full max-w-xl text-left">
+          <div className="p-3.5 rounded-xl bg-surface border border-border space-y-1">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-indigo-300">
+              <IonIcon icon={cubeOutline} className="text-sm" />
+              <span>Full Trajectory Replay</span>
+            </div>
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              Step through prompt turns, Docker tool calls, and observations with complete token metadata.
+            </p>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-surface border border-border space-y-1">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-sky-300">
+              <IonIcon icon={statsChartOutline} className="text-sm" />
+              <span>Score & Metric Cards</span>
+            </div>
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              Inspect held-out pytest verifier outcomes, accuracy distributions, and cost accounting.
+            </p>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-surface border border-border space-y-1">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-300">
+              <IonIcon icon={sparklesOutline} className="text-sm" />
+              <span>Direct Log Links</span>
+            </div>
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              Open and share deep-linked evaluation reports directly at <span className="font-mono text-emerald-400">/tasks/</span>.
+            </p>
+          </div>
+        </div>
+
+        {/* Primary Action Button */}
+        <div className="pt-2 flex flex-col items-center gap-2">
+          <IonButton
+            size="default"
+            color="tertiary"
+            onClick={handleOpenInspectWindow}
+            className="font-bold text-sm shadow-lg shadow-indigo-500/20"
+          >
+            <IonIcon icon={openOutline} slot="start" />
+            Launch Inspect Visualizer ({inspectUrl})
+          </IonButton>
+          <span className="text-[11px] text-slate-500 font-mono">
+            CLI Command: uv run inspect view --port {inspectPort}
           </span>
         </div>
-      </div>
-
-      {/* Main Content Explorer */}
-      <div className="flex-1 p-6 space-y-6 overflow-y-auto font-sans">
-        {/* Hero CTA Card */}
-        <div className="p-6 rounded-2xl bg-gradient-to-br from-indigo-950/40 via-surface to-surface-elevated border border-indigo-500/30 shadow-xl space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-2 text-indigo-400 font-bold text-base">
-                <Sparkles className="w-5 h-5" />
-                Launch Full UK AISI Trace Explorer
-              </div>
-              <p className="text-xs text-slate-300 max-w-xl leading-relaxed">
-                UK AISI's standalone visualizer is designed for full-screen analysis of agent trajectories, token waterfall graphs, and held-out scoring breakdowns.
-              </p>
-            </div>
-
-            <a
-              href={inspectUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-5 py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 hover:from-indigo-400 hover:to-sky-400 font-bold text-sm text-white flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/25 transition-all active:scale-[0.98] flex-shrink-0"
-            >
-              <ExternalLink className="w-4 h-4" />
-              Open Inspect View ({inspectUrl})
-            </a>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-border/40 text-xs text-slate-400 font-mono">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-              <span>Native @task Bridge</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-              <span>Token Waterfall Charts</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-              <span>Held-Out Scorer Metrics</span>
-            </div>
-          </div>
-        </div>
-
-        {/* 2-Column Details Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Left: Registered Tasks */}
-          <div className="p-4 rounded-xl bg-surface border border-border space-y-3">
-            <div className="flex items-center gap-2 text-xs font-semibold text-slate-300 uppercase tracking-wider">
-              <Layers className="w-4 h-4 text-primary" />
-              Registered Inspect AI Tasks (5)
-            </div>
-            <div className="space-y-1.5 font-mono text-xs text-slate-300">
-              <div className="p-2 rounded bg-surface-elevated border border-border/60 flex items-center justify-between">
-                <span>inspect_tasks.py@cancel_async_tasks</span>
-                <span className="text-[10px] text-emerald-400 font-bold">READY</span>
-              </div>
-              <div className="p-2 rounded bg-surface-elevated border border-border/60 flex items-center justify-between">
-                <span>inspect_tasks.py@regex_log</span>
-                <span className="text-[10px] text-emerald-400 font-bold">READY</span>
-              </div>
-              <div className="p-2 rounded bg-surface-elevated border border-border/60 flex items-center justify-between">
-                <span>inspect_tasks.py@openssl_selfsigned_cert</span>
-                <span className="text-[10px] text-emerald-400 font-bold">READY</span>
-              </div>
-              <div className="p-2 rounded bg-surface-elevated border border-border/60 flex items-center justify-between">
-                <span>inspect_tasks.py@feed_sync_platform</span>
-                <span className="text-[10px] text-emerald-400 font-bold">READY</span>
-              </div>
-              <div className="p-2 rounded bg-surface-elevated border border-border/60 flex items-center justify-between">
-                <span>inspect_tasks.py@build_pov_ray</span>
-                <span className="text-[10px] text-emerald-400 font-bold">READY</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Right: Quick CLI Commands */}
-          <div className="p-4 rounded-xl bg-surface border border-border space-y-3">
-            <div className="flex items-center gap-2 text-xs font-semibold text-slate-300 uppercase tracking-wider">
-              <Terminal className="w-4 h-4 text-primary" />
-              CLI Quick Commands
-            </div>
-            <div className="space-y-2 text-xs">
-              <div className="p-2.5 rounded-lg bg-[#040711] border border-border/80 font-mono text-slate-300 space-y-1">
-                <div className="text-[11px] text-slate-500"># Start Inspect View Visualizer:</div>
-                <div className="text-sky-300">uv run inspect view --port 7575</div>
-              </div>
-              <div className="p-2.5 rounded-lg bg-[#040711] border border-border/80 font-mono text-slate-300 space-y-1">
-                <div className="text-[11px] text-slate-500"># Run Evaluation with Inspect AI:</div>
-                <div className="text-emerald-300">uv run inspect eval inspect_tasks.py@cancel_async_tasks --model google/gemini-2.0-flash</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+      </IonCardContent>
+    </IonCard>
   );
 };

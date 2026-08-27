@@ -1,5 +1,26 @@
 import { useEffect, useState } from 'react';
-import { Play, RotateCcw, AlertTriangle, Bot, ShieldCheck, Square } from 'lucide-react';
+import {
+  IonApp,
+  IonBadge,
+  IonButton,
+  IonCard,
+  IonContent,
+  IonIcon,
+  IonLabel,
+  IonPage,
+  IonSegment,
+  IonSegmentButton,
+  IonSpinner,
+  IonToast,
+} from '@ionic/react';
+import {
+  alertCircleOutline,
+  playSharp,
+  shieldCheckmarkOutline,
+  stopSharp,
+  terminalOutline,
+} from 'ionicons/icons';
+
 import { Header } from './components/Header';
 import { TaskSelector } from './components/TaskSelector';
 import { ModelPicker } from './components/ModelPicker';
@@ -215,194 +236,171 @@ export function App() {
   const activeModel = models.find((m) => m.id === selectedModelId);
 
   return (
-    <div className="min-h-screen flex flex-col bg-background text-slate-100 font-sans">
-      <Header
-        serverConnected={serverConnected}
-        activeModelName={activeModel?.name}
-        totalTasks={tasks.length}
-      />
+    <IonApp className="dark">
+      <IonPage className="bg-background text-slate-100 font-sans">
+        <Header
+          serverConnected={serverConnected}
+          activeModelName={activeModel?.name}
+          totalTasks={tasks.length}
+        />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto p-6 space-y-6">
-        {!serverConnected && (
-          <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0" />
-              <span>
-                <strong>Backend Server Offline:</strong> To load benchmark tasks and models, start the API server in your terminal:{' '}
-                <code className="px-2 py-0.5 rounded bg-black/50 font-mono text-amber-200 border border-amber-500/20">
-                  uv run uvicorn server.app:app --port 8000
-                </code>
-              </span>
-            </div>
-          </div>
-        )}
-
-        {errorMsg && (
-          <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-300 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-rose-400" />
-              <span>{errorMsg}</span>
-            </div>
-            <button onClick={() => setErrorMsg(null)} className="underline hover:text-white">
-              Dismiss
-            </button>
-          </div>
-        )}
-
-        {/* 3-Column Studio Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* Left Column: Task & Model Config (4 Cols) */}
-          <div className="lg:col-span-4 space-y-6">
-            <div className="p-5 rounded-2xl bg-surface border border-border space-y-6 shadow-sm">
-              <ModelPicker
-                models={models}
-                selectedModelId={selectedModelId}
-                onSelectModel={setSelectedModelId}
-                disabled={isStreaming}
-              />
-
-              <TaskSelector
-                tasks={tasks}
-                selectedTaskId={selectedTaskId}
-                onSelectTask={setSelectedTaskId}
-                disabled={isStreaming}
-              />
-
-              {/* Evaluation Engine Selector */}
-              <div className="space-y-1.5 pt-1">
-                <label className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center justify-between">
-                  <span>Harness Engine</span>
-                  <span className="text-[10px] font-mono text-primary font-bold">
-                    {evalEngine === 'openeval' ? 'Native ReAct' : 'UK AISI Inspect'}
+        <IonContent className="ion-padding" scrollY={true}>
+          <div className="max-w-7xl w-full mx-auto space-y-6 pb-12">
+            {!serverConnected && (
+              <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <IonIcon icon={alertCircleOutline} className="text-amber-400 text-base flex-shrink-0" />
+                  <span>
+                    <strong>Backend Server Offline:</strong> To load benchmark tasks and models, start the API server in your terminal:{' '}
+                    <code className="px-2 py-0.5 rounded bg-black/50 font-mono text-amber-200 border border-amber-500/20">
+                      uv run uvicorn server.app:app --port 8000
+                    </code>
                   </span>
-                </label>
-                <div className="grid grid-cols-2 gap-2 bg-surface-elevated p-1 rounded-xl border border-border">
-                  <button
-                    type="button"
-                    onClick={() => setEvalEngine('openeval')}
-                    disabled={isStreaming}
-                    className={`py-2 px-2.5 rounded-lg text-xs font-bold transition-all ${
-                      evalEngine === 'openeval'
-                        ? 'bg-sky-500 text-slate-950 shadow'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    ⚡ OpenEval ReAct
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEvalEngine('inspect_ai')}
-                    disabled={isStreaming}
-                    className={`py-2 px-2.5 rounded-lg text-xs font-bold transition-all ${
-                      evalEngine === 'inspect_ai'
-                        ? 'bg-indigo-500 text-white shadow'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    🇬🇧 UK AISI Inspect
-                  </button>
                 </div>
               </div>
+            )}
 
-              {/* Launch CTA */}
-              {/* Launch / Stop CTA */}
-              {isStreaming ? (
-                <div className="space-y-2">
-                  <div className="w-full py-2.5 px-4 rounded-xl font-bold text-xs tracking-wide bg-sky-500/10 border border-sky-500/30 text-sky-300 flex items-center justify-center gap-2 glow-active">
-                    <RotateCcw className="w-4 h-4 animate-spin text-primary" />
-                    Evaluation In Progress...
+            {/* 3-Column Studio Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+              {/* Left Column: Task & Model Config (4 Cols) */}
+              <div className="lg:col-span-4 space-y-6">
+                <IonCard className="m-0 p-5 rounded-2xl bg-surface border border-border space-y-6 shadow-sm">
+                  <ModelPicker
+                    models={models}
+                    selectedModelId={selectedModelId}
+                    onSelectModel={setSelectedModelId}
+                    disabled={isStreaming}
+                  />
+
+                  <TaskSelector
+                    tasks={tasks}
+                    selectedTaskId={selectedTaskId}
+                    onSelectTask={setSelectedTaskId}
+                    disabled={isStreaming}
+                  />
+
+                  {/* Evaluation Engine Selector using Ionic Segment */}
+                  <div className="space-y-1.5 pt-1">
+                    <label className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+                      <span>Harness Engine</span>
+                      <IonBadge color={evalEngine === 'openeval' ? 'primary' : 'tertiary'} className="text-[10px] font-mono font-bold">
+                        {evalEngine === 'openeval' ? 'Native ReAct' : 'UK AISI Inspect'}
+                      </IonBadge>
+                    </label>
+
+                    <IonSegment
+                      value={evalEngine}
+                      onIonChange={(e) => setEvalEngine(e.detail.value as 'openeval' | 'inspect_ai')}
+                      disabled={isStreaming}
+                      className="bg-surface-elevated rounded-xl p-1 border border-border"
+                    >
+                      <IonSegmentButton value="openeval" className="rounded-lg text-xs font-bold">
+                        <IonLabel className="text-xs font-bold">⚡ OpenEval ReAct</IonLabel>
+                      </IonSegmentButton>
+                      <IonSegmentButton value="inspect_ai" className="rounded-lg text-xs font-bold">
+                        <IonLabel className="text-xs font-bold">🇬🇧 Inspect AI</IonLabel>
+                      </IonSegmentButton>
+                    </IonSegment>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleStopEval}
-                    className="w-full py-3 px-4 rounded-xl font-bold text-xs tracking-wide bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-600/25 flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+
+                  {/* Launch / Stop CTA */}
+                  {isStreaming ? (
+                    <div className="space-y-2">
+                      <div className="w-full py-2.5 px-4 rounded-xl font-bold text-xs tracking-wide bg-sky-500/10 border border-sky-500/30 text-sky-300 flex items-center justify-center gap-2 glow-active">
+                        <IonSpinner name="crescent" color="primary" className="w-4 h-4" />
+                        <span>Evaluation In Progress...</span>
+                      </div>
+                      <IonButton
+                        expand="block"
+                        color="danger"
+                        onClick={handleStopEval}
+                        className="font-bold text-xs shadow-lg shadow-rose-600/25"
+                      >
+                        <IonIcon icon={stopSharp} slot="start" />
+                        Stop Active Run
+                      </IonButton>
+                    </div>
+                  ) : (
+                    <IonButton
+                      expand="block"
+                      color="primary"
+                      onClick={handleLaunchEval}
+                      disabled={!selectedTaskId || !serverConnected}
+                      className="font-bold text-sm tracking-wide shadow-lg shadow-sky-500/25"
+                    >
+                      <IonIcon icon={playSharp} slot="start" />
+                      Launch Evaluation Run
+                    </IonButton>
+                  )}
+                </IonCard>
+
+                {/* Scorecard */}
+                <Scorecard run={activeRun} />
+
+                {/* AI Safety & Alignment Audits */}
+                <SafetyAuditPanel verdicts={activeRun?.audit_verdicts} />
+              </div>
+
+              {/* Right Column: Live Trajectory Stream or Inspect View (8 Cols) */}
+              <div className="lg:col-span-8 space-y-4">
+                {/* View Mode Segment Switcher */}
+                <div className="flex items-center justify-between bg-surface p-1.5 rounded-xl border border-border">
+                  <IonSegment
+                    value={activeTab}
+                    onIonChange={(e) => setActiveTab(e.detail.value as 'live_trajectory' | 'inspect_view')}
+                    className="max-w-md bg-surface-elevated rounded-lg"
                   >
-                    <Square className="w-3.5 h-3.5 fill-white" />
-                    Stop Active Run
-                  </button>
+                    <IonSegmentButton value="live_trajectory" className="rounded-md">
+                      <IonIcon icon={terminalOutline} className="mr-1.5" />
+                      <IonLabel className="text-xs font-bold">Live Trajectory</IonLabel>
+                    </IonSegmentButton>
+                    <IonSegmentButton value="inspect_view" className="rounded-md">
+                      <IonIcon icon={shieldCheckmarkOutline} className="mr-1.5" />
+                      <IonLabel className="text-xs font-bold">UK AISI Inspect</IonLabel>
+                    </IonSegmentButton>
+                  </IonSegment>
+
+                  <div className="hidden sm:block text-[11px] text-slate-500 font-mono pr-3">
+                    {activeTab === 'live_trajectory' ? 'Real-Time SSE Stream' : 'Official Log Visualizer'}
+                  </div>
                 </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleLaunchEval}
-                  disabled={!selectedTaskId || !serverConnected}
-                  className={`w-full py-3.5 px-4 rounded-xl font-bold text-sm tracking-wide transition-all shadow-lg flex items-center justify-center gap-2 ${
-                    !serverConnected
-                      ? 'bg-slate-800 text-slate-500 border border-border cursor-not-allowed'
-                      : 'bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white shadow-sky-500/25 active:scale-[0.98]'
-                  }`}
-                >
-                  <Play className="w-4 h-4 fill-white" />
-                  Launch Evaluation Run
-                </button>
-              )}
-            </div>
 
-            {/* Scorecard */}
-            <Scorecard run={activeRun} />
+                {/* Main Visualizer Frame */}
+                <div className="h-[640px]">
+                  {activeTab === 'live_trajectory' ? (
+                    <LiveTrajectory
+                      steps={liveSteps}
+                      status={runStatus}
+                      isStreaming={isStreaming}
+                      run={activeRun}
+                    />
+                  ) : (
+                    <InspectViewer inspectPort={7575} />
+                  )}
+                </div>
 
-            {/* AI Safety & Alignment Audits */}
-            <SafetyAuditPanel verdicts={activeRun?.audit_verdicts} />
-          </div>
-
-          {/* Right Column: Live Trajectory Stream or Inspect View (8 Cols) */}
-          <div className="lg:col-span-8 space-y-4">
-            {/* View Mode Segmented Switcher */}
-            <div className="flex items-center justify-between bg-surface p-1.5 rounded-xl border border-border">
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={() => setActiveTab('live_trajectory')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
-                    activeTab === 'live_trajectory'
-                      ? 'bg-sky-500 text-slate-950 shadow-md shadow-sky-500/20'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <Bot className="w-3.5 h-3.5" />
-                  Live ReAct Trajectory
-                </button>
-                <button
-                  onClick={() => setActiveTab('inspect_view')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
-                    activeTab === 'inspect_view'
-                      ? 'bg-indigo-500 text-white shadow-md shadow-indigo-500/20'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  🇬🇧 UK AISI Inspect View
-                </button>
-              </div>
-
-              <div className="hidden sm:block text-[11px] text-slate-500 font-mono pr-3">
-                {activeTab === 'live_trajectory' ? 'Real-Time SSE Stream' : 'Official Log Visualizer'}
-              </div>
-            </div>
-
-            {/* Main Visualizer Frame */}
-            <div className="h-[640px]">
-              {activeTab === 'live_trajectory' ? (
-                <LiveTrajectory
-                  steps={liveSteps}
-                  status={runStatus}
-                  isStreaming={isStreaming}
-                  run={activeRun}
+                {/* Leaderboard Table */}
+                <Leaderboard
+                  runs={runsHistory}
+                  onSelectRun={handleSelectPastRun}
+                  activeRunId={activeRunId || undefined}
                 />
-              ) : (
-                <InspectViewer inspectPort={7575} />
-              )}
+              </div>
             </div>
-
-            {/* Leaderboard Table */}
-            <Leaderboard
-              runs={runsHistory}
-              onSelectRun={handleSelectPastRun}
-              activeRunId={activeRunId || undefined}
-            />
           </div>
-        </div>
-      </main>
-    </div>
+        </IonContent>
+
+        {/* Error Toast */}
+        <IonToast
+          isOpen={!!errorMsg}
+          message={errorMsg || ''}
+          color="danger"
+          duration={5000}
+          onDidDismiss={() => setErrorMsg(null)}
+          buttons={[{ text: 'Dismiss', role: 'cancel' }]}
+        />
+      </IonPage>
+    </IonApp>
   );
 }
 

@@ -1,5 +1,20 @@
 import React from 'react';
-import { AlertOctagon, CheckCircle2, Eye, ShieldAlert, Sparkles } from 'lucide-react';
+import {
+  IonBadge,
+  IonCard,
+  IonCardContent,
+  IonCardHeader,
+  IonCardTitle,
+  IonIcon,
+  IonProgressBar,
+} from '@ionic/react';
+import {
+  alertCircleOutline,
+  checkmarkCircleOutline,
+  eyeOutline,
+  shieldOutline,
+  sparklesOutline,
+} from 'ionicons/icons';
 import { JudgeVerdict } from '../types';
 
 interface SafetyAuditPanelProps {
@@ -14,13 +29,13 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({ verdicts }) 
   const getMetricIcon = (name: string) => {
     switch (name) {
       case 'plan_adherence':
-        return <Sparkles className="w-4 h-4 text-sky-400" />;
+        return sparklesOutline;
       case 'hallucination_detection':
-        return <Eye className="w-4 h-4 text-amber-400" />;
+        return eyeOutline;
       case 'reward_tampering':
-        return <ShieldAlert className="w-4 h-4 text-rose-400" />;
+        return shieldOutline;
       default:
-        return <AlertOctagon className="w-4 h-4 text-slate-400" />;
+        return alertCircleOutline;
     }
   };
 
@@ -38,19 +53,22 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({ verdicts }) 
   };
 
   return (
-    <div className="p-5 rounded-2xl bg-surface border border-border space-y-4 shadow-sm">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <ShieldAlert className="w-4 h-4 text-indigo-400" />
-          <h3 className="text-sm font-bold text-white tracking-tight">AI Safety & Alignment Audits</h3>
+    <IonCard className="m-0 p-0 rounded-2xl bg-surface border border-border shadow-sm">
+      <IonCardHeader className="p-4 pb-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <IonIcon icon={shieldOutline} className="text-indigo-400 text-base" />
+            <IonCardTitle className="text-sm font-bold text-white tracking-tight">
+              AI Safety & Alignment Audits
+            </IonCardTitle>
+          </div>
+          <IonBadge color="tertiary" className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5">
+            LLM-as-a-Judge
+          </IonBadge>
         </div>
-        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-          LLM-as-a-Judge
-        </span>
-      </div>
+      </IonCardHeader>
 
-      {/* Vertical Stack (1 Card per row for spacious, legible layout) */}
-      <div className="flex flex-col space-y-3">
+      <IonCardContent className="p-4 pt-0 space-y-3">
         {verdicts.map((v) => {
           const isPassed = v.passed;
           const pct = Math.round(v.score * 100);
@@ -67,30 +85,25 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({ verdicts }) 
               {/* Header with Title & Badge */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 font-semibold text-xs text-slate-200">
-                  {getMetricIcon(v.metric_name)}
+                  <IonIcon icon={getMetricIcon(v.metric_name)} className={isPassed ? 'text-sky-400 text-sm' : 'text-rose-400 text-sm'} />
                   <span>{getMetricTitle(v.metric_name)}</span>
                 </div>
 
-                {isPassed ? (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-bold font-mono px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">
-                    <CheckCircle2 className="w-3 h-3" /> {pct}%
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-bold font-mono px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30 animate-pulse">
-                    <AlertOctagon className="w-3 h-3" /> FLAGGED ({pct}%)
-                  </span>
-                )}
+                <IonBadge
+                  color={isPassed ? 'success' : 'danger'}
+                  className="text-[11px] font-bold font-mono px-2 py-0.5"
+                >
+                  <IonIcon icon={isPassed ? checkmarkCircleOutline : alertCircleOutline} className="mr-1 text-xs" />
+                  {isPassed ? `${pct}%` : `FLAGGED (${pct}%)`}
+                </IonBadge>
               </div>
 
-              {/* Score Progress Bar */}
-              <div className="w-full bg-black/40 h-1.5 rounded-full overflow-hidden border border-border/40">
-                <div
-                  className={`h-full rounded-full transition-all duration-500 ${
-                    isPassed ? 'bg-emerald-400' : 'bg-rose-500'
-                  }`}
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
+              {/* Ionic Progress Bar */}
+              <IonProgressBar
+                value={v.score}
+                color={isPassed ? 'success' : 'danger'}
+                className="rounded-full h-1.5"
+              />
 
               {/* Reasoning Description */}
               <p className="text-xs text-slate-300 leading-relaxed bg-black/30 p-2.5 rounded-lg border border-border/40 font-mono text-[11px]">
@@ -100,14 +113,14 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({ verdicts }) 
               {/* Flagged Turns Badge if any */}
               {v.flagged_steps && v.flagged_steps.length > 0 && (
                 <div className="text-[11px] font-mono text-rose-400 font-semibold flex items-center gap-1">
-                  <AlertOctagon className="w-3.5 h-3.5" />
+                  <IonIcon icon={alertCircleOutline} className="text-sm" />
                   <span>Flagged Turn(s): {v.flagged_steps.join(', ')}</span>
                 </div>
               )}
             </div>
           );
         })}
-      </div>
-    </div>
+      </IonCardContent>
+    </IonCard>
   );
 };

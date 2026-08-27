@@ -1,5 +1,17 @@
 import React from 'react';
-import { Bot, DollarSign, Sparkles } from 'lucide-react';
+import {
+  IonBadge,
+  IonCard,
+  IonCardContent,
+  IonChip,
+  IonIcon,
+} from '@ionic/react';
+import {
+  hardwareChipOutline,
+  sparklesOutline,
+  cashOutline,
+  globeOutline,
+} from 'ionicons/icons';
 import { ModelSpec } from '../types';
 
 interface ModelPickerProps {
@@ -17,16 +29,16 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
 }) => {
   const selectedModel = models.find((m) => m.id === selectedModelId);
 
-  const getTierBadge = (tier: string) => {
+  const getTierColor = (tier: string) => {
     switch (tier) {
       case 'flagship':
-        return 'bg-amber-500/10 text-amber-400 border-amber-500/30';
+        return 'warning';
       case 'fast':
-        return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
+        return 'success';
       case 'preview':
-        return 'bg-purple-500/10 text-purple-400 border-purple-500/30';
+        return 'tertiary';
       default:
-        return 'bg-sky-500/10 text-sky-400 border-sky-500/30';
+        return 'primary';
     }
   };
 
@@ -34,17 +46,16 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <label className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-          <Bot className="w-3.5 h-3.5 text-primary" />
+          <IonIcon icon={hardwareChipOutline} className="text-sky-400 text-sm" />
           Evaluation Model
         </label>
         {selectedModel && (
-          <span
-            className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${getTierBadge(
-              selectedModel.tier
-            )}`}
+          <IonBadge
+            color={getTierColor(selectedModel.tier)}
+            className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5"
           >
             {selectedModel.tier}
-          </span>
+          </IonBadge>
         )}
       </div>
 
@@ -62,27 +73,32 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
           ))}
         </select>
         <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-400">
-          <Sparkles className="w-4 h-4 text-primary" />
+          <IonIcon icon={sparklesOutline} className="text-primary text-base" />
         </div>
       </div>
 
       {selectedModel && (
-        <div className="p-3 rounded-xl bg-surface border border-border/80 text-xs space-y-1.5">
-          <p className="text-slate-300 leading-relaxed">{selectedModel.description}</p>
-          <div className="flex items-center gap-4 text-slate-400 pt-1 border-t border-border/40">
-            <span className="flex items-center gap-1">
-              <DollarSign className="w-3 h-3 text-emerald-400" />
-              In: <strong className="text-slate-200">${selectedModel.input_cost_per_m}</strong> / 1M
-            </span>
-            <span className="flex items-center gap-1">
-              <DollarSign className="w-3 h-3 text-emerald-400" />
-              Out: <strong className="text-slate-200">${selectedModel.output_cost_per_m}</strong> / 1M
-            </span>
-            <span>
-              Context: <strong className="text-slate-200">{selectedModel.context_window >= 1_000_000 ? `${selectedModel.context_window / 1_000_000}M` : `${selectedModel.context_window / 1000}k`}</strong>
-            </span>
-          </div>
-        </div>
+        <IonCard className="m-0 p-0 rounded-xl bg-surface border border-border/80 text-xs">
+          <IonCardContent className="p-3 space-y-2">
+            <p className="text-slate-300 leading-relaxed text-xs">{selectedModel.description}</p>
+            <div className="flex flex-wrap items-center gap-2 text-slate-400 pt-1 border-t border-border/40">
+              <IonChip className="bg-surface-elevated text-slate-300 text-[11px] h-6 px-2">
+                <IonIcon icon={cashOutline} color="success" />
+                <span className="ml-1">In: <strong>${selectedModel.input_cost_per_m}</strong>/1M</span>
+              </IonChip>
+              <IonChip className="bg-surface-elevated text-slate-300 text-[11px] h-6 px-2">
+                <IonIcon icon={cashOutline} color="success" />
+                <span className="ml-1">Out: <strong>${selectedModel.output_cost_per_m}</strong>/1M</span>
+              </IonChip>
+              <IonChip className="bg-surface-elevated text-slate-300 text-[11px] h-6 px-2">
+                <IonIcon icon={globeOutline} color="primary" />
+                <span className="ml-1">
+                  Ctx: <strong>{selectedModel.context_window >= 1_000_000 ? `${selectedModel.context_window / 1_000_000}M` : `${selectedModel.context_window / 1000}k`}</strong>
+                </span>
+              </IonChip>
+            </div>
+          </IonCardContent>
+        </IonCard>
       )}
     </div>
   );
