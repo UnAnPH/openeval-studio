@@ -37,13 +37,6 @@ export const Header: React.FC<HeaderProps> = ({
         <span className="text-xs text-text-muted">Evaluations /</span>
         <h1 className="text-xs font-bold text-text-primary">{getTabTitle()}</h1>
       </div>
-
-      {/* Right: Environment & Framework Badge */}
-      <div className="flex items-center gap-2">
-        <span className="px-2.5 py-1 rounded-lg bg-surface-subtle text-[11px] font-mono font-medium text-text-secondary border border-border-subtle">
-          UK AISI Inspect Native
-        </span>
-      </div>
     </header>
   );
 };
