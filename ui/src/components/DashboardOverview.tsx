@@ -39,6 +39,8 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 }) => {
   const [searchText, setSearchText] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'passed' | 'failed' | 'safety_flagged'>('all');
+  const [runPendingDelete, setRunPendingDelete] = useState<RunRecord | null>(null);
+  const [showClearAllModal, setShowClearAllModal] = useState<boolean>(false);
 
   const totalRunsCount = runs.length;
   const passedRuns = runs.filter((r) => r.passed === true);
@@ -265,11 +267,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             {runs.length > 0 && onClearAllRuns && (
               <button
                 type="button"
-                onClick={() => {
-                  if (confirm('Are you sure you want to clear all evaluation runs?')) {
-                    onClearAllRuns();
-                  }
-                }}
+                onClick={() => setShowClearAllModal(true)}
                 className="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
               >
                 <IonIcon icon={trashOutline} className="text-xs" />
@@ -371,11 +369,14 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                           {onDeleteRun && (
                             <button
                               type="button"
-                              onClick={() => onDeleteRun(run.run_id)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setRunPendingDelete(run);
+                              }}
                               className="p-1.5 rounded-lg text-text-muted hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                               title="Delete run"
                             >
-                              <IonIcon icon={trashOutline} className="text-xs" />
+                              <IonIcon icon={trashOutline} className="text-xs pointer-events-none" />
                             </button>
                           )}
                         </div>
@@ -388,6 +389,106 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           </div>
         )}
       </div>
+
+      {/* POPUP 1: Single Run Delete Confirmation Modal */}
+      {runPendingDelete && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn"
+          onClick={() => setRunPendingDelete(null)}
+        >
+          <div
+            className="bg-white rounded-2xl border border-border-subtle shadow-2xl max-w-md w-full p-6 space-y-4 font-sans"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 flex items-center justify-center flex-shrink-0">
+                <IonIcon icon={trashOutline} className="text-xl text-rose-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-text-primary">Delete Evaluation Run?</h3>
+                <p className="text-xs text-text-secondary">This action is permanent and cannot be undone.</p>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-canvas border border-border-subtle text-xs space-y-1 font-mono">
+              <div><span className="text-text-muted">Run ID:</span> <strong className="text-text-primary">{runPendingDelete.run_id}</strong></div>
+              <div><span className="text-text-muted">Task:</span> <strong className="text-text-primary">{runPendingDelete.task_id}</strong></div>
+              <div><span className="text-text-muted">Model:</span> <strong className="text-text-primary">{runPendingDelete.model}</strong></div>
+            </div>
+
+            <p className="text-xs text-text-secondary leading-relaxed">
+              Deleting this run will permanently purge all execution trajectory turns, tool outputs, and LLM judge audit verdicts from memory and disk logs.
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-border-subtle">
+              <button
+                type="button"
+                onClick={() => setRunPendingDelete(null)}
+                className="px-4 py-2 rounded-xl bg-canvas border border-border-subtle text-text-secondary text-xs font-bold hover:bg-surface-subtle transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onDeleteRun) onDeleteRun(runPendingDelete.run_id);
+                  setRunPendingDelete(null);
+                }}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
+              >
+                Delete Run
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* POPUP 2: Clear All Confirmation Modal */}
+      {showClearAllModal && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn"
+          onClick={() => setShowClearAllModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl border border-border-subtle shadow-2xl max-w-md w-full p-6 space-y-4 font-sans"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 flex items-center justify-center flex-shrink-0">
+                <IonIcon icon={trashOutline} className="text-xl text-rose-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-text-primary">Purge All Evaluation Runs?</h3>
+                <p className="text-xs text-text-secondary">Permanently delete all {runs.length} recorded runs.</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-text-secondary leading-relaxed">
+              Are you sure you want to permanently clear all historical evaluation trajectories and logs from the system?
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-border-subtle">
+              <button
+                type="button"
+                onClick={() => setShowClearAllModal(false)}
+                className="px-4 py-2 rounded-xl bg-canvas border border-border-subtle text-text-secondary text-xs font-bold hover:bg-surface-subtle transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onClearAllRuns) onClearAllRuns();
+                  setShowClearAllModal(false);
+                }}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
+              >
+                Purge All Runs
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

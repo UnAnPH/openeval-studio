@@ -51,6 +51,7 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
   const [humanReviewNotes, setHumanReviewNotes] = useState<string>(run?.human_review_notes || '');
   const [overrideScores, setOverrideScores] = useState<Record<string, boolean>>(run?.audit_overrides || {});
   const [isSaved, setIsSaved] = useState<boolean>(false);
+  const [showDeleteModal, setShowDeleteModal] = useState<boolean>(false);
 
   if (!run) {
     return (
@@ -280,13 +281,10 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
           {onDeleteRun && (
             <button
               type="button"
-              onClick={() => {
-                onDeleteRun(run.run_id);
-                onBack();
-              }}
+              onClick={() => setShowDeleteModal(true)}
               className="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
             >
-              <IonIcon icon={trashOutline} className="text-xs" />
+              <IonIcon icon={trashOutline} className="text-xs pointer-events-none" />
               <span>Delete Run</span>
             </button>
           )}
@@ -797,6 +795,60 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
                   </li>
                 ))}
               </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal Popup */}
+      {showDeleteModal && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn"
+          onClick={() => setShowDeleteModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl border border-border-subtle shadow-2xl max-w-md w-full p-6 space-y-4 font-sans"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 flex items-center justify-center flex-shrink-0">
+                <IonIcon icon={trashOutline} className="text-xl text-rose-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-text-primary">Delete Evaluation Run?</h3>
+                <p className="text-xs text-text-secondary">This action is permanent and cannot be undone.</p>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-canvas border border-border-subtle text-xs space-y-1 font-mono">
+              <div><span className="text-text-muted">Run ID:</span> <strong className="text-text-primary">{run.run_id}</strong></div>
+              <div><span className="text-text-muted">Task:</span> <strong className="text-text-primary">{run.task_id}</strong></div>
+              <div><span className="text-text-muted">Model:</span> <strong className="text-text-primary">{run.model}</strong></div>
+            </div>
+
+            <p className="text-xs text-text-secondary leading-relaxed">
+              Deleting this run will permanently purge all execution trajectory turns, tool outputs, and LLM judge audit verdicts from memory and disk logs.
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-border-subtle">
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(false)}
+                className="px-4 py-2 rounded-xl bg-canvas border border-border-subtle text-text-secondary text-xs font-bold hover:bg-surface-subtle transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onDeleteRun) onDeleteRun(run.run_id);
+                  setShowDeleteModal(false);
+                  onBack();
+                }}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
+              >
+                Delete Run
+              </button>
             </div>
           </div>
         </div>

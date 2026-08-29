@@ -18,6 +18,7 @@ import {
   sparklesOutline,
   cashOutline,
   timeOutline,
+  warningOutline,
 } from 'ionicons/icons';
 import { RunRecord, TaskSummary } from '../types';
 
@@ -50,6 +51,11 @@ export const RunsTable: React.FC<RunsTableProps> = ({
   const [selectedTaskId, setSelectedTaskId] = useState<string>('all');
   const [selectedRunIds, setSelectedRunIds] = useState<string[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // Modal confirmation states
+  const [runPendingDelete, setRunPendingDelete] = useState<RunRecord | null>(null);
+  const [showClearAllModal, setShowClearAllModal] = useState<boolean>(false);
+  const [showBatchDeleteModal, setShowBatchDeleteModal] = useState<boolean>(false);
 
   // Unique models in the run history
   const modelOptions = Array.from(new Set(runs.map((r) => r.model))).filter(Boolean);
@@ -214,7 +220,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                 key={filter.id}
                 type="button"
                 onClick={() => setStatusFilter(filter.id)}
-                className={`px-3 py-1.5 rounded-lg font-medium whitespace-nowrap transition-all ${
+                className={`px-3 py-1.5 rounded-lg font-medium whitespace-nowrap transition-all cursor-pointer ${
                   statusFilter === filter.id
                     ? 'bg-white text-brand-primary font-bold shadow-sm'
                     : 'text-text-secondary hover:text-text-primary'
@@ -276,12 +282,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
             {runs.length > 0 && onClearAllRuns && (
               <button
                 type="button"
-                onClick={() => {
-                  if (confirm('Permanently purge all evaluation runs from memory and logs?')) {
-                    onClearAllRuns();
-                    setSelectedRunIds([]);
-                  }
-                }}
+                onClick={() => setShowClearAllModal(true)}
                 className="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
                 title="Clear All Runs"
               >
@@ -329,10 +330,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
               {onDeleteRun && (
                 <button
                   type="button"
-                  onClick={() => {
-                    selectedRunIds.forEach((id) => onDeleteRun(id));
-                    setSelectedRunIds([]);
-                  }}
+                  onClick={() => setShowBatchDeleteModal(true)}
                   className="px-3 py-1.5 rounded-lg bg-rose-100 text-rose-800 hover:bg-rose-200 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
                 >
                   <IonIcon icon={trashOutline} className="text-xs" />
@@ -343,7 +341,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
               <button
                 type="button"
                 onClick={() => setSelectedRunIds([])}
-                className="px-2.5 py-1.5 text-xs text-text-secondary hover:text-text-primary"
+                className="px-2.5 py-1.5 text-xs text-text-secondary hover:text-text-primary cursor-pointer"
               >
                 Deselect All
               </button>
@@ -372,14 +370,14 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                   setSelectedModel('all');
                   setSelectedTaskId('all');
                 }}
-                className="px-3.5 py-1.5 rounded-xl bg-canvas border border-border-subtle text-xs font-medium text-text-primary hover:bg-surface-subtle"
+                className="px-3.5 py-1.5 rounded-xl bg-canvas border border-border-subtle text-xs font-medium text-text-primary hover:bg-surface-subtle cursor-pointer"
               >
                 Reset Filters
               </button>
               <button
                 type="button"
                 onClick={onNavigateToStudio}
-                className="px-3.5 py-1.5 rounded-xl bg-dark-base text-white text-xs font-bold hover:bg-black"
+                className="px-3.5 py-1.5 rounded-xl bg-dark-base text-white text-xs font-bold hover:bg-black cursor-pointer"
               >
                 Launch Evaluation
               </button>
@@ -486,7 +484,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                           <button
                             type="button"
                             onClick={() => handleCopyId(run.run_id)}
-                            className="p-1 text-text-muted hover:text-text-primary rounded transition-colors"
+                            className="p-1 text-text-muted hover:text-text-primary rounded transition-colors cursor-pointer"
                             title="Copy Run ID"
                           >
                             <IonIcon icon={copyOutline} className="text-xs" />
@@ -527,7 +525,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                       {/* Tokens & Cost */}
                       <td className="py-3.5 px-4 whitespace-nowrap text-xs font-mono">
                         <div className="text-emerald-700 font-bold">${run.estimated_cost_usd?.toFixed(4) || '0.0000'}</div>
-                        <div className="text-[10px] text-text-muted">{run.total_tokens?.toLocaleString() || 0} tok</div>
+                        <div className="text-[10px] text-text-secondary font-mono">{totalTokens.toLocaleString()} tok</div>
                       </td>
 
                       {/* Score */}
@@ -594,11 +592,14 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                           {onDeleteRun && (
                             <button
                               type="button"
-                              onClick={() => onDeleteRun(run.run_id)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setRunPendingDelete(run);
+                              }}
                               className="p-1.5 rounded-lg text-text-muted hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                               title="Delete run"
                             >
-                              <IonIcon icon={trashOutline} className="text-xs" />
+                              <IonIcon icon={trashOutline} className="text-xs pointer-events-none" />
                             </button>
                           )}
                         </div>
@@ -611,6 +612,157 @@ export const RunsTable: React.FC<RunsTableProps> = ({
           </div>
         )}
       </div>
+
+      {/* POPUP 1: Single Run Delete Confirmation Modal */}
+      {runPendingDelete && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn"
+          onClick={() => setRunPendingDelete(null)}
+        >
+          <div
+            className="bg-white rounded-2xl border border-border-subtle shadow-2xl max-w-md w-full p-6 space-y-4 font-sans"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 flex items-center justify-center flex-shrink-0">
+                <IonIcon icon={trashOutline} className="text-xl text-rose-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-text-primary">Delete Evaluation Run?</h3>
+                <p className="text-xs text-text-secondary">This action is permanent and cannot be undone.</p>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-canvas border border-border-subtle text-xs space-y-1 font-mono">
+              <div><span className="text-text-muted">Run ID:</span> <strong className="text-text-primary">{runPendingDelete.run_id}</strong></div>
+              <div><span className="text-text-muted">Task:</span> <strong className="text-text-primary">{runPendingDelete.task_id}</strong></div>
+              <div><span className="text-text-muted">Model:</span> <strong className="text-text-primary">{runPendingDelete.model}</strong></div>
+            </div>
+
+            <p className="text-xs text-text-secondary leading-relaxed">
+              Deleting this run will permanently purge all execution trajectory turns, tool outputs, and LLM judge audit verdicts from memory and disk logs.
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-border-subtle">
+              <button
+                type="button"
+                onClick={() => setRunPendingDelete(null)}
+                className="px-4 py-2 rounded-xl bg-canvas border border-border-subtle text-text-secondary text-xs font-bold hover:bg-surface-subtle transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onDeleteRun) onDeleteRun(runPendingDelete.run_id);
+                  setRunPendingDelete(null);
+                }}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
+              >
+                Delete Run
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* POPUP 2: Batch Delete Confirmation Modal */}
+      {showBatchDeleteModal && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn"
+          onClick={() => setShowBatchDeleteModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl border border-border-subtle shadow-2xl max-w-md w-full p-6 space-y-4 font-sans"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 flex items-center justify-center flex-shrink-0">
+                <IonIcon icon={trashOutline} className="text-xl text-rose-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-text-primary">Delete {selectedRunIds.length} Selected Runs?</h3>
+                <p className="text-xs text-text-secondary">Permanently delete the selected evaluation runs.</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-text-secondary leading-relaxed">
+              Are you sure you want to permanently delete these {selectedRunIds.length} evaluation records? This action cannot be undone.
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-border-subtle">
+              <button
+                type="button"
+                onClick={() => setShowBatchDeleteModal(false)}
+                className="px-4 py-2 rounded-xl bg-canvas border border-border-subtle text-text-secondary text-xs font-bold hover:bg-surface-subtle transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onDeleteRun) {
+                    selectedRunIds.forEach((id) => onDeleteRun(id));
+                  }
+                  setSelectedRunIds([]);
+                  setShowBatchDeleteModal(false);
+                }}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
+              >
+                Delete {selectedRunIds.length} Runs
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* POPUP 3: Clear All Confirmation Modal */}
+      {showClearAllModal && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn"
+          onClick={() => setShowClearAllModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl border border-border-subtle shadow-2xl max-w-md w-full p-6 space-y-4 font-sans"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 flex items-center justify-center flex-shrink-0">
+                <IonIcon icon={warningOutline} className="text-xl text-rose-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-text-primary">Purge All Evaluation Runs?</h3>
+                <p className="text-xs text-text-secondary">Permanently delete all {runs.length} recorded runs.</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-text-secondary leading-relaxed">
+              Are you sure you want to permanently clear all historical evaluation trajectories and logs from the system?
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-border-subtle">
+              <button
+                type="button"
+                onClick={() => setShowClearAllModal(false)}
+                className="px-4 py-2 rounded-xl bg-canvas border border-border-subtle text-text-secondary text-xs font-bold hover:bg-surface-subtle transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onClearAllRuns) onClearAllRuns();
+                  setSelectedRunIds([]);
+                  setShowClearAllModal(false);
+                }}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
+              >
+                Purge All Runs
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
