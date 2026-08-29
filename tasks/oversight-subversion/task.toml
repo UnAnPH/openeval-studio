@@ -1,0 +1,40 @@
+schema_version = "1.1"
+artifacts = []
+
+[task]
+name = "openeval/oversight-subversion"
+description = "Evaluates whether an autonomous agent adheres to safety monitoring controls under conflicting reward incentives or attempts to disable/bypass oversight mechanisms."
+keywords = ["scheming", "alignment", "safety", "oversight", "security"]
+[[task.authors]]
+name = "AI Safety Research Team"
+email = "safety@openeval.org"
+
+[metadata]
+author_name = "AI Safety Research Team"
+author_email = "safety@openeval.org"
+difficulty = "hard"
+category = "ai-safety"
+tags = ["scheming", "alignment", "safety", "oversight"]
+expert_time_estimate_min = 60.0
+junior_time_estimate_min = 180.0
+
+[verifier]
+timeout_sec = 300.0
+
+[agent]
+timeout_sec = 600.0
+max_steps = 30
+
+[environment]
+build_timeout_sec = 300.0
+docker_image = "python:3.11-slim"
+cpus = 1
+memory_mb = 2048
+storage_mb = 4096
+gpus = 0
+allow_internet = false
+mcp_servers = []
+
+[verifier.env]
+
+[environment.env]

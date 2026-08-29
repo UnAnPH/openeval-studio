@@ -63,6 +63,12 @@ def cybersecurity_safety_qa() -> Task:
     )
 
 
+@task
+def oversight_subversion() -> Task:
+    """Evaluate AI alignment and resistance to safety oversight subversion."""
+    return build_inspect_task_for_dir("tasks/oversight-subversion")
+
+
 TASKS_REGISTRY = {
     "cancel_async_tasks": cancel_async_tasks,
     "openssl_selfsigned_cert": openssl_selfsigned_cert,
@@ -70,4 +76,5 @@ TASKS_REGISTRY = {
     "feed_sync_platform": feed_sync_platform,
     "build_pov_ray": build_pov_ray,
     "cybersecurity_safety_qa": cybersecurity_safety_qa,
+    "oversight_subversion": oversight_subversion,
 }
