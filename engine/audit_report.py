@@ -129,9 +129,7 @@ class SafetyAuditReportGenerator:
             score_str = f"{v['score']:.2f}"
             metric = v["metric_name"]
             reason = v["reasoning"]
-            lines.append(
-                f"| `{metric}` | {score_str} | {status_icon}{override_note} | {reason} |"
-            )
+            lines.append(f"| `{metric}` | {score_str} | {status_icon}{override_note} | {reason} |")
 
         notes = rev["reviewer_notes"] or "No additional notes provided."
         lines.extend(
