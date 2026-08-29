@@ -1,42 +1,120 @@
+@import url('https://fonts.googleapis.com/css2?family=Onest:wght@300;400;500;600;700;800&family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   body {
-    @apply bg-background text-slate-100 font-sans selection:bg-primary/20 selection:text-primary;
+    background-color: #F6F5F9;
+    color: #14121F;
+    font-family: 'Onest', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 }
 
-/* Custom terminal scrollbars */
+:root, :root.ios, :root.md, html, body {
+  /* Aegis Design Tokens */
+  --ae-color-surface-white: #FFFFFF;
+  --ae-color-canvas-bg: #F6F5F9;
+  --ae-color-surface-subtle: #EBE8F6;
+  --ae-color-dark-base: #14121F;
+  --ae-color-brand-primary: #2E2682;
+  --ae-color-brand-purple: #6B46C1;
+  --ae-color-accent-orange: #F2740E;
+  --ae-color-risk-high: #E23636;
+  --ae-color-risk-elevated: #F2740E;
+  --ae-color-risk-routine: #645F78;
+  --ae-color-status-cleared: #10B981;
+
+  /* Ionic Light Theme Overrides */
+  --ion-background-color: #F6F5F9;
+  --ion-text-color: #14121F;
+  --ion-card-background: #FFFFFF;
+  --ion-color-primary: #2E2682;
+  --ion-color-primary-rgb: 46, 38, 130;
+  --ion-color-primary-contrast: #FFFFFF;
+  --ion-color-step-50: #FFFFFF;
+  --ion-color-step-100: #F6F5F9;
+  --ion-color-step-150: #EBE8F6;
+  --ion-text-color-step-50: #14121F;
+  --ion-text-color-step-100: #14121F;
+  --ion-text-color-step-150: #14121F;
+
+  color: #14121F;
+  background-color: #F6F5F9;
+}
+
+/* Ensure all Ionic wrapper tags inherit high-contrast dark text by default */
+ion-app, ion-page, ion-content, ion-card, ion-header, ion-toolbar {
+  --background: #F6F5F9;
+  --color: #14121F;
+  color: #14121F;
+}
+
+/* Custom subtle scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #090d16;
+  background: #F6F5F9;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
+  background: #D8D4E5;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #334155;
+  background: #B6B0CC;
 }
 
-/* Glowing animation for active live evaluations */
-@keyframes pulse-glow {
-  0%, 100% {
-    box-shadow: 0 0 15px rgba(56, 189, 248, 0.2);
-  }
-  50% {
-    box-shadow: 0 0 25px rgba(56, 189, 248, 0.4);
-  }
+/* Aegis Component Styles */
+.ae-card {
+  background-color: #FFFFFF;
+  border: 1px solid #E3E0EC;
+  border-radius: 16px;
+  box-shadow: 0 4px 16px -2px rgba(20, 18, 31, 0.04), 0 2px 6px -1px rgba(20, 18, 31, 0.02);
 }
 
-.glow-active {
-  animation: pulse-glow 2s infinite ease-in-out;
+.ae-card-hover {
+  transition: all 0.15s ease-in-out;
 }
+.ae-card-hover:hover {
+  border-color: #C8C3DC;
+  box-shadow: 0 8px 24px -4px rgba(20, 18, 31, 0.08);
+}
+
+.ae-badge-high {
+  background: rgba(226, 54, 54, 0.08);
+  color: #E23636;
+  border: 1px solid rgba(226, 54, 54, 0.2);
+}
+
+.ae-badge-elevated {
+  background: rgba(242, 116, 14, 0.08);
+  color: #F2740E;
+  border: 1px solid rgba(242, 116, 14, 0.2);
+}
+
+.ae-badge-routine {
+  background: rgba(148, 144, 166, 0.12);
+  color: #645F78;
+  border: 1px solid rgba(148, 144, 166, 0.25);
+}
+
+.ae-badge-cleared {
+  background: rgba(16, 185, 129, 0.10);
+  color: #10B981;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+/* Monospace font settings */
+code, pre, .font-mono {
+  font-family: 'Space Mono', 'SF Mono', Consolas, Monaco, monospace;
+}
+
+

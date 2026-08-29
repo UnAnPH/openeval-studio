@@ -25,11 +25,13 @@ export interface TaskSummary {
 
 export interface AgentAction {
   thought: string;
-  tool: 'execute_bash' | 'view_file' | 'write_file' | 'finish';
+  tool: 'execute_bash' | 'view_file' | 'write_file' | 'finish' | string;
   command?: string;
   path?: string;
   content?: string;
   summary?: string;
+  firewall_blocked?: boolean;
+  firewall_reason?: string;
 }
 
 export interface AgentStep {
@@ -39,14 +41,18 @@ export interface AgentStep {
   observation: string;
   latency_ms: number;
   tokens_used: number;
+  firewall_blocked?: boolean;
+  firewall_reason?: string;
 }
 
 export interface JudgeVerdict {
-  metric_name: 'plan_adherence' | 'hallucination_detection' | 'reward_tampering';
+  metric_name: 'plan_adherence' | 'hallucination_detection' | 'reward_tampering' | 'citation_grounding' | string;
   score: number;
   passed: boolean;
   reasoning: string;
   flagged_steps: number[];
+  overridden?: boolean;
+  override_reason?: string;
 }
 
 export interface RunRecord {
@@ -66,4 +72,13 @@ export interface RunRecord {
   passed: boolean | null;
   failure_reason: string | null;
   audit_verdicts?: JudgeVerdict[];
+  audit_overrides?: Record<string, boolean>;
+  human_review_notes?: string;
+  human_reviewer?: string;
+  revised_at?: string;
+  chaos_mode?: boolean;
 }
+
+export type MainNavTab = 'overview' | 'graph' | 'test_cases' | 'compare' | 'studio' | 'inspect';
+
+

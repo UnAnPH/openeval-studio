@@ -1,10 +1,5 @@
 import React from 'react';
 import {
-  IonBadge,
-  IonCard,
-  IonCardContent,
-  IonCardHeader,
-  IonCardTitle,
   IonIcon,
 } from '@ionic/react';
 import {
@@ -28,88 +23,68 @@ export const TaskSelector: React.FC<TaskSelectorProps> = ({
   onSelectTask,
   disabled = false,
 }) => {
-  const getDifficultyColor = (diff: string | null) => {
-    switch (diff?.toLowerCase()) {
-      case 'easy':
-        return 'success';
-      case 'medium':
-        return 'warning';
-      case 'hard':
-        return 'danger';
-      default:
-        return 'medium';
-    }
-  };
+  const selectedTask = tasks.find((t) => t.task_id === selectedTaskId);
 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <label className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-          <IonIcon icon={layersOutline} className="text-sky-400 text-sm" />
-          Benchmark Tasks ({tasks.length})
+        <label className="text-xs font-mono font-bold uppercase tracking-wider text-text-secondary flex items-center gap-1.5">
+          <IonIcon icon={layersOutline} className="text-brand-purple text-sm" />
+          Benchmark Task Target
         </label>
+        <span className="text-[10px] font-mono font-bold text-brand-purple bg-surface-subtle px-2 py-0.5 rounded-full border border-border-subtle">
+          {tasks.length} tasks
+        </span>
       </div>
 
-      <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
-        {tasks.map((task) => {
-          const isSelected = task.task_id === selectedTaskId;
-          return (
-            <IonCard
-              key={task.task_id}
-              onClick={() => !disabled && onSelectTask(task.task_id)}
-              className={`m-0 p-0 rounded-xl border transition-all cursor-pointer text-left ${
-                isSelected
-                  ? 'bg-sky-500/10 border-primary ring-1 ring-sky-500/30 shadow-lg shadow-sky-500/10'
-                  : 'bg-surface border-border/80 hover:border-slate-600 hover:bg-surface-elevated'
-              } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              <IonCardHeader className="p-3.5 pb-1.5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <IonIcon
-                      icon={terminalOutline}
-                      className={`text-base ${isSelected ? 'text-primary' : 'text-slate-400'}`}
-                    />
-                    <IonCardTitle className="font-semibold text-sm text-slate-100">
-                      {task.task_id}
-                    </IonCardTitle>
-                  </div>
-                  {task.difficulty && (
-                    <IonBadge
-                      color={getDifficultyColor(task.difficulty)}
-                      className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5"
-                    >
-                      {task.difficulty}
-                    </IonBadge>
-                  )}
-                </div>
-              </IonCardHeader>
-
-              <IonCardContent className="p-3.5 pt-0 space-y-2">
-                <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
-                  {task.instruction_preview || 'No instructions provided.'}
-                </p>
-
-                <div className="flex items-center gap-3 text-[11px] text-slate-500 pt-1 border-t border-border/40">
-                  <span className="flex items-center gap-1">
-                    <IonIcon icon={timeOutline} className="text-slate-400 text-xs" />
-                    {task.timeout_sec}s limit
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <IonIcon icon={serverOutline} className="text-slate-400 text-xs" />
-                    {task.memory_mb} MB RAM
-                  </span>
-                  {task.category && (
-                    <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700/50">
-                      {task.category}
-                    </span>
-                  )}
-                </div>
-              </IonCardContent>
-            </IonCard>
-          );
-        })}
+      <div className="relative">
+        <select
+          value={selectedTaskId}
+          onChange={(e) => onSelectTask(e.target.value)}
+          disabled={disabled}
+          className="w-full bg-canvas border border-border-subtle rounded-xl px-3.5 py-2.5 text-xs text-text-primary font-medium focus:outline-none focus:border-brand-primary transition-all disabled:opacity-50 appearance-none cursor-pointer"
+        >
+          {tasks.map((t) => (
+            <option key={t.task_id} value={t.task_id} className="bg-white text-text-primary">
+              {t.task_id} [{t.category?.toUpperCase() || 'GENERAL'}] — {t.difficulty?.toUpperCase() || 'MEDIUM'}
+            </option>
+          ))}
+        </select>
+        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-text-muted">
+          <IonIcon icon={layersOutline} className="text-brand-purple text-sm" />
+        </div>
       </div>
+
+      {selectedTask && (
+        <div className="p-3.5 rounded-xl bg-canvas border border-border-subtle space-y-2 text-xs">
+          <div className="flex items-center justify-between">
+            <span className="font-bold text-text-primary font-mono">{selectedTask.task_id}</span>
+            <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded-full bg-surface-subtle text-brand-purple">
+              {selectedTask.difficulty || 'Medium'}
+            </span>
+          </div>
+
+          <p className="text-text-secondary leading-relaxed line-clamp-3 text-xs">
+            {selectedTask.instruction_preview}
+          </p>
+
+          <div className="flex flex-wrap items-center gap-2 text-text-muted pt-2 border-t border-border-subtle text-[11px] font-mono">
+            <span className="px-2 py-0.5 rounded bg-white text-text-primary border border-border-subtle flex items-center gap-1">
+              <IonIcon icon={timeOutline} className="text-accent-orange" />
+              <span>{selectedTask.timeout_sec}s limit</span>
+            </span>
+            <span className="px-2 py-0.5 rounded bg-white text-text-primary border border-border-subtle flex items-center gap-1">
+              <IonIcon icon={terminalOutline} className="text-brand-purple" />
+              <span>{selectedTask.max_steps} max turns</span>
+            </span>
+            <span className="px-2 py-0.5 rounded bg-white text-text-primary border border-border-subtle flex items-center gap-1">
+              <IonIcon icon={serverOutline} className="text-emerald-600" />
+              <span>{selectedTask.memory_mb}MB RAM</span>
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+
