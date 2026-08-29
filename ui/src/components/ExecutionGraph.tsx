@@ -4,8 +4,10 @@ import {
 } from '@ionic/react';
 import {
   checkmarkCircle,
+  closeCircle,
   codeSlashOutline,
   cubeOutline,
+  hourglassOutline,
   shieldCheckmarkOutline,
   sparklesOutline,
   terminalOutline,
@@ -24,10 +26,15 @@ export const ExecutionGraph: React.FC<ExecutionGraphProps> = ({
   runs = [],
   onNavigateToTrace,
 }) => {
-  const [selectedTaskId, setSelectedTaskId] = useState<string>(tasks[0]?.task_id || 'swe_bench_041');
+  const [selectedTaskId, setSelectedTaskId] = useState<string>(tasks[0]?.task_id || '');
 
   const selectedTask = tasks.find((t) => t.task_id === selectedTaskId) || tasks[0] || null;
-  const matchingRun = runs.find((r) => r.task_id === selectedTaskId) || runs[0] || null;
+  const matchingRuns = runs.filter((r) => r.task_id === (selectedTask?.task_id || ''));
+  const latestRun = matchingRuns.length > 0 ? matchingRuns[0] : null;
+
+  const planVerdict = latestRun?.audit_verdicts?.find((v) => v.metric_name === 'plan_adherence');
+  const halluVerdict = latestRun?.audit_verdicts?.find((v) => v.metric_name === 'hallucination_detection');
+  const rewardVerdict = latestRun?.audit_verdicts?.find((v) => v.metric_name === 'reward_tampering');
 
   return (
     <div className="w-full space-y-4 animate-fadeIn font-sans">
@@ -38,12 +45,12 @@ export const ExecutionGraph: React.FC<ExecutionGraphProps> = ({
             Execution & Verification Topology
           </h2>
           <p className="text-xs text-text-secondary mt-0.5 font-mono">
-            Direct dependency flow from sandbox to LLM judges
+            End-to-end dependency pipeline from sandbox to LLM judges
           </p>
         </div>
 
         <select
-          value={selectedTaskId}
+          value={selectedTask?.task_id || ''}
           onChange={(e) => setSelectedTaskId(e.target.value)}
           className="bg-canvas border border-border-subtle rounded-xl px-3 py-2 text-xs text-text-primary font-medium focus:outline-none focus:border-brand-primary"
         >
@@ -70,7 +77,7 @@ export const ExecutionGraph: React.FC<ExecutionGraphProps> = ({
                   <IonIcon icon={codeSlashOutline} className="text-base" />
                 </div>
                 <div>
-                  <h3 className="text-xs font-bold text-text-primary font-mono">{selectedTask?.task_id || 'swe_bench_041'}</h3>
+                  <h3 className="text-xs font-bold text-text-primary font-mono">{selectedTask?.task_id || 'No task selected'}</h3>
                   <span className="text-[10px] text-text-secondary capitalize">
                     {selectedTask?.category || 'General'} · {selectedTask?.difficulty || 'Medium'}
                   </span>
@@ -82,8 +89,10 @@ export const ExecutionGraph: React.FC<ExecutionGraphProps> = ({
               </p>
 
               <div className="flex items-center justify-between text-[11px] font-mono pt-1 text-text-secondary">
-                <span>Model: {matchingRun?.model || 'gemini-3.1-flash'}</span>
-                <span className="font-bold text-emerald-700">Reward: {matchingRun?.reward?.toFixed(1) || '1.0'}</span>
+                <span>Model: {latestRun?.model || '—'}</span>
+                <span className={`font-bold ${latestRun?.passed ? 'text-emerald-700' : latestRun?.passed === false ? 'text-rose-700' : 'text-text-muted'}`}>
+                  Reward: {latestRun && latestRun.reward !== null ? `${latestRun.reward.toFixed(1)}/1.0` : '—'}
+                </span>
               </div>
             </div>
           </div>
@@ -101,45 +110,62 @@ export const ExecutionGraph: React.FC<ExecutionGraphProps> = ({
                   <IonIcon icon={cubeOutline} className="text-brand-purple text-base" />
                   <div>
                     <h4 className="text-xs font-bold text-text-primary">Docker Sandbox</h4>
-                    <p className="text-[10px] text-text-secondary font-mono">net:none · isolated environment</p>
+                    <p className="text-[10px] text-text-secondary font-mono">net:none · isolated container</p>
                   </div>
                 </div>
                 <span className="text-[10px] font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
-                  Active
+                  {latestRun ? 'Completed' : 'Ready'}
                 </span>
               </div>
 
               {/* ReAct Loop */}
               <div
-                onClick={() => matchingRun && onNavigateToTrace?.(matchingRun.run_id)}
-                className="p-3.5 rounded-xl bg-canvas border border-border-subtle flex items-center justify-between cursor-pointer hover:border-brand-purple transition-colors"
+                onClick={() => latestRun && onNavigateToTrace?.(latestRun.run_id)}
+                className={`p-3.5 rounded-xl bg-canvas border border-border-subtle flex items-center justify-between transition-colors ${
+                  latestRun ? 'cursor-pointer hover:border-brand-purple' : 'opacity-75'
+                }`}
               >
                 <div className="flex items-center gap-2.5">
                   <IonIcon icon={terminalOutline} className="text-accent-orange text-base" />
                   <div>
-                    <h4 className="text-xs font-bold text-text-primary">ReAct Solver Trajectory</h4>
+                    <h4 className="text-xs font-bold text-text-primary">Solver Trajectory</h4>
                     <p className="text-[10px] text-text-secondary font-mono">
-                      {matchingRun?.total_steps || 6} turns · {matchingRun?.total_duration_sec?.toFixed(1) || '14.8'}s
+                      {latestRun ? `${latestRun.total_steps} turns · ${latestRun.total_duration_sec.toFixed(1)}s` : 'No execution trace'}
                     </p>
                   </div>
                 </div>
-                <span className="text-[10px] font-mono text-brand-purple font-medium">Inspect &rarr;</span>
+                {latestRun && <span className="text-[10px] font-mono text-brand-purple font-medium">Inspect &rarr;</span>}
               </div>
 
               {/* Pytest Verifier */}
               <div
-                onClick={() => matchingRun && onNavigateToTrace?.(matchingRun.run_id)}
-                className="p-3.5 rounded-xl bg-canvas border border-border-subtle flex items-center justify-between cursor-pointer hover:border-brand-purple transition-colors"
+                onClick={() => latestRun && onNavigateToTrace?.(latestRun.run_id)}
+                className={`p-3.5 rounded-xl bg-canvas border border-border-subtle flex items-center justify-between transition-colors ${
+                  latestRun ? 'cursor-pointer hover:border-brand-purple' : 'opacity-75'
+                }`}
               >
                 <div className="flex items-center gap-2.5">
-                  <IonIcon icon={checkmarkCircle} className="text-status-cleared text-base" />
+                  <IonIcon
+                    icon={latestRun?.passed ? checkmarkCircle : latestRun?.passed === false ? closeCircle : hourglassOutline}
+                    className={`text-base ${latestRun?.passed ? 'text-status-cleared' : latestRun?.passed === false ? 'text-risk-high' : 'text-text-muted'}`}
+                  />
                   <div>
-                    <h4 className="text-xs font-bold text-text-primary">Pytest Verifier Trace</h4>
-                    <p className="text-[10px] text-text-secondary font-mono">Held-out test harness assertions</p>
+                    <h4 className="text-xs font-bold text-text-primary">Held-Out Verifier Trace</h4>
+                    <p className="text-[10px] text-text-secondary font-mono">
+                      {latestRun?.passed ? 'All assertions passed' : latestRun?.passed === false ? 'Assertion failed' : 'Awaiting execution'}
+                    </p>
                   </div>
                 </div>
-                <span className="text-[10px] font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
-                  PASS
+                <span
+                  className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
+                    latestRun?.passed
+                      ? 'text-emerald-700 bg-emerald-50'
+                      : latestRun?.passed === false
+                      ? 'text-rose-700 bg-rose-50'
+                      : 'text-text-muted bg-canvas'
+                  }`}
+                >
+                  {latestRun?.passed ? 'PASS' : latestRun?.passed === false ? 'FAIL' : 'PENDING'}
                 </span>
               </div>
             </div>
@@ -157,7 +183,9 @@ export const ExecutionGraph: React.FC<ExecutionGraphProps> = ({
                   <IonIcon icon={sparklesOutline} className="text-brand-purple" />
                   <span className="text-xs font-bold text-text-primary">Plan Adherence</span>
                 </div>
-                <span className="text-xs font-mono font-bold text-emerald-700">94%</span>
+                <span className="text-xs font-mono font-bold text-text-primary">
+                  {planVerdict ? `${Math.round(planVerdict.score * 100)}%` : '—'}
+                </span>
               </div>
 
               <div className="p-3.5 rounded-xl bg-canvas border border-border-subtle flex items-center justify-between">
@@ -165,7 +193,9 @@ export const ExecutionGraph: React.FC<ExecutionGraphProps> = ({
                   <IonIcon icon={shieldCheckmarkOutline} className="text-status-cleared" />
                   <span className="text-xs font-bold text-text-primary">Hallucination Filter</span>
                 </div>
-                <span className="text-xs font-mono font-bold text-emerald-700">100%</span>
+                <span className="text-xs font-mono font-bold text-text-primary">
+                  {halluVerdict ? `${Math.round(halluVerdict.score * 100)}%` : '—'}
+                </span>
               </div>
 
               <div className="p-3.5 rounded-xl bg-canvas border border-border-subtle flex items-center justify-between">
@@ -173,7 +203,9 @@ export const ExecutionGraph: React.FC<ExecutionGraphProps> = ({
                   <IonIcon icon={shieldCheckmarkOutline} className="text-status-cleared" />
                   <span className="text-xs font-bold text-text-primary">Reward Tampering</span>
                 </div>
-                <span className="text-xs font-mono font-bold text-emerald-700">100%</span>
+                <span className="text-xs font-mono font-bold text-text-primary">
+                  {rewardVerdict ? `${Math.round(rewardVerdict.score * 100)}%` : '—'}
+                </span>
               </div>
             </div>
           </div>
