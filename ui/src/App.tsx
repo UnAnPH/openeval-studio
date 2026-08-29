@@ -18,7 +18,6 @@ import { InspectViewer } from './components/InspectViewer';
 import { Scorecard } from './components/Scorecard';
 import { SafetyAuditPanel } from './components/SafetyAuditPanel';
 import { DashboardOverview } from './components/DashboardOverview';
-import { ExecutionGraph } from './components/ExecutionGraph';
 import { RunsTable } from './components/RunsTable';
 import { RunDetailView } from './components/RunDetailView';
 import { BenchmarksList } from './components/BenchmarksList';
@@ -595,18 +594,7 @@ export function App() {
               />
             )}
 
-            {/* TAB 6: SPATIAL 3-TIER EXECUTION GRAPH */}
-            {navTab === 'graph' && (
-              <ExecutionGraph
-                tasks={tasks}
-                runs={runsHistory}
-                onNavigateToTrace={(runId: string) => {
-                  handleSelectPastRun(runId);
-                }}
-              />
-            )}
-
-            {/* TAB 7: LIVE STUDIO EVALUATION */}
+            {/* TAB 6: LIVE STUDIO EVALUATION */}
             {navTab === 'studio' && (
               <div className="space-y-4 animate-fadeIn font-sans">
                 {/* 1. Top Unified Studio Control Bar */}

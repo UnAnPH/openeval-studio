@@ -6,7 +6,6 @@ import {
   downloadOutline,
   gitCompareOutline,
   gridOutline,
-  layersOutline,
   shieldCheckmarkOutline,
   terminalOutline,
   folderOpenOutline,
@@ -69,12 +68,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Compare Runs',
       icon: gitCompareOutline,
       isActive: activeTab === 'compare',
-    },
-    {
-      id: 'graph' as MainNavTab,
-      label: 'Execution Graph',
-      icon: layersOutline,
-      isActive: activeTab === 'graph',
     },
     {
       id: 'inspect' as MainNavTab,

@@ -88,7 +88,6 @@ export type MainNavTab =
   | 'test_cases'
   | 'studio'
   | 'compare'
-  | 'graph'
   | 'inspect';
 
 

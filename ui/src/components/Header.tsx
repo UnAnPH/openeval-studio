@@ -25,8 +25,6 @@ export const Header: React.FC<HeaderProps> = ({
       case 'benchmarks':
       case 'test_cases':
         return 'Benchmarks & Test Suites';
-      case 'graph':
-        return 'Execution Graph';
       case 'compare':
         return 'Compare Runs';
       case 'studio':
