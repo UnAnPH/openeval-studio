@@ -424,12 +424,12 @@ async def list_runs() -> list[RunRecord]:
     combined: list[RunRecord] = []
 
     for r in studio_runs:
-        if r.run_id not in seen_ids:
+        if r.run_id not in seen_ids and not global_run_store.is_deleted(r.run_id):
             seen_ids.add(r.run_id)
             combined.append(r)
 
     for r in inspect_runs:
-        if r.run_id not in seen_ids:
+        if r.run_id not in seen_ids and not global_run_store.is_deleted(r.run_id):
             seen_ids.add(r.run_id)
             combined.append(r)
 
@@ -440,6 +440,9 @@ async def list_runs() -> list[RunRecord]:
 @app.get("/api/eval/runs/{run_id}", response_model=RunRecord)
 async def get_run_details(run_id: str) -> RunRecord:
     """Retrieve details and complete step trajectory for a specific run."""
+    if global_run_store.is_deleted(run_id):
+        raise HTTPException(status_code=404, detail=f"Run '{run_id}' has been deleted")
+
     record = global_run_store.get_run(run_id)
     if record:
         return record
@@ -455,13 +458,20 @@ async def get_run_details(run_id: str) -> RunRecord:
 @app.delete("/api/eval/runs/{run_id}")
 async def delete_single_run(run_id: str) -> dict[str, str]:
     """Delete a specific evaluation run from memory store and disk logs."""
-    # 1. Remove from in-memory run store
+    # 1. Remove from in-memory run store & tombstone it
     global_run_store.delete_run(run_id)
 
-    # 2. Remove matching .eval file from LOGS_DIR if present
-    stem_suffix = run_id.replace("inspect_", "")
-    for eval_file in LOGS_DIR.glob("*.eval"):
-        if run_id in eval_file.name or stem_suffix in eval_file.stem or run_id in eval_file.stem:
+    # 2. Remove matching .eval / .json files from LOGS_DIR recursively
+    stem_suffix = run_id.replace("inspect_", "").replace("eval-", "")
+    for eval_file in LOGS_DIR.rglob("*"):
+        if not eval_file.is_file():
+            continue
+        if (
+            run_id in eval_file.name
+            or stem_suffix in eval_file.stem
+            or eval_file.stem.endswith(stem_suffix)
+            or run_id in eval_file.stem
+        ):
             with contextlib.suppress(Exception):
                 eval_file.unlink()
 
@@ -472,9 +482,10 @@ async def delete_single_run(run_id: str) -> dict[str, str]:
 async def clear_all_runs_endpoint() -> dict[str, str]:
     """Delete all evaluation runs from memory store and disk logs."""
     global_run_store.clear_runs()
-    for eval_file in LOGS_DIR.glob("*.eval"):
-        with contextlib.suppress(Exception):
-            eval_file.unlink()
+    for eval_file in LOGS_DIR.rglob("*"):
+        if eval_file.is_file():
+            with contextlib.suppress(Exception):
+                eval_file.unlink()
     return {"status": "all_deleted"}
 
 

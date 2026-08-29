@@ -281,10 +281,8 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
             <button
               type="button"
               onClick={() => {
-                if (confirm(`Delete run ${run.run_id}?`)) {
-                  onDeleteRun(run.run_id);
-                  onBack();
-                }
+                onDeleteRun(run.run_id);
+                onBack();
               }}
               className="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
             >

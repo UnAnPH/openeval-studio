@@ -46,26 +46,35 @@ class RunStore:
     def __init__(self) -> None:
         self._runs: dict[str, RunRecord] = {}
         self._subscribers: dict[str, list[asyncio.Queue[dict[str, Any]]]] = {}
+        self._deleted_ids: set[str] = set()
 
     def create_run(self, task_id: str, model: str, provider: str = "google") -> RunRecord:
         """Initialize a new pending evaluation run."""
         record = RunRecord(task_id=task_id, model=model, provider=provider)
         self._runs[record.run_id] = record
         self._subscribers[record.run_id] = []
+        self._deleted_ids.discard(record.run_id)
         return record
 
     def get_run(self, run_id: str) -> RunRecord | None:
         """Look up a run by its ID."""
+        if run_id in self._deleted_ids:
+            return None
         return self._runs.get(run_id)
+
+    def is_deleted(self, run_id: str) -> bool:
+        """Check if a run ID has been deleted."""
+        return run_id in self._deleted_ids
 
     def list_runs(self) -> list[RunRecord]:
         """Return all historical runs sorted by created_at descending."""
-        return sorted(self._runs.values(), key=lambda r: r.created_at, reverse=True)
+        active = [r for r in self._runs.values() if r.run_id not in self._deleted_ids]
+        return sorted(active, key=lambda r: r.created_at, reverse=True)
 
     def update_run(self, run_id: str, **kwargs: Any) -> RunRecord | None:
         """Update fields on an existing run record."""
         record = self._runs.get(run_id)
-        if record is None:
+        if record is None or run_id in self._deleted_ids:
             return None
 
         updated_data = record.model_dump()
@@ -95,13 +104,16 @@ class RunStore:
                 q.put_nowait(payload)
 
     def delete_run(self, run_id: str) -> bool:
-        """Delete a run from the store."""
+        """Delete a run from the store and record tombstone."""
+        self._deleted_ids.add(run_id)
         removed = self._runs.pop(run_id, None) is not None
         self._subscribers.pop(run_id, None)
         return removed
 
     def clear_runs(self) -> None:
-        """Clear all runs from the store."""
+        """Clear all runs from the store and record tombstones."""
+        for r_id in self._runs:
+            self._deleted_ids.add(r_id)
         self._runs.clear()
         self._subscribers.clear()
 

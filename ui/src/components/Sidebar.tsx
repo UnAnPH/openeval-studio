@@ -3,7 +3,6 @@ import {
   IonIcon,
 } from '@ionic/react';
 import {
-  downloadOutline,
   gitCompareOutline,
   gridOutline,
   shieldCheckmarkOutline,
@@ -27,10 +26,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   onTabChange,
   serverConnected,
-  activeModelName,
   totalTasks,
   totalRuns,
-  onExportSFT,
 }) => {
   const isRunsActive = activeTab === 'runs' || activeTab === 'run_detail';
   const isDashboardActive = activeTab === 'dashboard' || activeTab === 'overview';
@@ -137,34 +134,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </nav>
       </div>
 
-      {/* Bottom Actions & Status */}
-      <div className="p-4 border-t border-[#221F33] space-y-3">
-        {onExportSFT && (
-          <button
-            type="button"
-            onClick={onExportSFT}
-            className="w-full py-2 px-3 rounded-xl bg-[#1C182E] hover:bg-[#25203D] text-slate-300 hover:text-white text-[11px] font-medium flex items-center justify-center gap-1.5 transition-all border border-[#2A2445] cursor-pointer"
-          >
-            <IonIcon icon={downloadOutline} className="text-xs text-brand-purple" />
-            <span>Export SFT Dataset</span>
-          </button>
-        )}
-
-        {activeModelName && (
-          <div className="p-2 rounded-lg bg-[#1C182E]/60 border border-[#2A2445] text-[10px] font-mono text-slate-300 flex items-center justify-between">
-            <span className="text-slate-400">Target:</span>
-            <span className="text-purple-300 font-bold truncate max-w-[120px]">{activeModelName}</span>
-          </div>
-        )}
-
+      {/* Bottom Status */}
+      <div className="p-4 border-t border-[#221F33]">
         <div className="flex items-center justify-between px-1 text-[11px] font-mono text-slate-400">
           <div className="flex items-center gap-2">
             <span
               className={`w-2 h-2 rounded-full ${
-                serverConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
+                serverConnected ? 'bg-emerald-400' : 'bg-amber-400'
               }`}
             />
-            <span>{serverConnected ? 'Inspect Native' : 'Offline Mode'}</span>
+            <span>{serverConnected ? 'Connected' : 'Offline'}</span>
           </div>
           <span className="text-[10px] text-slate-500 font-bold">v2.0</span>
         </div>

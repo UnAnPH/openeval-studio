@@ -666,15 +666,40 @@ export function App() {
                         <span>Stop Run</span>
                       </button>
                     ) : (
-                      <button
-                        type="button"
-                        onClick={() => handleLaunchEval()}
-                        disabled={!selectedTaskId || !serverConnected}
-                        className="px-5 py-2 rounded-xl bg-dark-base text-white text-xs font-bold hover:bg-black transition-all active:scale-[0.98] shadow-sm flex items-center gap-2 disabled:opacity-50 cursor-pointer"
-                      >
-                        <IonIcon icon={playSharp} className="text-xs" />
-                        <span>Launch Evaluation</span>
-                      </button>
+                      <div className="flex items-center gap-2">
+                        {activeRunId && liveSteps.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => handleSelectPastRun(activeRunId)}
+                            className="px-3.5 py-2 rounded-xl bg-surface-subtle border border-border-subtle text-brand-purple font-bold text-xs hover:bg-purple-100 transition-all cursor-pointer"
+                          >
+                            <span>Inspect Run Detail &rarr;</span>
+                          </button>
+                        )}
+                        {liveSteps.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setLiveSteps([]);
+                              setActiveRun(null);
+                              setActiveRunId(null);
+                              setRunStatus('idle');
+                            }}
+                            className="px-3 py-2 rounded-xl bg-canvas border border-border-subtle text-text-secondary font-medium text-xs hover:text-text-primary hover:bg-surface-subtle transition-all cursor-pointer"
+                          >
+                            <span>Clear Studio</span>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleLaunchEval()}
+                          disabled={!selectedTaskId || !serverConnected}
+                          className="px-5 py-2 rounded-xl bg-dark-base text-white text-xs font-bold hover:bg-black transition-all active:scale-[0.98] shadow-sm flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                        >
+                          <IonIcon icon={playSharp} className="text-xs" />
+                          <span>Launch Evaluation</span>
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>

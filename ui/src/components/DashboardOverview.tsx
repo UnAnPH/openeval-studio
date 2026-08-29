@@ -371,12 +371,8 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                           {onDeleteRun && (
                             <button
                               type="button"
-                              onClick={() => {
-                                if (confirm(`Delete run ${run.run_id}?`)) {
-                                  onDeleteRun(run.run_id);
-                                }
-                              }}
-                              className="p-1 rounded text-text-muted hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                              onClick={() => onDeleteRun(run.run_id)}
+                              className="p-1.5 rounded-lg text-text-muted hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                               title="Delete run"
                             >
                               <IonIcon icon={trashOutline} className="text-xs" />
