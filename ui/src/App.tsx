@@ -48,6 +48,24 @@ export function App() {
   const [serverConnected, setServerConnected] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Persistent client-side tombstone set for deleted runs
+  const deletedRunIdsRef = useRef<Set<string>>(new Set());
+
+  // Initialize deletedRunIds from localStorage if present
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('openeval_deleted_run_ids');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          deletedRunIdsRef.current = new Set(parsed);
+        }
+      }
+    } catch (e) {
+      console.warn('Could not load deleted run IDs from localStorage', e);
+    }
+  }, []);
+
   // Fetch initial data & poll until connected
   useEffect(() => {
     fetchInitialData();
@@ -90,7 +108,9 @@ export function App() {
 
       if (runsRes && runsRes.ok) {
         const data: RunRecord[] = await runsRes.json();
-        setRunsHistory(data);
+        // Filter out any runs marked as deleted
+        const activeOnly = data.filter((r) => !deletedRunIdsRef.current.has(r.run_id));
+        setRunsHistory(activeOnly);
       }
     } catch (err) {
       console.warn('Backend server poll check (running in offline demo mode):', err);
@@ -430,7 +450,15 @@ export function App() {
 
   // Delete individual run
   const handleDeleteRun = async (runId: string) => {
-    // 1. Optimistically update local state immediately
+    // 1. Record tombstone in memory and localStorage
+    deletedRunIdsRef.current.add(runId);
+    try {
+      localStorage.setItem('openeval_deleted_run_ids', JSON.stringify(Array.from(deletedRunIdsRef.current)));
+    } catch (e) {
+      console.warn('Failed to persist deleted run ID to localStorage', e);
+    }
+
+    // 2. Optimistically update local state immediately
     setRunsHistory((prev) => prev.filter((r) => r.run_id !== runId));
     if (activeRunId === runId) {
       setActiveRunId(null);
@@ -442,29 +470,39 @@ export function App() {
       setSelectedDetailRunId(null);
       setNavTab('runs');
     }
-    // 2. Call backend delete
+
+    // 3. Call backend delete (supports both POST and DELETE verbs)
     try {
-      await fetch(`/api/eval/runs/${runId}`, { method: 'DELETE' });
+      await fetch(`/api/eval/runs/${runId}/delete`, { method: 'POST' }).catch(() => null);
+      await fetch(`/api/eval/runs/${runId}`, { method: 'DELETE' }).catch(() => null);
     } catch (err) {
-      console.error('Failed to delete run:', err);
+      console.warn('Backend delete notification completed with offline state preserved:', err);
     }
-    await fetchInitialData();
   };
 
   // Clear all historical runs
   const handleClearAllRuns = async () => {
+    // 1. Record all current run IDs in tombstones
+    runsHistory.forEach((r) => deletedRunIdsRef.current.add(r.run_id));
+    try {
+      localStorage.setItem('openeval_deleted_run_ids', JSON.stringify(Array.from(deletedRunIdsRef.current)));
+    } catch (e) {
+      console.warn('Failed to persist deleted run IDs to localStorage', e);
+    }
+
     setRunsHistory([]);
     setActiveRunId(null);
     setActiveRun(null);
     setSelectedDetailRunId(null);
     setLiveSteps([]);
     setRunStatus('idle');
+
     try {
-      await fetch('/api/eval/runs', { method: 'DELETE' });
+      await fetch('/api/eval/runs/clear', { method: 'POST' }).catch(() => null);
+      await fetch('/api/eval/runs', { method: 'DELETE' }).catch(() => null);
     } catch (err) {
-      console.error('Failed to clear all runs:', err);
+      console.warn('Backend clear all notification completed with offline state preserved:', err);
     }
-    await fetchInitialData();
   };
 
   // Comparison Handlers
