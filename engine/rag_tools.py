@@ -4,7 +4,6 @@ Provides native Inspect AI @tool callables for document querying,
 semantic knowledge lookup, and evidence retrieval with citations.
 """
 
-
 from inspect_ai.tool import Tool, tool
 
 # In-memory benchmark documentation repository

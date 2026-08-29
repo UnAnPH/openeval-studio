@@ -8,7 +8,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-ModelProvider = Literal["google", "openai", "anthropic", "custom"]
+ModelProvider = Literal["google", "openai", "anthropic", "custom", "ollama", "vllm"]
 ModelTier = Literal["flagship", "balanced", "fast", "preview", "specialized"]
 
 
@@ -150,6 +150,43 @@ MODEL_CATALOG: list[ModelSpec] = [
         input_cost_per_m=1.10,
         output_cost_per_m=4.40,
         capabilities=["deep_reasoning", "math", "coding"],
+    ),
+    # --- LOCAL OPEN-SOURCE MODELS (Ollama / vLLM / LoRA) ---
+    ModelSpec(
+        id="ollama/llama3.1",
+        name="Llama 3.1 8B (Local Ollama)",
+        provider="ollama",
+        tier="fast",
+        description="Locally-hosted Meta Llama 3.1 8B via Ollama with zero token cost.",
+        context_window=128000,
+        max_output_tokens=4096,
+        input_cost_per_m=0.0,
+        output_cost_per_m=0.0,
+        capabilities=["local", "privacy", "tool_use"],
+    ),
+    ModelSpec(
+        id="ollama/qwen2.5-coder",
+        name="Qwen 2.5 Coder 7B (Local Ollama)",
+        provider="ollama",
+        tier="fast",
+        description="Local coding-specialized model with zero API latency and zero cost.",
+        context_window=128000,
+        max_output_tokens=8192,
+        input_cost_per_m=0.0,
+        output_cost_per_m=0.0,
+        capabilities=["local", "coding", "agentic"],
+    ),
+    ModelSpec(
+        id="vllm/meta-llama/Llama-3-8B-Instruct",
+        name="Llama 3 8B (vLLM + LoRA)",
+        provider="vllm",
+        tier="specialized",
+        description="High-throughput vLLM inference server supporting dynamic LoRA adapters.",
+        context_window=128000,
+        max_output_tokens=4096,
+        input_cost_per_m=0.0,
+        output_cost_per_m=0.0,
+        capabilities=["local", "lora", "high_throughput"],
     ),
 ]
 

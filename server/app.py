@@ -548,6 +548,30 @@ async def revise_safety_audit_report(run_id: str, req: ReviseReportRequest) -> d
     return SafetyAuditReportGenerator.generate_report(record, rev)
 
 
+@app.get("/api/eval/export/sft")
+async def export_sft_dataset(
+    format: str = Query(
+        default="openai_chat", description="Export format: openai_chat, sharegpt, dpo_pairs"
+    ),
+    only_passed: bool = Query(default=True, description="Filter only passing trajectories"),
+    task_id: str | None = Query(default=None, description="Optional task filter"),
+) -> dict[str, Any]:
+    """Export evaluation trajectories formatted as SFT / DPO training datasets."""
+    from engine.sft_exporter import SFTDatasetExporter
+
+    data = SFTDatasetExporter.export_runs(
+        logs_dir=LOGS_DIR,
+        format_type=format,  # type: ignore[arg-type]
+        only_passed=only_passed,
+        task_id=task_id,
+    )
+    return {
+        "format": format,
+        "total_records": len(data),
+        "dataset": data,
+    }
+
+
 @app.get("/api/eval/stream/{run_id}")
 async def stream_run_events(run_id: str) -> StreamingResponse:
     """Server-Sent Events (SSE) endpoint streaming real-time ReAct thoughts and actions."""
