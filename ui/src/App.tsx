@@ -92,9 +92,7 @@ export function App() {
 
       if (runsRes && runsRes.ok) {
         const data: RunRecord[] = await runsRes.json();
-        if (data.length > 0) {
-          setRunsHistory(data);
-        }
+        setRunsHistory(data);
       }
     } catch (err) {
       console.warn('Backend server poll check (running in offline demo mode):', err);
@@ -428,40 +426,42 @@ export function App() {
 
   // Delete individual run
   const handleDeleteRun = async (runId: string) => {
-    try {
-      await fetch(`/api/eval/runs/${runId}`, { method: 'DELETE' });
-      setRunsHistory((prev) => prev.filter((r) => r.run_id !== runId));
-      if (activeRunId === runId) {
-        setActiveRunId(null);
-        setActiveRun(null);
-        setLiveSteps([]);
-        setRunStatus('idle');
-      }
-      if (drawerRun?.run_id === runId) {
-        setIsDrawerOpen(false);
-        setDrawerRun(null);
-      }
-      await fetchInitialData();
-    } catch (err) {
-      console.error('Failed to delete run:', err);
-    }
-  };
-
-  // Clear all historical runs
-  const handleClearAllRuns = async () => {
-    try {
-      await fetch('/api/eval/runs', { method: 'DELETE' });
-      setRunsHistory([]);
+    // 1. Optimistically update local state immediately
+    setRunsHistory((prev) => prev.filter((r) => r.run_id !== runId));
+    if (activeRunId === runId) {
       setActiveRunId(null);
       setActiveRun(null);
       setLiveSteps([]);
       setRunStatus('idle');
+    }
+    if (drawerRun?.run_id === runId) {
       setIsDrawerOpen(false);
       setDrawerRun(null);
-      await fetchInitialData();
+    }
+    // 2. Call backend delete
+    try {
+      await fetch(`/api/eval/runs/${runId}`, { method: 'DELETE' });
+    } catch (err) {
+      console.error('Failed to delete run:', err);
+    }
+    await fetchInitialData();
+  };
+
+  // Clear all historical runs
+  const handleClearAllRuns = async () => {
+    setRunsHistory([]);
+    setActiveRunId(null);
+    setActiveRun(null);
+    setLiveSteps([]);
+    setRunStatus('idle');
+    setIsDrawerOpen(false);
+    setDrawerRun(null);
+    try {
+      await fetch('/api/eval/runs', { method: 'DELETE' });
     } catch (err) {
       console.error('Failed to clear all runs:', err);
     }
+    await fetchInitialData();
   };
 
   const activeModel = models.find((m) => m.id === selectedModelId);
@@ -538,6 +538,7 @@ export function App() {
                 runs={runsHistory}
                 onSelectRun={handleSelectPastRun}
                 onLaunchTask={(taskId) => handleLaunchEval(taskId)}
+                onDeleteRun={handleDeleteRun}
                 onExportSFT={() => handleExportSFTData()}
               />
             )}

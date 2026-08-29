@@ -10,6 +10,7 @@ import {
   searchOutline,
   shieldOutline,
   playSharp,
+  trashOutline,
 } from 'ionicons/icons';
 import { RunRecord, TaskSummary } from '../types';
 
@@ -18,6 +19,7 @@ interface TestCasesTableProps {
   runs: RunRecord[];
   onSelectRun: (runId: string) => void;
   onLaunchTask: (taskId: string) => void;
+  onDeleteRun?: (runId: string) => void;
   onExportSFT?: () => void;
 }
 
@@ -26,6 +28,7 @@ export const TestCasesTable: React.FC<TestCasesTableProps> = ({
   runs,
   onSelectRun,
   onLaunchTask,
+  onDeleteRun,
   onExportSFT,
 }) => {
   const [searchText, setSearchText] = useState<string>('');
@@ -309,6 +312,20 @@ export const TestCasesTable: React.FC<TestCasesTableProps> = ({
                           <IonIcon icon={playSharp} className="text-[10px]" />
                           <span>{latestRun ? 'Re-run' : 'Run'}</span>
                         </button>
+                        {latestRun && onDeleteRun && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm(`Delete run ${latestRun.run_id}?`)) {
+                                onDeleteRun(latestRun.run_id);
+                              }
+                            }}
+                            className="p-1 rounded text-text-muted hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                            title="Delete this run"
+                          >
+                            <IonIcon icon={trashOutline} className="text-xs" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

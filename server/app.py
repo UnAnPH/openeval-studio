@@ -459,8 +459,9 @@ async def delete_single_run(run_id: str) -> dict[str, str]:
     global_run_store.delete_run(run_id)
 
     # 2. Remove matching .eval file from LOGS_DIR if present
+    stem_suffix = run_id.replace("inspect_", "")
     for eval_file in LOGS_DIR.glob("*.eval"):
-        if run_id in eval_file.name:
+        if run_id in eval_file.name or stem_suffix in eval_file.stem or run_id in eval_file.stem:
             with contextlib.suppress(Exception):
                 eval_file.unlink()
 
