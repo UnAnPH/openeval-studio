@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   IonApp,
   IonIcon,
@@ -40,6 +40,8 @@ export function App() {
   const [runsHistory, setRunsHistory] = useState<RunRecord[]>([]);
   const [studioInspectorTab, setStudioInspectorTab] = useState<'scorecard' | 'safety' | 'task_info'>('scorecard');
   const [chaosMode, setChaosMode] = useState<boolean>(false);
+
+  const eventSourceRef = useRef<EventSource | null>(null);
 
   // Human adjudication drawer state
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
@@ -242,6 +244,11 @@ export function App() {
     }
 
     try {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+
       const launchRes = await fetch('/api/eval/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -264,6 +271,7 @@ export function App() {
 
       // Connect to real-time Server-Sent Events stream
       const eventSource = new EventSource(`/api/eval/stream/${currentRunId}`);
+      eventSourceRef.current = eventSource;
 
       eventSource.addEventListener('snapshot', (e) => {
         try {
@@ -298,6 +306,7 @@ export function App() {
           setRunStatus(result.status || 'completed');
           setIsStreaming(false);
           eventSource.close();
+          eventSourceRef.current = null;
 
           // Fetch full completed RunRecord
           const detailsRes = await fetch(`/api/eval/runs/${currentRunId}`).catch(() => null);
@@ -315,6 +324,7 @@ export function App() {
         console.warn('SSE stream error or termination:', e);
         setIsStreaming(false);
         eventSource.close();
+        eventSourceRef.current = null;
         fetchInitialData();
       });
     } catch (err: any) {
@@ -324,14 +334,20 @@ export function App() {
   };
 
   const handleStopEval = async () => {
-    if (!activeRunId) return;
-    try {
-      await fetch(`/api/eval/runs/${activeRunId}/stop`, { method: 'POST' });
-      setIsStreaming(false);
-      setRunStatus('cancelled');
-      fetchInitialData();
-    } catch (err) {
-      console.error('Failed to stop run:', err);
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+    setIsStreaming(false);
+    setRunStatus('cancelled');
+
+    if (activeRunId) {
+      try {
+        await fetch(`/api/eval/runs/${activeRunId}/stop`, { method: 'POST' }).catch(() => null);
+        await fetchInitialData();
+      } catch (err) {
+        console.error('Failed to stop run:', err);
+      }
     }
   };
 

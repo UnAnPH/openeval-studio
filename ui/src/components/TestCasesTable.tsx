@@ -289,26 +289,27 @@ export const TestCasesTable: React.FC<TestCasesTableProps> = ({
                       </span>
                     </td>
 
-                    {/* Action */}
+                    {/* Action Column */}
                     <td className="py-3 px-4 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                      {latestRun ? (
-                        <button
-                          type="button"
-                          onClick={() => onSelectRun(latestRun.run_id)}
-                          className="text-[11px] font-medium text-brand-purple hover:underline"
-                        >
-                          Inspect Trace
-                        </button>
-                      ) : (
+                      <div className="flex items-center justify-end gap-2.5">
+                        {latestRun && (
+                          <button
+                            type="button"
+                            onClick={() => onSelectRun(latestRun.run_id)}
+                            className="text-[11px] font-medium text-brand-purple hover:underline"
+                          >
+                            Inspect Trace
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => onLaunchTask(task.task_id)}
-                          className="px-2.5 py-1 rounded bg-dark-base text-white text-[10px] font-bold flex items-center gap-1 ml-auto hover:bg-black transition-colors"
+                          className="px-3 py-1 rounded-lg bg-dark-base text-white text-[11px] font-bold flex items-center gap-1.5 hover:bg-black transition-all shadow-sm active:scale-95 cursor-pointer"
                         >
-                          <IonIcon icon={playSharp} className="text-[9px]" />
-                          <span>Run</span>
+                          <IonIcon icon={playSharp} className="text-[10px]" />
+                          <span>{latestRun ? 'Re-run' : 'Run'}</span>
                         </button>
-                      )}
+                      </div>
                     </td>
                   </tr>
                 );
