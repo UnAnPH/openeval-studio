@@ -9,7 +9,7 @@ import json
 import logging
 import os
 import time
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from dotenv import load_dotenv
 from google import genai
@@ -201,7 +201,7 @@ class AsyncLLMRunner:
             try:
                 response = await self.google_client.aio.models.generate_content(
                     model=cfg.model,
-                    contents=contents,
+                    contents=cast(Any, contents),
                     config=gen_config,
                 )
 

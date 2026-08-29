@@ -28,7 +28,9 @@ def parse_eval_log_to_run_record(eval_file_path: Path) -> RunRecord | None:
         task_id = log.eval.task.replace("_", "-")
         raw_model = log.eval.model or "unknown"
         clean_model = raw_model.split("/")[-1] if "/" in raw_model else raw_model
-        is_openai = clean_model.startswith("gpt-") or clean_model.startswith("o1")
+        is_openai = any(
+            clean_model.startswith(prefix) for prefix in ("gpt-", "o1", "o3")
+        )
         provider = "openai" if is_openai else "google"
 
         # Determine status
@@ -102,23 +104,50 @@ def parse_eval_log_to_run_record(eval_file_path: Path) -> RunRecord | None:
                         raw_args = getattr(tc, "arguments", {})
                         args = raw_args if isinstance(raw_args, dict) else {}
 
-                        tool_type = (
-                            "execute_bash"
-                            if fn_name == "execute_bash"
-                            else "view_file"
-                            if fn_name == "view_file"
-                            else "write_file"
-                            if fn_name == "write_file"
-                            else "finish"
-                        )
+                        if fn_name in ("execute_bash", "bash"):
+                            tool_type = "execute_bash"
+                            cmd = args.get("cmd") or args.get("command")
+                            path = None
+                            content = None
+                        elif fn_name == "text_editor":
+                            editor_cmd = args.get("command")
+                            if editor_cmd == "view":
+                                tool_type = "view_file"
+                                cmd = None
+                                path = args.get("path")
+                                content = None
+                            else:
+                                tool_type = "write_file"
+                                cmd = None
+                                path = args.get("path")
+                                content = (
+                                    args.get("file_text")
+                                    or args.get("new_str")
+                                    or args.get("content")
+                                )
+                        elif fn_name in ("view_file", "read_file"):
+                            tool_type = "view_file"
+                            cmd = None
+                            path = args.get("path")
+                            content = None
+                        elif fn_name in ("write_file", "edit_file"):
+                            tool_type = "write_file"
+                            cmd = None
+                            path = args.get("path")
+                            content = args.get("content") or args.get("text")
+                        else:
+                            tool_type = "finish"
+                            cmd = None
+                            path = None
+                            content = None
 
                         action = AgentAction(
                             tool=tool_type,  # type: ignore[arg-type]
                             thought=thought.strip(),
-                            command=args.get("command"),
-                            path=args.get("path"),
-                            content=args.get("content"),
-                            summary=args.get("answer") or args.get("summary"),
+                            command=cmd,
+                            path=path,
+                            content=content,
+                            summary=args.get("answer") or args.get("summary") or args.get("text"),
                         )
 
                         if tool_type == "finish" and action.summary:

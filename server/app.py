@@ -280,10 +280,11 @@ async def _run_evaluation_worker(
 
 
 @app.post("/api/eval/run", response_model=LaunchEvalResponse)
+@app.post("/api/eval/launch", response_model=LaunchEvalResponse)
 async def launch_eval(req: LaunchEvalRequest) -> LaunchEvalResponse:
-    """Spawn an asynchronous ReAct evaluation run in the background."""
+    """Spawn an asynchronous evaluation run in the background."""
     task_path = TASKS_DIR / req.task_id
-    if not task_path.exists():
+    if not task_path.exists() and not (PROJECT_ROOT / "datasets" / f"{req.task_id}.json").exists():
         raise HTTPException(status_code=404, detail=f"Task '{req.task_id}' not found in tasks/")
 
     model_id = req.model or get_default_model("google").id
@@ -316,6 +317,7 @@ async def launch_eval(req: LaunchEvalRequest) -> LaunchEvalResponse:
 
 
 @app.post("/api/eval/runs/{run_id}/stop")
+@app.post("/api/eval/stop/{run_id}")
 async def stop_eval_run(run_id: str) -> dict[str, str]:
     """Cancel a running evaluation and stop its Docker sandbox immediately."""
     task = active_run_tasks.get(run_id)
