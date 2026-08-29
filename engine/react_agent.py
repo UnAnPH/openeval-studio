@@ -37,7 +37,7 @@ class AgentAction(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    thought: str = Field(..., description="Internal chain-of-thought reasoning and plan")
+    thought: str = Field(default="", description="Internal chain-of-thought reasoning and plan")
     tool: Literal["execute_bash", "view_file", "write_file", "finish"] = Field(
         ..., description="The chosen tool"
     )

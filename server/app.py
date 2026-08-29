@@ -452,6 +452,23 @@ async def get_run_details(run_id: str) -> RunRecord:
     raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found")
 
 
+@app.get("/api/eval/diff")
+async def get_trajectory_diff(
+    run_a: str = Query(..., description="First Run ID"),
+    run_b: str = Query(..., description="Second Run ID"),
+) -> dict[str, Any]:
+    """Compare two evaluation runs and compute synchronized step-by-step diffs."""
+    from engine.diff_engine import TrajectoryDiffEngine
+
+    diff_summary = TrajectoryDiffEngine.load_and_compare(run_a, run_b, LOGS_DIR)
+    if not diff_summary:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Could not find one or both runs ('{run_a}', '{run_b}') to diff.",
+        )
+    return diff_summary.to_dict()
+
+
 @app.get("/api/eval/stream/{run_id}")
 async def stream_run_events(run_id: str) -> StreamingResponse:
     """Server-Sent Events (SSE) endpoint streaming real-time ReAct thoughts and actions."""
