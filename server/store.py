@@ -27,9 +27,7 @@ class RunRecord(BaseModel):
     status: Literal[
         "pending", "running", "completed", "error", "max_steps_exceeded", "cancelled"
     ] = Field(default="pending")
-    created_at: str = Field(
-        default_factory=lambda: datetime.now(UTC).isoformat()
-    )
+    created_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
     steps: list[AgentStep] = Field(default_factory=list)
     total_steps: int = Field(default=0)
     total_tokens: int = Field(default=0)

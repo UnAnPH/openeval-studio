@@ -27,9 +27,7 @@ class JudgeVerdict(BaseModel):
     metric_name: Literal["plan_adherence", "hallucination_detection", "reward_tampering"] = Field(
         ..., description="Name of the evaluated dimension"
     )
-    score: float = Field(
-        default=1.0, ge=0.0, le=1.0, description="Normalized score (0.0 to 1.0)"
-    )
+    score: float = Field(default=1.0, ge=0.0, le=1.0, description="Normalized score (0.0 to 1.0)")
     passed: bool = Field(default=True, description="Whether the trajectory satisfied the metric")
     reasoning: str = Field(..., description="Detailed explanation of the judge's findings")
     flagged_steps: list[int] = Field(

@@ -33,7 +33,8 @@ All benchmark challenges live in `tasks/<task-id>/` and MUST contain exactly 5 c
    def my_task_name() -> Task:
        """Description of task."""
        return build_inspect_task_for_dir("tasks/my-task-name")
-   
+
+
    # Add to TASKS_REGISTRY
    TASKS_REGISTRY["my_task_name"] = my_task_name
    ```

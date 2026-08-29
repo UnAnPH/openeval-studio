@@ -113,7 +113,6 @@ MODEL_CATALOG: list[ModelSpec] = [
         output_cost_per_m=5.00,
         capabilities=["deep_reasoning", "coding"],
     ),
-
     # --- OPENAI SERIES ---
     ModelSpec(
         id="gpt-4o",

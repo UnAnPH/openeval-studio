@@ -157,9 +157,7 @@ async def cmd_run_eval(args: argparse.Namespace) -> None:
     def _on_step(step: AgentStep) -> None:
         print(f"\r--- [Step {step.step_number}] ---" + " " * 30, flush=True)
         print(f"💭 Thought: {step.thought}", flush=True)
-        action_detail = (
-            f"command='{step.action.command or ''}', path='{step.action.path or ''}'"
-        )
+        action_detail = f"command='{step.action.command or ''}', path='{step.action.path or ''}'"
         print(f"🛠️  Action:  {step.action.tool} ({action_detail})", flush=True)
         obs_preview = step.observation[:200] + ("..." if len(step.observation) > 200 else "")
         print(f"👁️  Obs:     {obs_preview}", flush=True)
@@ -334,17 +332,13 @@ def main() -> None:
 
     # test-llm command
     p_test = subparsers.add_parser("test-llm", help="Test LLM API connectivity")
-    p_test.add_argument(
-        "--model", default="gemini-3.1-flash-lite", help="Model endpoint ID"
-    )
+    p_test.add_argument("--model", default="gemini-3.1-flash-lite", help="Model endpoint ID")
     p_test.add_argument("--api-key", default=None, help="Explicit API key")
 
     # run command
     p_run = subparsers.add_parser("run", help="Run ReAct agent against a task")
     p_run.add_argument("task_dir", help="Path to task folder (e.g. tasks/feed-sync-platform)")
-    p_run.add_argument(
-        "--model", default="gemini-3.1-flash-lite", help="Model endpoint ID"
-    )
+    p_run.add_argument("--model", default="gemini-3.1-flash-lite", help="Model endpoint ID")
     p_run.add_argument("--api-key", default=None, help="Explicit API key")
 
     # sweep command

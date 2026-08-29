@@ -28,9 +28,7 @@ def parse_eval_log_to_run_record(eval_file_path: Path) -> RunRecord | None:
         task_id = log.eval.task.replace("_", "-")
         raw_model = log.eval.model or "unknown"
         clean_model = raw_model.split("/")[-1] if "/" in raw_model else raw_model
-        is_openai = any(
-            clean_model.startswith(prefix) for prefix in ("gpt-", "o1", "o3")
-        )
+        is_openai = any(clean_model.startswith(prefix) for prefix in ("gpt-", "o1", "o3"))
         provider = "openai" if is_openai else "google"
 
         # Determine status

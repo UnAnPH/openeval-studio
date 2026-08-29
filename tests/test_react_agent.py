@@ -16,9 +16,7 @@ def sample_task(tmp_path: Path):
     """Create a temporary test task."""
     task_dir = tmp_path / "sample-eval"
     task_dir.mkdir()
-    (task_dir / "task.toml").write_text(
-        "[metadata]\ncategory = 'sec'\n[agent]\nmax_steps = 5\n"
-    )
+    (task_dir / "task.toml").write_text("[metadata]\ncategory = 'sec'\n[agent]\nmax_steps = 5\n")
     (task_dir / "instruction.md").write_text("Fix the auth bug")
     (task_dir / "environment").mkdir()
     (task_dir / "environment" / "Dockerfile").write_text("FROM alpine\n")
@@ -108,6 +106,7 @@ async def test_react_agent_successful_resolution(sample_task) -> None:
 @pytest.mark.asyncio
 async def test_react_agent_max_steps_exceeded(sample_task) -> None:
     """Verify that ReActAgent halts gracefully when max_steps is reached without finish."""
+
     def mock_handler(request: httpx.Request) -> httpx.Response:
         payload = {
             "thought": "Still exploring files...",

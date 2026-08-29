@@ -469,6 +469,85 @@ async def get_trajectory_diff(
     return diff_summary.to_dict()
 
 
+@app.get("/api/eval/analytics/summary")
+async def get_analytics_summary() -> dict[str, Any]:
+    """Retrieve DuckDB-powered aggregate evaluation metrics and Pareto frontier."""
+    from server.analytics_store import DuckDBTraceEngine
+
+    engine = DuckDBTraceEngine(LOGS_DIR)
+    leaderboard = engine.get_model_leaderboard()
+    pareto = engine.get_cost_pareto_frontier()
+
+    return {
+        "leaderboard": leaderboard,
+        "pareto_frontier": pareto,
+        "total_evals_synced": len(leaderboard),
+    }
+
+
+class SearchRequest(BaseModel):
+    """Request payload for transcript search."""
+
+    query: str
+    status: str | None = None
+    task: str | None = None
+    model: str | None = None
+    max_results: int = 50
+
+
+@app.post("/api/eval/search")
+async def search_transcripts(req: SearchRequest) -> list[dict[str, Any]]:
+    """Search thoughts, actions, commands, and failure modes across all evaluation trajectories."""
+    from server.search_engine import TranscriptSearchEngine
+
+    return TranscriptSearchEngine.search(
+        query=req.query,
+        logs_dir=LOGS_DIR,
+        status_filter=req.status,
+        task_filter=req.task,
+        model_filter=req.model,
+        max_results=req.max_results,
+    )
+
+
+run_audit_revisions: dict[str, Any] = {}
+
+
+@app.get("/api/eval/runs/{run_id}/report")
+async def get_safety_audit_report(run_id: str) -> dict[str, Any]:
+    """Generate an automated & revisable safety audit report for a specific run."""
+    from engine.audit_report import SafetyAuditReportGenerator
+
+    record = await get_run_details(run_id)
+    revision = run_audit_revisions.get(run_id)
+    return SafetyAuditReportGenerator.generate_report(record, revision)
+
+
+class ReviseReportRequest(BaseModel):
+    """Request payload to save human audit review & sign-off."""
+
+    reviewer_name: str
+    sign_off_status: str
+    reviewer_notes: str
+    overridden_verdicts: dict[str, bool] = Field(default_factory=dict)
+
+
+@app.post("/api/eval/runs/{run_id}/report/revise")
+async def revise_safety_audit_report(run_id: str, req: ReviseReportRequest) -> dict[str, Any]:
+    """Save human reviewer sign-off and update safety report."""
+    from engine.audit_report import HumanAuditRevision, SafetyAuditReportGenerator
+
+    record = await get_run_details(run_id)
+    rev = HumanAuditRevision(
+        reviewer_name=req.reviewer_name,
+        sign_off_status=req.sign_off_status,
+        reviewer_notes=req.reviewer_notes,
+        overridden_verdicts=req.overridden_verdicts,
+    )
+    run_audit_revisions[run_id] = rev
+    return SafetyAuditReportGenerator.generate_report(record, rev)
+
+
 @app.get("/api/eval/stream/{run_id}")
 async def stream_run_events(run_id: str) -> StreamingResponse:
     """Server-Sent Events (SSE) endpoint streaming real-time ReAct thoughts and actions."""

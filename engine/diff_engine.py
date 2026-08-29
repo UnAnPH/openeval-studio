@@ -94,7 +94,9 @@ class TrajectoryDiffEngine:
     """Engine for comparing and diffing evaluation trajectories."""
 
     @staticmethod
-    def _compute_text_diff(text_a: str | None, text_b: str | None, fromfile: str = "Run A", tofile: str = "Run B") -> str | None:
+    def _compute_text_diff(
+        text_a: str | None, text_b: str | None, fromfile: str = "Run A", tofile: str = "Run B"
+    ) -> str | None:
         """Generate a unified line diff string between two text snippets."""
         if not text_a and not text_b:
             return None
@@ -141,17 +143,26 @@ class TrajectoryDiffEngine:
             obs_diff = None
 
             if sa and sb:
-                tool_match = (sa.action.tool == sb.action.tool)
+                tool_match = sa.action.tool == sb.action.tool
                 sim = cls._calculate_similarity(sa.thought, sb.thought)
 
                 if sa.action.command or sb.action.command:
-                    cmd_diff = cls._compute_text_diff(sa.action.command, sb.action.command, "Model A Command", "Model B Command")
+                    cmd_diff = cls._compute_text_diff(
+                        sa.action.command, sb.action.command, "Model A Command", "Model B Command"
+                    )
 
                 if sa.action.content or sb.action.content:
-                    content_diff = cls._compute_text_diff(sa.action.content, sb.action.content, "Model A File Content", "Model B File Content")
+                    content_diff = cls._compute_text_diff(
+                        sa.action.content,
+                        sb.action.content,
+                        "Model A File Content",
+                        "Model B File Content",
+                    )
 
                 if sa.observation or sb.observation:
-                    obs_diff = cls._compute_text_diff(sa.observation, sb.observation, "Model A Observation", "Model B Observation")
+                    obs_diff = cls._compute_text_diff(
+                        sa.observation, sb.observation, "Model A Observation", "Model B Observation"
+                    )
 
                 args_match = (
                     sa.action.command == sb.action.command
@@ -164,16 +175,28 @@ class TrajectoryDiffEngine:
                     if divergence_step is None:
                         divergence_step = step_num
                         if not tool_match:
-                            divergence_reason = f"Tool divergence at Turn {step_num}: Model A used '{sa.action.tool}' vs Model B '{sb.action.tool}'."
+                            divergence_reason = (
+                                f"Tool divergence at Turn {step_num}: Model A used "
+                                f"'{sa.action.tool}' vs Model B '{sb.action.tool}'."
+                            )
                         elif not args_match:
-                            divergence_reason = f"Command/File divergence at Turn {step_num}: Different arguments executed in sandbox."
+                            divergence_reason = (
+                                f"Command/File divergence at Turn {step_num}: Different arguments "
+                                f"executed in sandbox."
+                            )
                         else:
-                            divergence_reason = f"Reasoning divergence at Turn {step_num}: Thought similarity dropped to {sim:.0%}."
+                            divergence_reason = (
+                                f"Reasoning divergence at Turn {step_num}: Thought similarity "
+                                f"dropped to {sim:.0%}."
+                            )
             else:
                 is_div = True
                 if divergence_step is None:
                     divergence_step = step_num
-                    divergence_reason = f"Turn count divergence at Turn {step_num}: One model finished earlier than the other."
+                    divergence_reason = (
+                        f"Turn count divergence at Turn {step_num}: One model finished "
+                        f"earlier than the other."
+                    )
 
             step_diffs.append(
                 StepDiff(
@@ -221,7 +244,9 @@ class TrajectoryDiffEngine:
         )
 
     @classmethod
-    def load_and_compare(cls, run_a_id: str, run_b_id: str, logs_dir: Path) -> TrajectoryDiffSummary | None:
+    def load_and_compare(
+        cls, run_a_id: str, run_b_id: str, logs_dir: Path
+    ) -> TrajectoryDiffSummary | None:
         """Fetch RunRecords from store or .eval files and produce a full diff."""
         run_a = global_run_store.get_run(run_a_id)
         run_b = global_run_store.get_run(run_b_id)

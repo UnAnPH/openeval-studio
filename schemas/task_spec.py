@@ -61,9 +61,7 @@ class EnvironmentConfig(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    build_timeout_sec: float = Field(
-        default=6000.0, description="Max Docker build time in seconds"
-    )
+    build_timeout_sec: float = Field(default=6000.0, description="Max Docker build time in seconds")
     cpus: int = Field(default=2, ge=1, le=64, description="CPU core quota")
     memory_mb: int = Field(default=4096, ge=512, description="RAM limit in Megabytes")
     storage_mb: int = Field(default=10240, ge=1024, description="Disk storage quota in Megabytes")

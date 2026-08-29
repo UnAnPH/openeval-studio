@@ -82,9 +82,7 @@ def held_out_verifier_scorer(test_file: str = "tests/test_outputs.py") -> Scorer
     return score
 
 
-def extract_trajectory_from_inspect_state(
-    state: TaskState, task_spec: TaskSpec
-) -> AgentTrajectory:
+def extract_trajectory_from_inspect_state(state: TaskState, task_spec: TaskSpec) -> AgentTrajectory:
     """Reconstruct an AgentTrajectory from Inspect TaskState messages."""
     steps: list[AgentStep] = []
     step_num = 1

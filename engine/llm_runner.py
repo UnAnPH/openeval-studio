@@ -151,9 +151,7 @@ class AsyncLLMRunner:
             return await self._generate_google(messages, cfg, response_schema)
         else:
             if self.openai_client is None:
-                self.openai_client = AsyncOpenAI(
-                    api_key=os.getenv("OPENAI_API_KEY") or "mock-key"
-                )
+                self.openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY") or "mock-key")
             return await self._generate_openai(messages, cfg, response_schema)
 
     async def _generate_google(
@@ -212,12 +210,8 @@ class AsyncLLMRunner:
                 comp_toks = 0
                 tot_toks = 0
                 if hasattr(response, "usage_metadata") and response.usage_metadata:
-                    prompt_toks = (
-                        getattr(response.usage_metadata, "prompt_token_count", 0) or 0
-                    )
-                    comp_toks = (
-                        getattr(response.usage_metadata, "candidates_token_count", 0) or 0
-                    )
+                    prompt_toks = getattr(response.usage_metadata, "prompt_token_count", 0) or 0
+                    comp_toks = getattr(response.usage_metadata, "candidates_token_count", 0) or 0
                     tot_toks = getattr(response.usage_metadata, "total_token_count", 0) or 0
 
                 parsed_json = None
@@ -262,7 +256,7 @@ class AsyncLLMRunner:
                         cfg.max_retries,
                     )
                 else:
-                    backoff = min(2.0 ** attempt, 10.0)
+                    backoff = min(2.0**attempt, 10.0)
                     logger.warning("Google API error: %s. Retrying in %.1fs...", exc, backoff)
 
                 await asyncio.sleep(backoff)
@@ -278,10 +272,7 @@ class AsyncLLMRunner:
         """Execute async inference via the official OpenAI SDK."""
         start_time = time.perf_counter()
 
-        formatted_messages = [
-            {"role": m.role, "content": m.content}
-            for m in messages
-        ]
+        formatted_messages = [{"role": m.role, "content": m.content} for m in messages]
 
         kwargs: dict[str, Any] = {
             "model": cfg.model,

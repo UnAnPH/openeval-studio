@@ -62,6 +62,7 @@ class DockerSandbox:
         if self._docker_client is None:
             try:
                 import docker  # type: ignore[import-untyped]
+
                 self._docker_client = docker.from_env()
             except Exception as e:
                 logger.warning("Failed to initialize Docker client from environment: %s", e)
@@ -240,6 +241,7 @@ class DockerSandbox:
 
     def as_tool_executor(self) -> ToolExecutor:
         """Return a callable ToolExecutor compatible with ReActAgent."""
+
         async def _execute(action: AgentAction) -> str:
             if action.tool == "execute_bash":
                 if not action.command:
