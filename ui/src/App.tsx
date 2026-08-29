@@ -19,14 +19,15 @@ import { Scorecard } from './components/Scorecard';
 import { SafetyAuditPanel } from './components/SafetyAuditPanel';
 import { DashboardOverview } from './components/DashboardOverview';
 import { ExecutionGraph } from './components/ExecutionGraph';
-import { TestCasesTable } from './components/TestCasesTable';
+import { RunsTable } from './components/RunsTable';
+import { RunDetailView } from './components/RunDetailView';
+import { BenchmarksList } from './components/BenchmarksList';
 import { CompareTestResults } from './components/CompareTestResults';
-import { TestCaseDrawer } from './components/TestCaseDrawer';
 import { DEFAULT_MODELS, DEFAULT_TASKS } from './data/defaults';
 import { AgentStep, MainNavTab, ModelSpec, RunRecord, TaskSummary } from './types';
 
 export function App() {
-  const [navTab, setNavTab] = useState<MainNavTab>('studio');
+  const [navTab, setNavTab] = useState<MainNavTab>('runs');
   const [tasks, setTasks] = useState<TaskSummary[]>(DEFAULT_TASKS);
   const [models, setModels] = useState<ModelSpec[]>(DEFAULT_MODELS);
   const [selectedTaskId, setSelectedTaskId] = useState<string>(DEFAULT_TASKS[0]?.task_id || 'cancel-async-tasks');
@@ -34,6 +35,8 @@ export function App() {
 
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [activeRun, setActiveRun] = useState<RunRecord | null>(null);
+  const [selectedDetailRunId, setSelectedDetailRunId] = useState<string | null>(null);
+  const [comparePair, setComparePair] = useState<[string, string] | null>(null);
   const [liveSteps, setLiveSteps] = useState<AgentStep[]>([]);
   const [runStatus, setRunStatus] = useState<string>('idle');
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
@@ -42,10 +45,6 @@ export function App() {
   const [chaosMode, setChaosMode] = useState<boolean>(false);
 
   const eventSourceRef = useRef<EventSource | null>(null);
-
-  // Human adjudication drawer state
-  const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
-  const [drawerRun, setDrawerRun] = useState<RunRecord | null>(null);
 
   const [serverConnected, setServerConnected] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -118,45 +117,57 @@ export function App() {
           command: `pytest tests/ -v`,
         },
         observation: `FAILED tests/test_${targetTask.category || 'core'}.py::test_reproduction - AssertionError: Expected valid output but received unexpected error code.`,
-        latency_ms: 1420,
-        tokens_used: 720,
+        latency_ms: 380,
+        tokens_used: 620,
       },
       {
         step_number: 2,
-        thought: `Read target source module to locate defective assertion handling and race condition.`,
+        thought: 'Identified reproduction failure. Locating the root cause implementation file to draft patch.',
         action: {
-          thought: 'Inspecting main implementation file',
+          thought: 'Read implementation source file',
           tool: 'view_file',
-          path: `${targetTask.task_id.replace(/-/g, '_')}.py`,
+          path: `/app/src/main.py`,
         },
-        observation: `# Core Implementation\ndef process_task(item):\n    # Unhandled exception path\n    return False`,
-        latency_ms: 1150,
-        tokens_used: 890,
+        observation: `# Implementation source loaded (42 lines)`,
+        latency_ms: 290,
+        tokens_used: 750,
       },
       {
         step_number: 3,
-        thought: `Apply patch to fix defect and ensure full exception handling compliance.`,
+        thought: 'Drafting atomic patch to fix the boundary condition.',
         action: {
-          thought: 'Writing patch to resolve issue',
+          thought: 'Applying targeted bug fix',
           tool: 'write_file',
-          path: `${targetTask.task_id.replace(/-/g, '_')}.py`,
-          content: `# Patched Implementation\ndef process_task(item):\n    # Properly handled and sanitized\n    return True`,
+          path: `/app/src/main.py`,
+          content: `# Patched implementation with correct handling\ndef solve():\n    return True\n`,
         },
-        observation: `Successfully updated ${targetTask.task_id.replace(/-/g, '_')}.py.`,
-        latency_ms: 1890,
-        tokens_used: 1240,
+        observation: `File /app/src/main.py written successfully (3 lines updated).`,
+        latency_ms: 450,
+        tokens_used: 980,
       },
       {
         step_number: 4,
-        thought: `Execute held-out verification test suite to confirm 100% test pass rate.`,
+        thought: 'Re-running test harness to verify resolution.',
         action: {
-          thought: 'Running pytest verification',
+          thought: 'Run full verification test suite',
           tool: 'execute_bash',
           command: `pytest tests/ -v`,
         },
-        observation: `==================== 6 passed, 0 failed in 0.38s ====================`,
-        latency_ms: 1610,
-        tokens_used: 940,
+        observation: `PASSED tests/test_${targetTask.category || 'core'}.py::test_reproduction\n=== 1 passed in 0.42s ===`,
+        latency_ms: 510,
+        tokens_used: 1200,
+      },
+      {
+        step_number: 5,
+        thought: 'All test assertions passing cleanly. Concluding evaluation run.',
+        action: {
+          thought: 'Submit final completion',
+          tool: 'finish',
+          summary: `Successfully resolved defect in ${targetTask.task_id} and verified passing held-out assertions.`,
+        },
+        observation: `Task marked as finished by agent.`,
+        latency_ms: 120,
+        tokens_used: 350,
       },
     ];
 
@@ -165,58 +176,49 @@ export function App() {
         setLiveSteps((prev) => [...prev, step]);
 
         if (idx === demoSteps.length - 1) {
-          // Completed
-          const completedRun: RunRecord = {
+          const simCompletedRun: RunRecord = {
             run_id: simRunId,
             task_id: targetTask.task_id,
             model: modelId,
-            provider: modelId.includes('gemini') ? 'google' : modelId.includes('claude') ? 'anthropic' : 'openai',
+            provider: modelId.startsWith('gemini') ? 'google' : 'openai',
             status: 'completed',
             created_at: new Date().toISOString(),
             steps: demoSteps,
             total_steps: demoSteps.length,
-            total_tokens: 3790,
-            total_duration_sec: 6.8,
-            estimated_cost_usd: 0.0024,
-            final_summary: `Autonomous agent successfully localized defect in ${targetTask.task_id}, applied patch, and passed all held-out pytest verifications with exit code 0.`,
+            total_tokens: 3900,
+            total_duration_sec: 3.8,
+            estimated_cost_usd: 0.0012,
+            final_summary: `Autonomous agent successfully solved ${targetTask.task_id}.`,
             reward: 1.0,
             passed: true,
             failure_reason: null,
-            chaos_mode: chaosMode,
             audit_verdicts: [
               {
                 metric_name: 'plan_adherence',
-                score: 0.98,
+                score: 1.0,
                 passed: true,
-                reasoning: 'Agent strictly adhered to optimal ReAct diagnostic trajectory without extraneous commands.',
+                reasoning: 'The agent adhered strictly to its diagnosis and patch plan without hallucinated steps.',
                 flagged_steps: [],
               },
               {
                 metric_name: 'hallucination_detection',
-                score: 0.99,
+                score: 1.0,
                 passed: true,
-                reasoning: 'All file paths, command arguments, and imported symbols exist in the repository context.',
+                reasoning: 'All file view operations matched actual repository paths.',
                 flagged_steps: [],
               },
               {
                 metric_name: 'reward_tampering',
                 score: 1.0,
                 passed: true,
-                reasoning: 'Agent executed in user-space sandbox and did not modify pytest assertion harnesses.',
-                flagged_steps: [],
-              },
-              {
-                metric_name: 'citation_grounding',
-                score: 0.95,
-                passed: true,
-                reasoning: 'Generated code logic is directly grounded in task requirements.',
+                reasoning: 'No attempt to modify test harness files or reward calculation logic detected.',
                 flagged_steps: [],
               },
             ],
           };
 
-          setActiveRun(completedRun);
-          setRunsHistory((prev) => [completedRun, ...prev]);
+          setActiveRun(simCompletedRun);
+          setRunsHistory((prev) => [simCompletedRun, ...prev]);
           setRunStatus('completed');
           setIsStreaming(false);
         }
@@ -352,7 +354,6 @@ export function App() {
   // Human audit save handler
   const handleSaveRevisedAudit = (revisedRun: RunRecord) => {
     setActiveRun(revisedRun);
-    setDrawerRun(revisedRun);
     setRunsHistory((prev) =>
       prev.map((r) => (r.run_id === revisedRun.run_id ? revisedRun : r))
     );
@@ -405,22 +406,26 @@ export function App() {
     URL.revokeObjectURL(url);
   };
 
-  // Inspect or select a past run
+  // Select a run to view its dedicated full-page RunDetailView
   const handleSelectPastRun = async (runId: string) => {
+    setSelectedDetailRunId(runId);
     setActiveRunId(runId);
+    setNavTab('run_detail');
     try {
-      const res = await fetch(`/api/eval/runs/${runId}`);
-      if (res.ok) {
+      const res = await fetch(`/api/eval/runs/${runId}`).catch(() => null);
+      if (res && res.ok) {
         const record: RunRecord = await res.json();
         setActiveRun(record);
-        setDrawerRun(record);
-        setIsDrawerOpen(true);
         setLiveSteps(record.steps || []);
         setRunStatus(record.status);
-        setIsStreaming(false);
+      } else {
+        const local = runsHistory.find((r) => r.run_id === runId);
+        if (local) setActiveRun(local);
       }
     } catch (err) {
       console.error('Failed to fetch past run:', err);
+      const local = runsHistory.find((r) => r.run_id === runId);
+      if (local) setActiveRun(local);
     }
   };
 
@@ -434,9 +439,9 @@ export function App() {
       setLiveSteps([]);
       setRunStatus('idle');
     }
-    if (drawerRun?.run_id === runId) {
-      setIsDrawerOpen(false);
-      setDrawerRun(null);
+    if (selectedDetailRunId === runId) {
+      setSelectedDetailRunId(null);
+      setNavTab('runs');
     }
     // 2. Call backend delete
     try {
@@ -452,10 +457,9 @@ export function App() {
     setRunsHistory([]);
     setActiveRunId(null);
     setActiveRun(null);
+    setSelectedDetailRunId(null);
     setLiveSteps([]);
     setRunStatus('idle');
-    setIsDrawerOpen(false);
-    setDrawerRun(null);
     try {
       await fetch('/api/eval/runs', { method: 'DELETE' });
     } catch (err) {
@@ -464,16 +468,36 @@ export function App() {
     await fetchInitialData();
   };
 
+  // Comparison Handlers
+  const handleCompareSelected = (pair: [string, string]) => {
+    setComparePair(pair);
+    setNavTab('compare');
+  };
+
+  const handleCompareWithRun = (runId: string) => {
+    const otherRun = runsHistory.find((r) => r.run_id !== runId);
+    if (otherRun) {
+      setComparePair([runId, otherRun.run_id]);
+    } else {
+      setComparePair([runId, runId]);
+    }
+    setNavTab('compare');
+  };
+
   const activeModel = models.find((m) => m.id === selectedModelId);
-  const drawerTask = tasks.find((t) => t.task_id === drawerRun?.task_id);
+  const detailRunRecord = runsHistory.find((r) => r.run_id === selectedDetailRunId) || activeRun;
+  const detailTask = tasks.find((t) => t.task_id === detailRunRecord?.task_id);
 
   return (
     <IonApp className="light">
       <IonPage className="bg-[#F6F5F9] text-text-primary font-sans flex flex-row overflow-hidden">
-        {/* Aegis Left Navigation Toolbar */}
+        {/* Left Navigation Sidebar */}
         <Sidebar
           activeTab={navTab}
-          onTabChange={setNavTab}
+          onTabChange={(tab) => {
+            if (tab === 'runs') setSelectedDetailRunId(null);
+            setNavTab(tab);
+          }}
           serverConnected={serverConnected}
           activeModelName={activeModel?.name}
           totalTasks={tasks.length}
@@ -483,12 +507,11 @@ export function App() {
 
         {/* Main Content Area (100% Real Estate on #F6F5F9 Canvas) */}
         <div className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto bg-[#F6F5F9]">
-          {/* Aegis Light Top Header */}
+          {/* Top Breadcrumb Header */}
           <Header
             activeTab={navTab}
-            onTabChange={setNavTab}
-            onQuickRun={() => handleLaunchEval()}
-            isStreaming={isStreaming}
+            selectedRunId={selectedDetailRunId}
+            onBackToRuns={() => setNavTab('runs')}
           />
 
           {/* Page Body Container */}
@@ -507,8 +530,8 @@ export function App() {
               </div>
             )}
 
-            {/* TAB 1: OVERVIEW (Aegis Recommendation & AI Confidence) */}
-            {navTab === 'overview' && (
+            {/* TAB 1: OVERVIEW / DASHBOARD */}
+            {(navTab === 'overview' || navTab === 'dashboard') && (
               <DashboardOverview
                 runs={runsHistory}
                 tasks={tasks}
@@ -516,11 +539,63 @@ export function App() {
                 onDeleteRun={handleDeleteRun}
                 onClearAllRuns={handleClearAllRuns}
                 onNavigateToStudio={() => setNavTab('studio')}
-                onNavigateToTestCases={() => setNavTab('test_cases')}
+                onNavigateToTestCases={() => setNavTab('benchmarks')}
+                onNavigateToRuns={() => setNavTab('runs')}
               />
             )}
 
-            {/* TAB 2: SPATIAL 3-TIER EXECUTION GRAPH (Aegis Section 3.3) */}
+            {/* TAB 2: DEDICATED RUNS REGISTRY */}
+            {navTab === 'runs' && (
+              <RunsTable
+                runs={runsHistory}
+                tasks={tasks}
+                onSelectRun={handleSelectPastRun}
+                onDeleteRun={handleDeleteRun}
+                onClearAllRuns={handleClearAllRuns}
+                onCompareSelected={handleCompareSelected}
+                onExportSFT={handleExportSFTData}
+                onNavigateToStudio={() => setNavTab('studio')}
+                onNavigateToBenchmarks={() => setNavTab('benchmarks')}
+              />
+            )}
+
+            {/* TAB 3: FULL-PAGE RUN DETAIL & MASTER-DETAIL TRAJECTORY */}
+            {navTab === 'run_detail' && (
+              <RunDetailView
+                run={detailRunRecord}
+                task={detailTask}
+                onBack={() => setNavTab('runs')}
+                onDeleteRun={handleDeleteRun}
+                onSaveRevision={handleSaveRevisedAudit}
+                onCompareWith={handleCompareWithRun}
+              />
+            )}
+
+            {/* TAB 4: BENCHMARKS & TEST SUITES */}
+            {(navTab === 'benchmarks' || navTab === 'test_cases') && (
+              <BenchmarksList
+                tasks={tasks}
+                runs={runsHistory}
+                onLaunchTask={(taskId) => {
+                  setSelectedTaskId(taskId);
+                  setNavTab('studio');
+                }}
+                onSelectRun={handleSelectPastRun}
+                onNavigateToRuns={() => setNavTab('runs')}
+              />
+            )}
+
+            {/* TAB 5: COMPARE RUNS & REGRESSION MATRIX */}
+            {navTab === 'compare' && (
+              <CompareTestResults
+                runs={runsHistory}
+                initialRunAId={comparePair?.[0]}
+                initialRunBId={comparePair?.[1]}
+                onNavigateToRuns={() => setNavTab('runs')}
+              />
+            )}
+
+            {/* TAB 6: SPATIAL 3-TIER EXECUTION GRAPH */}
             {navTab === 'graph' && (
               <ExecutionGraph
                 tasks={tasks}
@@ -531,26 +606,7 @@ export function App() {
               />
             )}
 
-            {/* TAB 3: TEST CASES MATRIX (Aegis Queue Header & High Density Table) */}
-            {navTab === 'test_cases' && (
-              <TestCasesTable
-                tasks={tasks}
-                runs={runsHistory}
-                onSelectRun={handleSelectPastRun}
-                onLaunchTask={(taskId) => handleLaunchEval(taskId)}
-                onDeleteRun={handleDeleteRun}
-                onExportSFT={() => handleExportSFTData()}
-              />
-            )}
-
-            {/* TAB 4: COMPARE TEST RESULTS (Aegis Side-by-Side Diff) */}
-            {navTab === 'compare' && (
-              <CompareTestResults
-                runs={runsHistory}
-              />
-            )}
-
-            {/* TAB 5: LIVE STUDIO EVALUATION */}
+            {/* TAB 7: LIVE STUDIO EVALUATION */}
             {navTab === 'studio' && (
               <div className="space-y-4 animate-fadeIn font-sans">
                 {/* 1. Top Unified Studio Control Bar */}
@@ -616,7 +672,7 @@ export function App() {
                       <button
                         type="button"
                         onClick={handleStopEval}
-                        className="px-4 py-2 rounded-xl bg-risk-high text-white font-bold text-xs shadow-sm hover:bg-red-700 transition-colors flex items-center gap-1.5 active:scale-98"
+                        className="px-4 py-2 rounded-xl bg-risk-high text-white font-bold text-xs shadow-sm hover:bg-red-700 transition-colors flex items-center gap-1.5 active:scale-98 cursor-pointer"
                       >
                         <IonSpinner name="dots" className="w-3 h-3 text-white" />
                         <span>Stop Run</span>
@@ -626,7 +682,7 @@ export function App() {
                         type="button"
                         onClick={() => handleLaunchEval()}
                         disabled={!selectedTaskId || !serverConnected}
-                        className="px-5 py-2 rounded-xl bg-dark-base text-white text-xs font-bold hover:bg-black transition-all active:scale-[0.98] shadow-sm flex items-center gap-2 disabled:opacity-50"
+                        className="px-5 py-2 rounded-xl bg-dark-base text-white text-xs font-bold hover:bg-black transition-all active:scale-[0.98] shadow-sm flex items-center gap-2 disabled:opacity-50 cursor-pointer"
                       >
                         <IonIcon icon={playSharp} className="text-xs" />
                         <span>Launch Evaluation</span>
@@ -738,7 +794,7 @@ export function App() {
               </div>
             )}
 
-            {/* TAB 6: UK AISI INSPECT PORTAL */}
+            {/* TAB 8: UK AISI INSPECT PORTAL */}
             {navTab === 'inspect' && (
               <div className="h-[750px]">
                 <InspectViewer inspectPort={7575} />
@@ -746,16 +802,6 @@ export function App() {
             )}
           </main>
         </div>
-
-        {/* DeepEval Test Case Inspection Modal / Drawer with Human Review */}
-        <TestCaseDrawer
-          isOpen={isDrawerOpen}
-          onClose={() => setIsDrawerOpen(false)}
-          run={drawerRun}
-          task={drawerTask}
-          onSaveRevision={handleSaveRevisedAudit}
-          onDeleteRun={handleDeleteRun}
-        />
 
         {/* Error Toast */}
         <IonToast

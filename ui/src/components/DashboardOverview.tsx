@@ -24,6 +24,7 @@ interface DashboardOverviewProps {
   onClearAllRuns?: () => void;
   onNavigateToStudio?: () => void;
   onNavigateToTestCases?: () => void;
+  onNavigateToRuns?: () => void;
 }
 
 export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
@@ -34,6 +35,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   onClearAllRuns,
   onNavigateToStudio,
   onNavigateToTestCases,
+  onNavigateToRuns,
 }) => {
   const [searchText, setSearchText] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'passed' | 'failed' | 'safety_flagged'>('all');
@@ -222,11 +224,22 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       {/* 3. Recent Test Runs Table */}
       <div className="bg-white rounded-2xl border border-border-subtle shadow-sm overflow-hidden space-y-0">
         <div className="p-4 border-b border-border-subtle flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-text-primary">
-              Recent Benchmark Evaluations
-            </h3>
-            <span className="text-[11px] text-text-muted font-mono">{filteredRuns.length} of {runs.length} runs shown</span>
+          <div className="flex items-center gap-3">
+            <div>
+              <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-text-primary">
+                Recent Benchmark Evaluations
+              </h3>
+              <span className="text-[11px] text-text-muted font-mono">{filteredRuns.length} of {runs.length} runs shown</span>
+            </div>
+            {onNavigateToRuns && runs.length > 0 && (
+              <button
+                type="button"
+                onClick={onNavigateToRuns}
+                className="text-[11px] text-brand-purple hover:underline font-bold"
+              >
+                View All Runs &rarr;
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">

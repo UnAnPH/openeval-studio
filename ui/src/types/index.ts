@@ -79,6 +79,16 @@ export interface RunRecord {
   chaos_mode?: boolean;
 }
 
-export type MainNavTab = 'overview' | 'graph' | 'test_cases' | 'compare' | 'studio' | 'inspect';
+export type MainNavTab =
+  | 'dashboard'
+  | 'overview'
+  | 'runs'
+  | 'run_detail'
+  | 'benchmarks'
+  | 'test_cases'
+  | 'studio'
+  | 'compare'
+  | 'graph'
+  | 'inspect';
 
 

@@ -1,0 +1,808 @@
+import React, { useState } from 'react';
+import {
+  IonIcon,
+} from '@ionic/react';
+import {
+  arrowBackOutline,
+  checkmarkCircle,
+  closeCircle,
+  codeSlashOutline,
+  copyOutline,
+  documentTextOutline,
+  downloadOutline,
+  gitCompareOutline,
+  hourglassOutline,
+  layersOutline,
+  saveOutline,
+  shieldCheckmarkOutline,
+  shieldOutline,
+  terminalOutline,
+  timeOutline,
+  trashOutline,
+  cashOutline,
+  sparklesOutline,
+  chevronForwardOutline,
+} from 'ionicons/icons';
+import { RunRecord, TaskSummary } from '../types';
+
+interface RunDetailViewProps {
+  run: RunRecord | null;
+  task?: TaskSummary | null;
+  onBack: () => void;
+  onDeleteRun?: (runId: string) => void;
+  onSaveRevision?: (revisedRun: RunRecord) => void;
+  onCompareWith?: (runId: string) => void;
+}
+
+export const RunDetailView: React.FC<RunDetailViewProps> = ({
+  run,
+  task,
+  onBack,
+  onDeleteRun,
+  onSaveRevision,
+  onCompareWith,
+}) => {
+  const [activeTab, setActiveTab] = useState<'trajectory' | 'judges' | 'verifier' | 'diffs' | 'report'>('trajectory');
+  const [selectedStepIdx, setSelectedStepIdx] = useState<number>(0);
+  const [copied, setCopied] = useState<boolean>(false);
+
+  // Human review state
+  const [humanReviewer, setHumanReviewer] = useState<string>(run?.human_reviewer || '');
+  const [humanReviewNotes, setHumanReviewNotes] = useState<string>(run?.human_review_notes || '');
+  const [overrideScores, setOverrideScores] = useState<Record<string, boolean>>(run?.audit_overrides || {});
+  const [isSaved, setIsSaved] = useState<boolean>(false);
+
+  if (!run) {
+    return (
+      <div className="w-full bg-white p-12 rounded-2xl border border-border-subtle shadow-sm text-center space-y-4 font-sans">
+        <div className="w-12 h-12 rounded-2xl bg-canvas border border-border-subtle mx-auto flex items-center justify-center text-text-muted">
+          <IonIcon icon={hourglassOutline} className="text-2xl" />
+        </div>
+        <h3 className="text-base font-bold text-text-primary">Evaluation Run Not Found</h3>
+        <p className="text-xs text-text-secondary">The requested evaluation record could not be loaded or was deleted.</p>
+        <button
+          type="button"
+          onClick={onBack}
+          className="px-4 py-2 rounded-xl bg-dark-base text-white text-xs font-bold hover:bg-black"
+        >
+          Back to Runs
+        </button>
+      </div>
+    );
+  }
+
+  const isPassed = run.passed === true;
+  const isFailed = run.passed === false;
+  const steps = run.steps || [];
+  const selectedStep = steps[selectedStepIdx] || steps[0] || null;
+
+  // File mutations
+  const mutatedFiles = steps.filter(
+    (s) => s.action.tool === 'write_file' && s.action.path
+  );
+
+  const handleCopyId = () => {
+    navigator.clipboard.writeText(run.run_id);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleSaveReview = () => {
+    const updatedVerdicts = (run.audit_verdicts || []).map((v) => {
+      const isOverridden = overrideScores[v.metric_name] !== undefined;
+      return {
+        ...v,
+        overridden: isOverridden,
+        passed: isOverridden ? overrideScores[v.metric_name] : v.passed,
+        override_reason: v.override_reason,
+      };
+    });
+
+    const updatedRun: RunRecord = {
+      ...run,
+      audit_verdicts: updatedVerdicts,
+      audit_overrides: overrideScores,
+      human_reviewer: humanReviewer || 'Anonymous Auditor',
+      human_review_notes: humanReviewNotes,
+      revised_at: new Date().toISOString(),
+    };
+
+    onSaveRevision?.(updatedRun);
+    setIsSaved(true);
+    setTimeout(() => setIsSaved(false), 3000);
+  };
+
+  const handleDownloadReport = () => {
+    const reportMd = `# 🛡️ OpenEval Safety Audit & Verification Report
+**Run ID:** \`${run.run_id}\`  
+**Benchmark Task:** \`${run.task_id}\`  
+**Model:** \`${run.model}\`  
+**Status:** **${isPassed ? 'PASSED ✅' : isFailed ? 'FAILED ❌' : run.status}**  
+**Execution Timestamp:** ${run.created_at}  
+**Total Steps:** ${run.total_steps || steps.length}  
+**Duration:** ${run.total_duration_sec.toFixed(2)}s  
+**Token Usage:** ${run.total_tokens?.toLocaleString()} tokens (Est. Cost: $${run.estimated_cost_usd?.toFixed(4)})  
+**Human Auditor:** ${humanReviewer || run.human_reviewer || 'Unassigned'}  
+
+---
+
+## 🧪 1. Ground-Truth Verifier Assertions
+${run.failure_reason || (isPassed ? '=== 1 passed ===\nAll held-out pytest assertions verified.' : 'No diagnostic trace provided.')}
+
+---
+
+## ⚖️ 2. AI Safety & Alignment Audits
+${(run.audit_verdicts || [])
+  .map(
+    (v) => `### Metric: ${v.metric_name.toUpperCase()}
+- **Verdict:** ${v.passed ? '✅ PASSED' : '❌ FAILED'} (Score: ${(v.score * 100).toFixed(0)}%)
+- **Reasoning:** ${v.reasoning}
+${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
+  )
+  .join('\n\n')}
+
+---
+
+## 📝 3. Human Reviewer Notes
+> ${humanReviewNotes || run.human_review_notes || 'No human reviewer notes recorded.'}
+
+---
+*Generated by OpenEval Studio (Native UK AISI Inspect AI)*
+`;
+
+    const blob = new Blob([reportMd], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `audit_report_${run.task_id}_${run.run_id}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportSFT = () => {
+    const sftData = {
+      run_id: run.run_id,
+      task_id: run.task_id,
+      model: run.model,
+      reward: run.reward,
+      messages: [
+        {
+          role: 'system',
+          content: 'You are an autonomous software engineering and AI safety agent operating inside an isolated Docker sandbox.',
+        },
+        {
+          role: 'user',
+          content: `Solve benchmark task ${run.task_id}: ${task?.instruction_preview || 'Fix the repository defect.'}`,
+        },
+        ...steps.flatMap((s) => [
+          {
+            role: 'assistant',
+            content: `Thought: ${s.thought}\nAction: ${s.action.tool} ${s.action.command || s.action.path || ''}\n${s.action.content || ''}`,
+          },
+          {
+            role: 'user',
+            content: `Observation:\n${s.observation || '(no output)'}`,
+          },
+        ]),
+      ],
+    };
+
+    const blob = new Blob([JSON.stringify(sftData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `sft_sample_${run.task_id}_${run.run_id}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="w-full space-y-5 animate-fadeIn font-sans">
+      {/* 1. Top Breadcrumb & Action Banner */}
+      <div className="bg-white p-5 rounded-2xl border border-border-subtle shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="flex items-center gap-3 flex-wrap">
+          <button
+            type="button"
+            onClick={onBack}
+            className="p-2 rounded-xl bg-canvas border border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-subtle transition-colors flex items-center gap-1.5 text-xs font-bold cursor-pointer"
+          >
+            <IonIcon icon={arrowBackOutline} className="text-sm" />
+            <span>Back to Runs</span>
+          </button>
+
+          <div className="h-4 w-px bg-border-subtle hidden sm:block" />
+
+          <div className="flex items-center gap-2">
+            <h2 className="text-base font-bold text-text-primary font-mono">{run.task_id}</h2>
+            <span
+              className={`text-[10px] uppercase font-mono px-2.5 py-0.5 rounded-full font-bold border ${
+                isPassed
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : isFailed
+                  ? 'bg-rose-50 text-rose-700 border-rose-200'
+                  : 'bg-purple-50 text-brand-purple border-purple-200'
+              }`}
+            >
+              {isPassed ? 'PASSED' : isFailed ? 'FAILED' : run.status}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5 text-xs font-mono text-text-muted">
+            <span>Run:</span>
+            <span className="text-text-primary">{run.run_id}</span>
+            <button
+              type="button"
+              onClick={handleCopyId}
+              className="p-0.5 hover:text-text-primary text-text-muted"
+              title="Copy ID"
+            >
+              <IonIcon icon={copyOutline} className="text-xs" />
+            </button>
+            {copied && <span className="text-[10px] text-emerald-600 font-bold">Copied!</span>}
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {onCompareWith && (
+            <button
+              type="button"
+              onClick={() => onCompareWith(run.run_id)}
+              className="px-3 py-1.5 rounded-xl bg-canvas border border-border-subtle text-xs font-bold text-text-primary hover:bg-surface-subtle transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <IonIcon icon={gitCompareOutline} className="text-xs text-brand-purple" />
+              <span>Compare Run</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={handleExportSFT}
+            className="px-3 py-1.5 rounded-xl bg-canvas border border-border-subtle text-xs font-bold text-text-primary hover:bg-surface-subtle transition-all flex items-center gap-1.5 cursor-pointer"
+          >
+            <IonIcon icon={downloadOutline} className="text-xs text-brand-purple" />
+            <span>Export SFT JSON</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleDownloadReport}
+            className="px-3 py-1.5 rounded-xl bg-surface-subtle border border-border-subtle text-xs font-bold text-brand-purple hover:bg-purple-100 transition-all flex items-center gap-1.5 cursor-pointer"
+          >
+            <IonIcon icon={documentTextOutline} className="text-xs" />
+            <span>Download Audit Report</span>
+          </button>
+
+          {onDeleteRun && (
+            <button
+              type="button"
+              onClick={() => {
+                if (confirm(`Delete run ${run.run_id}?`)) {
+                  onDeleteRun(run.run_id);
+                  onBack();
+                }
+              }}
+              className="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <IonIcon icon={trashOutline} className="text-xs" />
+              <span>Delete Run</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 2. Executive KPI Ribbon */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="bg-white p-4 rounded-xl border border-border-subtle shadow-sm space-y-1">
+          <div className="text-[11px] text-text-muted font-medium flex items-center justify-between">
+            <span>Score / Verdict</span>
+            <IonIcon
+              icon={isPassed ? checkmarkCircle : closeCircle}
+              className={`text-xs ${isPassed ? 'text-status-cleared' : 'text-risk-high'}`}
+            />
+          </div>
+          <div className={`text-xl font-bold font-mono ${isPassed ? 'text-emerald-700' : 'text-rose-700'}`}>
+            {run.reward !== null ? `${run.reward.toFixed(1)}/1.0` : '—'}
+          </div>
+          <div className="text-[10px] text-text-secondary truncate">
+            {isPassed ? 'Held-out tests passed' : 'Verifier assertions failed'}
+          </div>
+        </div>
+
+        <div className="bg-white p-4 rounded-xl border border-border-subtle shadow-sm space-y-1">
+          <div className="text-[11px] text-text-muted font-medium flex items-center justify-between">
+            <span>Model Evaluated</span>
+            <IonIcon icon={sparklesOutline} className="text-brand-purple text-xs" />
+          </div>
+          <div className="text-sm font-bold font-mono text-text-primary truncate">{run.model}</div>
+          <div className="text-[10px] text-text-secondary uppercase">{run.provider} provider</div>
+        </div>
+
+        <div className="bg-white p-4 rounded-xl border border-border-subtle shadow-sm space-y-1">
+          <div className="text-[11px] text-text-muted font-medium flex items-center justify-between">
+            <span>Duration</span>
+            <IonIcon icon={timeOutline} className="text-accent-orange text-xs" />
+          </div>
+          <div className="text-xl font-bold font-mono text-text-primary">{run.total_duration_sec.toFixed(1)}s</div>
+          <div className="text-[10px] text-text-secondary">Across {run.total_steps || steps.length} turns</div>
+        </div>
+
+        <div className="bg-white p-4 rounded-xl border border-border-subtle shadow-sm space-y-1">
+          <div className="text-[11px] text-text-muted font-medium flex items-center justify-between">
+            <span>Total Tokens</span>
+            <IonIcon icon={layersOutline} className="text-text-muted text-xs" />
+          </div>
+          <div className="text-xl font-bold font-mono text-text-primary">
+            {run.total_tokens?.toLocaleString() || 0}
+          </div>
+          <div className="text-[10px] text-text-secondary font-mono">
+            ~{Math.round((run.total_tokens || 0) / Math.max(1, steps.length))} tok/turn
+          </div>
+        </div>
+
+        <div className="bg-white p-4 rounded-xl border border-border-subtle shadow-sm space-y-1">
+          <div className="text-[11px] text-text-muted font-medium flex items-center justify-between">
+            <span>Est. Cost</span>
+            <IonIcon icon={cashOutline} className="text-emerald-600 text-xs" />
+          </div>
+          <div className="text-xl font-bold font-mono text-emerald-700">
+            ${run.estimated_cost_usd?.toFixed(4) || '0.0000'}
+          </div>
+          <div className="text-[10px] text-text-secondary">API token billing</div>
+        </div>
+
+        <div className="bg-white p-4 rounded-xl border border-border-subtle shadow-sm space-y-1">
+          <div className="text-[11px] text-text-muted font-medium flex items-center justify-between">
+            <span>Safety Judges</span>
+            <IonIcon icon={shieldCheckmarkOutline} className="text-brand-purple text-xs" />
+          </div>
+          <div className="text-xl font-bold font-mono text-brand-purple">
+            {(run.audit_verdicts || []).filter((v) => v.passed).length}/{(run.audit_verdicts || []).length || 3}
+          </div>
+          <div className="text-[10px] text-text-secondary">Audits cleared</div>
+        </div>
+      </div>
+
+      {/* 3. Navigation Tabs */}
+      <div className="bg-white p-1.5 rounded-2xl border border-border-subtle shadow-sm flex items-center gap-1 text-xs font-bold overflow-x-auto">
+        {[
+          { id: 'trajectory', label: `Trajectory Trace (${steps.length} Turns)`, icon: terminalOutline },
+          { id: 'judges', label: `Safety & Alignment Audits (${run.audit_verdicts?.length || 0})`, icon: shieldCheckmarkOutline },
+          { id: 'verifier', label: 'Held-Out Verifier Output', icon: checkmarkCircle },
+          { id: 'diffs', label: `Code Mutations (${mutatedFiles.length})`, icon: codeSlashOutline },
+          { id: 'report', label: 'Safety Audit Report', icon: documentTextOutline },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setActiveTab(tab.id as any)}
+            className={`px-4 py-2 rounded-xl flex items-center gap-2 whitespace-nowrap transition-all cursor-pointer ${
+              activeTab === tab.id
+                ? 'bg-dark-base text-white shadow-sm'
+                : 'text-text-secondary hover:text-text-primary hover:bg-canvas'
+            }`}
+          >
+            <IonIcon icon={tab.icon} className="text-xs" />
+            <span>{tab.label}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* 4. Tab Content Panels */}
+      {/* TAB 1: TWO-PANE MASTER-DETAIL TRAJECTORY INSPECTOR */}
+      {activeTab === 'trajectory' && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* Left Column: Turn Master List (4 Cols) */}
+          <div className="lg:col-span-4 bg-white p-4 rounded-2xl border border-border-subtle shadow-sm space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-border-subtle">
+              <h3 className="text-xs font-bold text-text-primary uppercase tracking-wider font-mono">
+                Execution Steps
+              </h3>
+              <span className="text-[11px] font-mono text-text-muted">{steps.length} turns</span>
+            </div>
+
+            {steps.length === 0 ? (
+              <div className="p-8 text-center text-text-muted text-xs font-mono">No steps recorded in this run.</div>
+            ) : (
+              <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1">
+                {steps.map((step, idx) => {
+                  const isSelected = selectedStepIdx === idx;
+                  const isBlocked = step.firewall_blocked || step.action?.firewall_blocked;
+                  const isFinish = step.action.tool === 'finish';
+
+                  return (
+                    <div
+                      key={step.step_number}
+                      onClick={() => setSelectedStepIdx(idx)}
+                      className={`p-3 rounded-xl border transition-all cursor-pointer space-y-1.5 ${
+                        isSelected
+                          ? 'bg-purple-50/70 border-brand-purple shadow-sm ring-1 ring-brand-purple/20'
+                          : 'bg-canvas/50 border-border-subtle hover:bg-canvas hover:border-border-subtle/80'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono font-bold text-brand-purple px-1.5 py-0.2 rounded bg-surface-subtle text-[10px]">
+                            #{step.step_number}
+                          </span>
+                          <span className="font-mono font-bold text-text-primary text-[11px]">
+                            {isFinish ? 'Finish' : step.action.tool}
+                          </span>
+                        </div>
+
+                        {isBlocked ? (
+                          <span className="text-[9px] uppercase px-1.5 py-0.2 rounded font-bold bg-rose-100 text-rose-800">
+                            Blocked
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-mono text-text-muted">
+                            {step.latency_ms?.toFixed(0) || 0}ms
+                          </span>
+                        )}
+                      </div>
+
+                      <p className="text-[11px] text-text-secondary line-clamp-2 leading-relaxed font-sans">
+                        {step.thought || (step.action.command ? `$ ${step.action.command}` : 'No reasoning text.')}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Right Column: Turn Detail Panel (8 Cols) */}
+          <div className="lg:col-span-8 bg-white p-6 rounded-2xl border border-border-subtle shadow-sm space-y-5">
+            {selectedStep ? (
+              <>
+                <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-text-primary font-mono">
+                      Turn #{selectedStep.step_number}: {selectedStep.action.tool}
+                    </span>
+                    {selectedStep.firewall_blocked && (
+                      <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-rose-100 text-rose-800">
+                        Safety Firewall Intercepted
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 font-mono text-xs text-text-muted">
+                    <span>{selectedStep.latency_ms?.toFixed(0) || 0}ms latency</span>
+                    <span>{selectedStep.tokens_used || 0} tokens</span>
+                  </div>
+                </div>
+
+                {/* Safety Firewall Interception Banner */}
+                {(selectedStep.firewall_blocked || selectedStep.action?.firewall_blocked) && (
+                  <div className="p-4 rounded-xl bg-rose-50 border border-rose-300 text-xs text-rose-900 space-y-1">
+                    <div className="flex items-center gap-1.5 font-bold font-mono text-rose-700">
+                      <IonIcon icon={shieldOutline} className="text-rose-600 text-sm" />
+                      <span>⚠️ BLOCKED BY APPROVAL POLICY FIREWALL</span>
+                    </div>
+                    <p className="text-xs text-rose-800 leading-tight">
+                      {selectedStep.firewall_reason ||
+                        selectedStep.action?.firewall_reason ||
+                        'Unauthorized privilege escalation or test tampering intercepted.'}
+                    </p>
+                  </div>
+                )}
+
+                {/* Agent Reasoning */}
+                <div className="space-y-2">
+                  <div className="text-[10px] font-mono uppercase font-bold tracking-wider text-text-muted flex items-center gap-1">
+                    <IonIcon icon={chevronForwardOutline} className="text-brand-purple text-xs" />
+                    Agent Inner Reasoning & Planning
+                  </div>
+                  <div className="p-4 rounded-xl bg-canvas border border-border-subtle text-xs text-text-primary leading-relaxed whitespace-pre-wrap font-sans">
+                    {selectedStep.thought || 'No explicit thought string provided.'}
+                  </div>
+                </div>
+
+                {/* Action Execution */}
+                {selectedStep.action.command && (
+                  <div className="space-y-2">
+                    <div className="text-[10px] font-mono uppercase font-bold tracking-wider text-accent-orange flex items-center gap-1">
+                      <IonIcon icon={terminalOutline} className="text-xs" />
+                      Executed Shell Command (Sandbox)
+                    </div>
+                    <pre className="p-4 rounded-xl bg-[#14121F] text-emerald-400 font-mono text-xs overflow-x-auto">
+                      <span className="text-slate-500 select-none">$ </span>
+                      {selectedStep.action.command}
+                    </pre>
+                  </div>
+                )}
+
+                {/* Action: Write File */}
+                {selectedStep.action.tool === 'write_file' && selectedStep.action.path && (
+                  <div className="space-y-2">
+                    <div className="text-[10px] font-mono uppercase font-bold tracking-wider text-brand-purple flex items-center gap-1">
+                      <IonIcon icon={codeSlashOutline} className="text-xs" />
+                      File Written: {selectedStep.action.path}
+                    </div>
+                    {selectedStep.action.content && (
+                      <pre className="p-4 rounded-xl bg-[#14121F] text-slate-200 font-mono text-xs overflow-x-auto max-h-64 whitespace-pre-wrap">
+                        {selectedStep.action.content}
+                      </pre>
+                    )}
+                  </div>
+                )}
+
+                {/* Action: Finish Summary */}
+                {selectedStep.action.tool === 'finish' && (
+                  <div className="space-y-2">
+                    <div className="text-[10px] font-mono uppercase font-bold tracking-wider text-status-cleared flex items-center gap-1">
+                      <IonIcon icon={checkmarkCircle} className="text-xs" />
+                      Final Agent Resolution Declaration
+                    </div>
+                    <div className="p-4 rounded-xl bg-emerald-50/60 border border-emerald-200 text-xs text-emerald-900 leading-relaxed whitespace-pre-wrap font-sans">
+                      {selectedStep.action.summary || selectedStep.thought || 'Task reported completed by agent.'}
+                    </div>
+                  </div>
+                )}
+
+                {/* Sandbox Observation */}
+                {selectedStep.observation && (
+                  <div className="space-y-2">
+                    <div className="text-[10px] font-mono uppercase font-bold tracking-wider text-text-muted flex items-center gap-1">
+                      <IonIcon icon={terminalOutline} className="text-xs" />
+                      Container Sandbox Stdout / Stderr
+                    </div>
+                    <pre className="p-4 rounded-xl bg-[#14121F] text-slate-300 font-mono text-xs overflow-x-auto max-h-56 whitespace-pre-wrap leading-relaxed">
+                      {selectedStep.observation}
+                    </pre>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="p-12 text-center text-text-muted text-xs">Select a step on the left to inspect.</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2: SAFETY & ALIGNMENT AUDITS */}
+      {activeTab === 'judges' && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* Left: Automated LLM Judges (7 Cols) */}
+          <div className="lg:col-span-7 bg-white p-6 rounded-2xl border border-border-subtle shadow-sm space-y-4">
+            <h3 className="text-sm font-bold text-text-primary">Automated LLM-as-a-Judge Criteria</h3>
+
+            {(run.audit_verdicts || []).length === 0 ? (
+              <div className="p-8 text-center text-text-muted text-xs font-mono">
+                No LLM judge audits evaluated for this run.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {(run.audit_verdicts || []).map((verdict) => {
+                  const isJudgePassed = verdict.passed;
+                  return (
+                    <div
+                      key={verdict.metric_name}
+                      className={`p-4 rounded-xl border space-y-2 ${
+                        isJudgePassed
+                          ? 'bg-emerald-50/50 border-emerald-200'
+                          : 'bg-rose-50/50 border-rose-200'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <IonIcon
+                            icon={isJudgePassed ? checkmarkCircle : closeCircle}
+                            className={`text-base ${isJudgePassed ? 'text-status-cleared' : 'text-risk-high'}`}
+                          />
+                          <span className="font-bold text-xs font-mono capitalize">
+                            {verdict.metric_name.replace('_', ' ')}
+                          </span>
+                        </div>
+                        <span className="font-mono font-bold text-xs">
+                          {Math.round(verdict.score * 100)}%
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-text-secondary leading-relaxed bg-white p-3 rounded-lg border border-border-subtle">
+                        {verdict.reasoning}
+                      </p>
+
+                      {/* Human Override Toggle */}
+                      <div className="pt-2 border-t border-border-subtle flex items-center justify-between text-xs">
+                        <span className="text-[11px] text-text-muted">Human Override:</span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setOverrideScores((prev) => ({
+                                ...prev,
+                                [verdict.metric_name]: true,
+                              }))
+                            }
+                            className={`px-2 py-1 rounded text-[10px] font-bold ${
+                              overrideScores[verdict.metric_name] === true
+                                ? 'bg-emerald-600 text-white'
+                                : 'bg-canvas text-text-secondary hover:bg-surface-subtle'
+                            }`}
+                          >
+                            Mark Pass
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setOverrideScores((prev) => ({
+                                ...prev,
+                                [verdict.metric_name]: false,
+                              }))
+                            }
+                            className={`px-2 py-1 rounded text-[10px] font-bold ${
+                              overrideScores[verdict.metric_name] === false
+                                ? 'bg-rose-600 text-white'
+                                : 'bg-canvas text-text-secondary hover:bg-surface-subtle'
+                            }`}
+                          >
+                            Mark Fail
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Right: Human Reviewer Sign-off (5 Cols) */}
+          <div className="lg:col-span-5 bg-white p-6 rounded-2xl border border-border-subtle shadow-sm space-y-4">
+            <h3 className="text-sm font-bold text-text-primary">Human-in-the-Loop Review</h3>
+            <p className="text-xs text-text-secondary leading-relaxed">
+              Add auditor notes and sign off on benchmark safety adherence.
+            </p>
+
+            <div className="space-y-3 text-xs">
+              <div className="space-y-1">
+                <label className="font-bold text-text-primary">Auditor Name / ID</label>
+                <input
+                  type="text"
+                  value={humanReviewer}
+                  onChange={(e) => setHumanReviewer(e.target.value)}
+                  placeholder="e.g. Safety Engineer (Jayson)"
+                  className="w-full bg-canvas border border-border-subtle rounded-xl px-3 py-2 text-xs text-text-primary focus:outline-none focus:border-brand-primary font-sans"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-text-primary">Audit Justification Notes</label>
+                <textarea
+                  rows={5}
+                  value={humanReviewNotes}
+                  onChange={(e) => setHumanReviewNotes(e.target.value)}
+                  placeholder="Explain why this trajectory adheres to or violates safety standards..."
+                  className="w-full bg-canvas border border-border-subtle rounded-xl p-3 text-xs text-text-primary focus:outline-none focus:border-brand-primary font-sans"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={handleSaveReview}
+                className="w-full py-2.5 rounded-xl bg-dark-base text-white font-bold text-xs hover:bg-black transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+              >
+                <IonIcon icon={saveOutline} className="text-xs" />
+                <span>Save Review & Sign Off</span>
+              </button>
+
+              {isSaved && (
+                <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs text-center font-bold animate-fadeIn">
+                  ✓ Human Review Signed Off & Saved!
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: HELD-OUT VERIFIER OUTPUT */}
+      {activeTab === 'verifier' && (
+        <div className="bg-white p-6 rounded-2xl border border-border-subtle shadow-sm space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
+            <div>
+              <h3 className="text-sm font-bold text-text-primary">Held-Out Verifier Diagnostics</h3>
+              <p className="text-xs text-text-secondary mt-0.5">Automated test harness assertions executed inside container</p>
+            </div>
+            <span
+              className={`px-3 py-1 rounded-full text-xs font-mono font-bold ${
+                isPassed ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+              }`}
+            >
+              {isPassed ? 'ALL ASSERTIONS PASSED (1.0)' : 'VERIFIER ASSERTION FAILED (0.0)'}
+            </span>
+          </div>
+
+          <pre className="p-4 rounded-xl bg-[#14121F] text-slate-200 font-mono text-xs overflow-x-auto whitespace-pre-wrap leading-relaxed max-h-[550px]">
+            {run.failure_reason || (isPassed ? '=== 1 passed ===\n\nAll test harness assertions verified.' : 'No diagnostic trace provided.')}
+          </pre>
+        </div>
+      )}
+
+      {/* TAB 4: CODE MUTATIONS & FILE DIFFS */}
+      {activeTab === 'diffs' && (
+        <div className="bg-white p-6 rounded-2xl border border-border-subtle shadow-sm space-y-4">
+          <h3 className="text-sm font-bold text-text-primary">File Mutations Generated by Agent</h3>
+
+          {mutatedFiles.length === 0 ? (
+            <div className="p-8 text-center text-text-muted text-xs font-mono">
+              No files were written or mutated during this run.
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {mutatedFiles.map((step) => (
+                <div key={step.step_number} className="p-4 rounded-xl bg-canvas border border-border-subtle space-y-2">
+                  <div className="flex items-center justify-between text-xs font-mono">
+                    <span className="font-bold text-brand-purple">
+                      Turn #{step.step_number}: {step.action.path}
+                    </span>
+                    <span className="text-text-muted">{step.action.content?.length || 0} bytes</span>
+                  </div>
+
+                  <pre className="p-4 rounded-xl bg-[#14121F] text-slate-200 font-mono text-xs overflow-x-auto whitespace-pre-wrap max-h-72">
+                    {step.action.content}
+                  </pre>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 5: AUDIT REPORT DOCUMENT */}
+      {activeTab === 'report' && (
+        <div className="bg-white p-6 rounded-2xl border border-border-subtle shadow-sm space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
+            <div>
+              <h3 className="text-sm font-bold text-text-primary">Safety Audit Report (Markdown)</h3>
+              <p className="text-xs text-text-secondary mt-0.5">Exportable compliance artifact for red-teaming and safety review</p>
+            </div>
+            <button
+              type="button"
+              onClick={handleDownloadReport}
+              className="px-3.5 py-1.5 rounded-xl bg-dark-base text-white text-xs font-bold flex items-center gap-1.5 hover:bg-black"
+            >
+              <IonIcon icon={downloadOutline} className="text-xs" />
+              <span>Download Report (.md)</span>
+            </button>
+          </div>
+
+          <div className="p-5 rounded-xl bg-canvas border border-border-subtle font-mono text-xs text-text-primary space-y-3 leading-relaxed">
+            <div className="font-bold text-sm text-text-primary">
+              # 🛡️ OpenEval Safety Audit & Verification Report
+            </div>
+            <div><strong>Task:</strong> {run.task_id}</div>
+            <div><strong>Run ID:</strong> {run.run_id}</div>
+            <div><strong>Model:</strong> {run.model}</div>
+            <div><strong>Status:</strong> {isPassed ? 'PASSED ✅' : 'FAILED ❌'}</div>
+            <div><strong>Duration:</strong> {run.total_duration_sec.toFixed(2)}s ({steps.length} turns)</div>
+            <div><strong>Tokens & Cost:</strong> {run.total_tokens?.toLocaleString()} tok (${run.estimated_cost_usd?.toFixed(4)})</div>
+
+            <div className="pt-3 border-t border-border-subtle">
+              <div className="font-bold text-xs text-text-primary mb-1">## Verifier Outcome:</div>
+              <div className="p-3 bg-white rounded-lg border border-border-subtle">
+                {run.failure_reason || '=== 1 passed === (Held-out verifier satisfied)'}
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-border-subtle">
+              <div className="font-bold text-xs text-text-primary mb-1">## Safety Judgments:</div>
+              <ul className="list-disc pl-5 space-y-1">
+                {(run.audit_verdicts || []).map((v) => (
+                  <li key={v.metric_name}>
+                    <strong>{v.metric_name}:</strong> {v.passed ? 'PASSED' : 'FAILED'} ({(v.score * 100).toFixed(0)}%) — {v.reasoning}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

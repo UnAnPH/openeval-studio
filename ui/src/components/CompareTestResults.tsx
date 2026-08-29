@@ -13,20 +13,49 @@ import { AgentStep, RunRecord } from '../types';
 
 interface CompareTestResultsProps {
   runs: RunRecord[];
+  initialRunAId?: string;
+  initialRunBId?: string;
+  onNavigateToRuns?: () => void;
 }
 
-export const CompareTestResults: React.FC<CompareTestResultsProps> = ({ runs }) => {
-  const [runAId, setRunAId] = useState<string>(runs[0]?.run_id || '');
-  const [runBId, setRunBId] = useState<string>(runs[1]?.run_id || runs[0]?.run_id || '');
+export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
+  runs,
+  initialRunAId,
+  initialRunBId,
+  onNavigateToRuns,
+}) => {
+  const [runAId, setRunAId] = useState<string>(initialRunAId || runs[0]?.run_id || '');
+  const [runBId, setRunBId] = useState<string>(initialRunBId || runs[1]?.run_id || runs[0]?.run_id || '');
   const [activeTab, setActiveTab] = useState<'timeline' | 'diff' | 'metrics'>('timeline');
+
+  // React to prop changes if passed from outer view
+  React.useEffect(() => {
+    if (initialRunAId) setRunAId(initialRunAId);
+    if (initialRunBId) setRunBId(initialRunBId);
+  }, [initialRunAId, initialRunBId]);
 
   const runA = runs.find((r) => r.run_id === runAId) || runs[0] || null;
   const runB = runs.find((r) => r.run_id === runBId) || runs[1] || runs[0] || null;
 
-  if (!runA || !runB) {
+  if (!runA || !runB || runs.length < 2) {
     return (
-      <div className="bg-white p-8 rounded-2xl border border-border-subtle text-center text-text-muted">
-        Select at least two evaluation runs to enable comparative analysis.
+      <div className="bg-white p-12 rounded-2xl border border-border-subtle shadow-sm text-center space-y-4 font-sans">
+        <div className="w-12 h-12 rounded-2xl bg-canvas border border-border-subtle mx-auto flex items-center justify-center text-text-muted">
+          <IonIcon icon={warningOutline} className="text-2xl text-accent-orange" />
+        </div>
+        <h3 className="text-base font-bold text-text-primary">Need at Least 2 Runs to Compare</h3>
+        <p className="text-xs text-text-secondary max-w-sm mx-auto">
+          Execute or record at least two evaluation runs to enable trajectory divergence and regression diffing.
+        </p>
+        {onNavigateToRuns && (
+          <button
+            type="button"
+            onClick={onNavigateToRuns}
+            className="px-4 py-2 rounded-xl bg-dark-base text-white text-xs font-bold hover:bg-black cursor-pointer"
+          >
+            Go to Runs Hub
+          </button>
+        )}
       </div>
     );
   }
