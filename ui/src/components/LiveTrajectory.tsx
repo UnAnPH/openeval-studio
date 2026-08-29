@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import {
   IonIcon,
   IonSpinner,
@@ -29,19 +29,8 @@ export const LiveTrajectory: React.FC<LiveTrajectoryProps> = ({
   isStreaming,
   run,
 }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
   const [expandedFiles, setExpandedFiles] = useState<Record<number, boolean>>({});
   const [showVerifierOutput, setShowVerifierOutput] = useState<boolean>(false);
-
-  useEffect(() => {
-    // Only scroll the internal trajectory log container during active live execution
-    if (isStreaming && containerRef.current) {
-      containerRef.current.scrollTo({
-        top: containerRef.current.scrollHeight,
-        behavior: 'smooth',
-      });
-    }
-  }, [steps.length, isStreaming]);
 
   const toggleFileExpand = (stepIdx: number) => {
     setExpandedFiles((prev) => ({ ...prev, [stepIdx]: !prev[stepIdx] }));
@@ -129,7 +118,7 @@ export const LiveTrajectory: React.FC<LiveTrajectoryProps> = ({
       </div>
 
       {/* Trajectory Timeline */}
-      <div ref={containerRef} className="flex-1 overflow-y-auto max-h-[620px] p-5 space-y-4 font-sans bg-canvas/40">
+      <div className="flex-1 overflow-y-auto max-h-[620px] p-5 space-y-4 font-sans bg-canvas/40">
         {steps.length === 0 && !isStreaming && (
           <div className="flex flex-col items-center justify-center h-64 text-center text-text-muted">
             <IonIcon icon={terminalOutline} className="text-4xl mb-2 opacity-40 text-text-muted" />
