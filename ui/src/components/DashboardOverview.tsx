@@ -36,13 +36,13 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   const totalRunsCount = runs.length;
   const passedRuns = runs.filter((r) => r.passed === true);
   const failedRuns = runs.filter((r) => r.passed === false);
-  const passRate = totalRunsCount > 0 ? Math.round((passedRuns.length / totalRunsCount) * 100) : 88;
+  const passRate = totalRunsCount > 0 ? Math.round((passedRuns.length / totalRunsCount) * 100) : 0;
 
   const totalTokens = runs.reduce((acc, r) => acc + (r.total_tokens || 0), 0);
   const totalCost = runs.reduce((acc, r) => acc + (r.estimated_cost_usd || 0), 0);
   const avgDuration = totalRunsCount > 0
     ? (runs.reduce((acc, r) => acc + (r.total_duration_sec || 0), 0) / totalRunsCount).toFixed(1)
-    : '14.2';
+    : '0.0';
 
   const filteredRuns = runs.filter((run) => {
     if (searchText) {

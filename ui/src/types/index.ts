@@ -1,7 +1,7 @@
 export interface ModelSpec {
   id: string;
   name: string;
-  provider: 'google' | 'openai' | 'anthropic' | 'custom';
+  provider: 'google' | 'openai' | 'anthropic' | 'custom' | 'ollama' | 'vllm';
   tier: 'flagship' | 'balanced' | 'fast' | 'preview' | 'specialized';
   description: string;
   context_window: number;

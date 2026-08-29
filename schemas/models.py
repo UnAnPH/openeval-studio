@@ -1,7 +1,7 @@
 """Model Catalog & Pricing Registry for OpenEval Studio.
 
 Defines metadata, token limits, pricing specifications, and capabilities
-for frontier LLM providers (Google Gemini, OpenAI).
+for frontier LLM providers (Google Gemini, OpenAI, Anthropic, Ollama, vLLM).
 """
 
 from typing import Literal
@@ -17,7 +17,7 @@ class ModelSpec(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    id: str = Field(..., description="API model endpoint identifier (e.g. gemini-3.7-flash)")
+    id: str = Field(..., description="API model endpoint identifier (e.g. gemini-2.5-flash)")
     name: str = Field(..., description="Human-readable display name")
     provider: ModelProvider = Field(..., description="Provider organization")
     tier: ModelTier = Field(..., description="Capability and latency tier")
@@ -36,9 +36,119 @@ class ModelSpec(BaseModel):
         return round(input_cost + output_cost, 6)
 
 
-# Complete registry of active Gemini & OpenAI evaluation models
+# Complete registry of active Gemini, OpenAI, Anthropic, and Local models
 MODEL_CATALOG: list[ModelSpec] = [
-    # --- GOOGLE GEMINI 3 SERIES ---
+    # =========================================================================
+    # GOOGLE AI STUDIO (GEMINI SERIES)
+    # =========================================================================
+    ModelSpec(
+        id="gemini-2.5-flash",
+        name="Gemini 2.5 Flash",
+        provider="google",
+        tier="balanced",
+        description="Latest stable Gemini 2.5 workhorse with high reasoning capacity and speed.",
+        context_window=1_048_576,
+        max_output_tokens=8192,
+        input_cost_per_m=0.10,
+        output_cost_per_m=0.40,
+        capabilities=["coding", "agentic", "tool_use", "fast"],
+    ),
+    ModelSpec(
+        id="gemini-2.5-pro",
+        name="Gemini 2.5 Pro",
+        provider="google",
+        tier="flagship",
+        description="Flagship Gemini 2.5 model for autonomous coding and agentic reasoning.",
+        context_window=2_097_152,
+        max_output_tokens=8192,
+        input_cost_per_m=1.25,
+        output_cost_per_m=5.00,
+        capabilities=["deep_reasoning", "coding", "agentic"],
+    ),
+    ModelSpec(
+        id="gemini-2.0-flash",
+        name="Gemini 2.0 Flash",
+        provider="google",
+        tier="fast",
+        description="Next-gen multimodal model with native tool use and low latency.",
+        context_window=1_048_576,
+        max_output_tokens=8192,
+        input_cost_per_m=0.10,
+        output_cost_per_m=0.40,
+        capabilities=["fast", "multimodal", "tool_use"],
+    ),
+    ModelSpec(
+        id="gemini-2.0-flash-lite",
+        name="Gemini 2.0 Flash-Lite",
+        provider="google",
+        tier="fast",
+        description="Cost-optimized model designed for ultra-high-throughput benchmark sweeps.",
+        context_window=1_048_576,
+        max_output_tokens=8192,
+        input_cost_per_m=0.075,
+        output_cost_per_m=0.30,
+        capabilities=["fast", "cost_effective", "tool_use"],
+    ),
+    ModelSpec(
+        id="gemini-2.0-flash-thinking-exp-01-21",
+        name="Gemini 2.0 Flash Thinking",
+        provider="google",
+        tier="specialized",
+        description="Experimental reasoning model with explicit chain-of-thought search.",
+        context_window=1_048_576,
+        max_output_tokens=65536,
+        input_cost_per_m=0.0,
+        output_cost_per_m=0.0,
+        capabilities=["deep_reasoning", "math", "coding"],
+    ),
+    ModelSpec(
+        id="gemini-2.0-pro-exp-02-05",
+        name="Gemini 2.0 Pro (Experimental)",
+        provider="google",
+        tier="preview",
+        description="State-of-the-art coding and agentic problem solving preview model.",
+        context_window=2_097_152,
+        max_output_tokens=8192,
+        input_cost_per_m=0.0,
+        output_cost_per_m=0.0,
+        capabilities=["coding", "agentic", "preview"],
+    ),
+    ModelSpec(
+        id="gemini-1.5-pro",
+        name="Gemini 1.5 Pro",
+        provider="google",
+        tier="flagship",
+        description="High-capacity multimodal model with 2M token context window.",
+        context_window=2_097_152,
+        max_output_tokens=8192,
+        input_cost_per_m=1.25,
+        output_cost_per_m=5.00,
+        capabilities=["long_context", "coding", "tool_use"],
+    ),
+    ModelSpec(
+        id="gemini-1.5-flash",
+        name="Gemini 1.5 Flash",
+        provider="google",
+        tier="balanced",
+        description="Fast and versatile workhorse model for general evaluation tasks.",
+        context_window=1_048_576,
+        max_output_tokens=8192,
+        input_cost_per_m=0.075,
+        output_cost_per_m=0.30,
+        capabilities=["balanced", "fast", "tool_use"],
+    ),
+    ModelSpec(
+        id="gemini-1.5-flash-8b",
+        name="Gemini 1.5 Flash-8B",
+        provider="google",
+        tier="fast",
+        description="Compact 8B model built for high-volume, low-cost tasks.",
+        context_window=1_048_576,
+        max_output_tokens=8192,
+        input_cost_per_m=0.0375,
+        output_cost_per_m=0.15,
+        capabilities=["fast", "compact"],
+    ),
     ModelSpec(
         id="gemini-3.7-flash",
         name="Gemini 3.7 Flash",
@@ -50,32 +160,19 @@ MODEL_CATALOG: list[ModelSpec] = [
         input_cost_per_m=0.15,
         output_cost_per_m=0.60,
         capabilities=["coding", "agentic", "tool_use", "reasoning"],
-        is_default=False,
     ),
     ModelSpec(
         id="gemini-3.1-flash-lite",
         name="Gemini 3.1 Flash-Lite",
         provider="google",
         tier="fast",
-        description="Ultra-fast, cost-effective frontier performance for high-throughput sweeps.",
+        description="Ultra-fast frontier performance for high-throughput sweeps.",
         context_window=1_048_576,
         max_output_tokens=8192,
         input_cost_per_m=0.075,
         output_cost_per_m=0.30,
         capabilities=["fast", "agentic", "tool_use", "high_throughput"],
         is_default=True,
-    ),
-    ModelSpec(
-        id="gemini-3.6-flash",
-        name="Gemini 3.6 Flash",
-        provider="google",
-        tier="balanced",
-        description="Previous-gen stable Flash model balancing speed and multimodal tasks.",
-        context_window=1_048_576,
-        max_output_tokens=8192,
-        input_cost_per_m=0.10,
-        output_cost_per_m=0.40,
-        capabilities=["balanced", "agentic", "tool_use"],
     ),
     ModelSpec(
         id="gemini-3.1-pro-preview",
@@ -89,42 +186,21 @@ MODEL_CATALOG: list[ModelSpec] = [
         output_cost_per_m=5.00,
         capabilities=["deep_reasoning", "coding", "agentic"],
     ),
-    ModelSpec(
-        id="gemini-2.5-flash",
-        name="Gemini 2.5 Flash",
-        provider="google",
-        tier="balanced",
-        description="Stable 2.5 workhorse model with high reasoning capacity and low latency.",
-        context_window=1_048_576,
-        max_output_tokens=8192,
-        input_cost_per_m=0.10,
-        output_cost_per_m=0.40,
-        capabilities=["balanced", "tool_use"],
-    ),
-    ModelSpec(
-        id="gemini-2.5-pro",
-        name="Gemini 2.5 Pro",
-        provider="google",
-        tier="flagship",
-        description="Deep reasoning and coding capabilities across the 2.5 family.",
-        context_window=2_097_152,
-        max_output_tokens=8192,
-        input_cost_per_m=1.25,
-        output_cost_per_m=5.00,
-        capabilities=["deep_reasoning", "coding"],
-    ),
-    # --- OPENAI SERIES ---
+
+    # =========================================================================
+    # OPENAI FRONTIER MODELS
+    # =========================================================================
     ModelSpec(
         id="gpt-4o",
-        name="GPT-4o",
+        name="GPT-4o (Omni)",
         provider="openai",
         tier="flagship",
-        description="Flagship multimodal omni model for complex technical workflows.",
+        description="OpenAI flagship omni model for advanced reasoning and tool interaction.",
         context_window=128000,
         max_output_tokens=16384,
         input_cost_per_m=2.50,
         output_cost_per_m=10.00,
-        capabilities=["coding", "agentic", "tool_use", "reasoning"],
+        capabilities=["reasoning", "agentic", "multimodal"],
         is_default=True,
     ),
     ModelSpec(
@@ -132,7 +208,7 @@ MODEL_CATALOG: list[ModelSpec] = [
         name="GPT-4o Mini",
         provider="openai",
         tier="fast",
-        description="Affordable, low-latency small model for fast benchmark iterations.",
+        description="Cost-efficient small model for rapid, lightweight evaluation testing.",
         context_window=128000,
         max_output_tokens=16384,
         input_cost_per_m=0.15,
@@ -140,18 +216,73 @@ MODEL_CATALOG: list[ModelSpec] = [
         capabilities=["fast", "tool_use"],
     ),
     ModelSpec(
+        id="o1",
+        name="o1 (Reasoning)",
+        provider="openai",
+        tier="specialized",
+        description="Flagship chain-of-thought reasoning model for hard engineering & safety.",
+        context_window=200000,
+        max_output_tokens=100000,
+        input_cost_per_m=15.00,
+        output_cost_per_m=60.00,
+        capabilities=["deep_reasoning", "math", "coding"],
+    ),
+    ModelSpec(
         id="o3-mini",
         name="o3-mini",
         provider="openai",
         tier="specialized",
-        description="Reasoning-specialized model with native chain-of-thought search.",
+        description="Fast reasoning-specialized model with native chain-of-thought search.",
         context_window=200000,
         max_output_tokens=100000,
         input_cost_per_m=1.10,
         output_cost_per_m=4.40,
         capabilities=["deep_reasoning", "math", "coding"],
     ),
-    # --- LOCAL OPEN-SOURCE MODELS (Ollama / vLLM / LoRA) ---
+
+    # =========================================================================
+    # ANTHROPIC CLAUDE MODELS
+    # =========================================================================
+    ModelSpec(
+        id="claude-3-7-sonnet-latest",
+        name="Claude 3.7 Sonnet",
+        provider="anthropic",
+        tier="flagship",
+        description="Hybrid reasoning and instant model with state-of-the-art coding abilities.",
+        context_window=200000,
+        max_output_tokens=8192,
+        input_cost_per_m=3.00,
+        output_cost_per_m=15.00,
+        capabilities=["coding", "agentic", "hybrid_reasoning"],
+    ),
+    ModelSpec(
+        id="claude-3-5-sonnet-latest",
+        name="Claude 3.5 Sonnet",
+        provider="anthropic",
+        tier="flagship",
+        description="Industry standard for coding agents and complex multi-step reasoning.",
+        context_window=200000,
+        max_output_tokens=8192,
+        input_cost_per_m=3.00,
+        output_cost_per_m=15.00,
+        capabilities=["coding", "agentic", "tool_use"],
+    ),
+    ModelSpec(
+        id="claude-3-5-haiku-latest",
+        name="Claude 3.5 Haiku",
+        provider="anthropic",
+        tier="fast",
+        description="Ultra-fast, high-intelligence model matching previous flagship capabilities.",
+        context_window=200000,
+        max_output_tokens=8192,
+        input_cost_per_m=0.80,
+        output_cost_per_m=4.00,
+        capabilities=["fast", "agentic", "tool_use"],
+    ),
+
+    # =========================================================================
+    # LOCAL OPEN-SOURCE MODELS (Ollama / vLLM / LoRA)
+    # =========================================================================
     ModelSpec(
         id="ollama/llama3.1",
         name="Llama 3.1 8B (Local Ollama)",
@@ -175,6 +306,18 @@ MODEL_CATALOG: list[ModelSpec] = [
         input_cost_per_m=0.0,
         output_cost_per_m=0.0,
         capabilities=["local", "coding", "agentic"],
+    ),
+    ModelSpec(
+        id="ollama/deepseek-r1",
+        name="DeepSeek R1 (Local Ollama)",
+        provider="ollama",
+        tier="specialized",
+        description="Locally-hosted open-weights reasoning model with deep reasoning traces.",
+        context_window=128000,
+        max_output_tokens=8192,
+        input_cost_per_m=0.0,
+        output_cost_per_m=0.0,
+        capabilities=["local", "reasoning", "privacy"],
     ),
     ModelSpec(
         id="vllm/meta-llama/Llama-3-8B-Instruct",

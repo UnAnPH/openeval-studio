@@ -22,7 +22,7 @@ import { ExecutionGraph } from './components/ExecutionGraph';
 import { TestCasesTable } from './components/TestCasesTable';
 import { CompareTestResults } from './components/CompareTestResults';
 import { TestCaseDrawer } from './components/TestCaseDrawer';
-import { DEFAULT_MODELS, DEFAULT_RUNS, DEFAULT_TASKS } from './data/defaults';
+import { DEFAULT_MODELS, DEFAULT_TASKS } from './data/defaults';
 import { AgentStep, MainNavTab, ModelSpec, RunRecord, TaskSummary } from './types';
 
 export function App() {
@@ -32,14 +32,13 @@ export function App() {
   const [selectedTaskId, setSelectedTaskId] = useState<string>(DEFAULT_TASKS[0]?.task_id || 'cancel-async-tasks');
   const [selectedModelId, setSelectedModelId] = useState<string>(DEFAULT_MODELS[0]?.id || 'gemini-3.1-flash-lite');
 
-  const [activeRunId, setActiveRunId] = useState<string | null>(DEFAULT_RUNS[0]?.run_id || null);
-  const [activeRun, setActiveRun] = useState<RunRecord | null>(DEFAULT_RUNS[0] || null);
-  const [liveSteps, setLiveSteps] = useState<AgentStep[]>(DEFAULT_RUNS[0]?.steps || []);
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [activeRun, setActiveRun] = useState<RunRecord | null>(null);
+  const [liveSteps, setLiveSteps] = useState<AgentStep[]>([]);
   const [runStatus, setRunStatus] = useState<string>('idle');
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
-  const [runsHistory, setRunsHistory] = useState<RunRecord[]>(DEFAULT_RUNS);
+  const [runsHistory, setRunsHistory] = useState<RunRecord[]>([]);
   const [studioInspectorTab, setStudioInspectorTab] = useState<'scorecard' | 'safety' | 'task_info'>('scorecard');
-  const [evalEngine, setEvalEngine] = useState<'openeval' | 'inspect_ai'>('openeval');
   const [chaosMode, setChaosMode] = useState<boolean>(false);
 
   // Human adjudication drawer state
@@ -243,8 +242,7 @@ export function App() {
     }
 
     try {
-      const endpoint = evalEngine === 'openeval' ? '/api/eval/run' : '/api/eval/inspect_run';
-      const launchRes = await fetch(endpoint, {
+      const launchRes = await fetch('/api/eval/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -264,18 +262,7 @@ export function App() {
       const currentRunId = launchData.run_id || `inspect_${Date.now()}`;
       setActiveRunId(currentRunId);
 
-      if (evalEngine === 'inspect_ai') {
-        // Inspect async runs in background
-        setRunStatus('running');
-        setTimeout(() => {
-          fetchInitialData();
-          setIsStreaming(false);
-          setRunStatus('completed');
-        }, 8000);
-        return;
-      }
-
-      // Connect SSE for OpenEval ReAct
+      // Connect to real-time Server-Sent Events stream
       const eventSource = new EventSource(`/api/eval/stream/${currentRunId}`);
 
       eventSource.addEventListener('snapshot', (e) => {
@@ -546,32 +533,9 @@ export function App() {
                       </select>
                     </div>
 
-                    {/* Engine Toggle */}
-                    <div className="flex items-center bg-canvas p-0.5 rounded-xl border border-border-subtle text-xs">
-                      <button
-                        type="button"
-                        onClick={() => setEvalEngine('openeval')}
-                        disabled={isStreaming}
-                        className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${
-                          evalEngine === 'openeval'
-                            ? 'bg-white text-brand-primary font-bold shadow-sm'
-                            : 'text-text-secondary hover:text-text-primary'
-                        }`}
-                      >
-                        ⚡ OpenEval ReAct
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEvalEngine('inspect_ai')}
-                        disabled={isStreaming}
-                        className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${
-                          evalEngine === 'inspect_ai'
-                            ? 'bg-white text-brand-primary font-bold shadow-sm'
-                            : 'text-text-secondary hover:text-text-primary'
-                        }`}
-                      >
-                        🇬🇧 Inspect AI
-                      </button>
+                    {/* Native Engine Badge */}
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-50/80 border border-purple-200/60 text-xs font-mono font-bold text-brand-purple">
+                      <span>🇬🇧 Native Inspect AI</span>
                     </div>
 
                     {/* Chaos Mode Switch */}
@@ -579,13 +543,13 @@ export function App() {
                       type="button"
                       onClick={() => setChaosMode(!chaosMode)}
                       disabled={isStreaming}
-                      className={`px-3 py-1 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-1.5 border ${
+                      className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all border ${
                         chaosMode
-                          ? 'bg-amber-50 text-amber-900 border-amber-300 shadow-sm animate-pulse'
-                          : 'bg-canvas text-text-muted border-border-subtle hover:text-text-secondary'
+                          ? 'bg-amber-50 text-amber-800 border-amber-300 shadow-sm'
+                          : 'bg-canvas text-text-secondary border-border-subtle hover:text-text-primary'
                       }`}
                     >
-                      <span>⚡ Chaos Mode: {chaosMode ? 'ON' : 'OFF'}</span>
+                      {chaosMode ? '🐒 Chaos Mode: ON' : '🐒 Chaos Mode: OFF'}
                     </button>
                   </div>
 
