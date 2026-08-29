@@ -94,6 +94,17 @@ class RunStore:
             for q in list(self._subscribers[run_id]):
                 q.put_nowait(payload)
 
+    def delete_run(self, run_id: str) -> bool:
+        """Delete a run from the store."""
+        removed = self._runs.pop(run_id, None) is not None
+        self._subscribers.pop(run_id, None)
+        return removed
+
+    def clear_runs(self) -> None:
+        """Clear all runs from the store."""
+        self._runs.clear()
+        self._subscribers.clear()
+
 
 # Singleton instance for the server process
 global_run_store = RunStore()

@@ -426,6 +426,44 @@ export function App() {
     }
   };
 
+  // Delete individual run
+  const handleDeleteRun = async (runId: string) => {
+    try {
+      await fetch(`/api/eval/runs/${runId}`, { method: 'DELETE' });
+      setRunsHistory((prev) => prev.filter((r) => r.run_id !== runId));
+      if (activeRunId === runId) {
+        setActiveRunId(null);
+        setActiveRun(null);
+        setLiveSteps([]);
+        setRunStatus('idle');
+      }
+      if (drawerRun?.run_id === runId) {
+        setIsDrawerOpen(false);
+        setDrawerRun(null);
+      }
+      await fetchInitialData();
+    } catch (err) {
+      console.error('Failed to delete run:', err);
+    }
+  };
+
+  // Clear all historical runs
+  const handleClearAllRuns = async () => {
+    try {
+      await fetch('/api/eval/runs', { method: 'DELETE' });
+      setRunsHistory([]);
+      setActiveRunId(null);
+      setActiveRun(null);
+      setLiveSteps([]);
+      setRunStatus('idle');
+      setIsDrawerOpen(false);
+      setDrawerRun(null);
+      await fetchInitialData();
+    } catch (err) {
+      console.error('Failed to clear all runs:', err);
+    }
+  };
+
   const activeModel = models.find((m) => m.id === selectedModelId);
   const drawerTask = tasks.find((t) => t.task_id === drawerRun?.task_id);
 
@@ -475,6 +513,8 @@ export function App() {
                 runs={runsHistory}
                 tasks={tasks}
                 onSelectRun={handleSelectPastRun}
+                onDeleteRun={handleDeleteRun}
+                onClearAllRuns={handleClearAllRuns}
                 onNavigateToStudio={() => setNavTab('studio')}
                 onNavigateToTestCases={() => setNavTab('test_cases')}
               />
@@ -713,6 +753,7 @@ export function App() {
           run={drawerRun}
           task={drawerTask}
           onSaveRevision={handleSaveRevisedAudit}
+          onDeleteRun={handleDeleteRun}
         />
 
         {/* Error Toast */}

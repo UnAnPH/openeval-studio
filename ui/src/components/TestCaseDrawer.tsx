@@ -18,6 +18,7 @@ import {
   shieldCheckmarkOutline,
   shieldOutline,
   terminalOutline,
+  trashOutline,
 } from 'ionicons/icons';
 import { RunRecord, TaskSummary } from '../types';
 
@@ -27,6 +28,7 @@ interface TestCaseDrawerProps {
   run: RunRecord | null;
   task?: TaskSummary | null;
   onSaveRevision?: (revisedRun: RunRecord) => void;
+  onDeleteRun?: (runId: string) => void;
 }
 
 export const TestCaseDrawer: React.FC<TestCaseDrawerProps> = ({
@@ -35,6 +37,7 @@ export const TestCaseDrawer: React.FC<TestCaseDrawerProps> = ({
   run,
   task,
   onSaveRevision,
+  onDeleteRun,
 }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'trajectory' | 'judges' | 'verifier'>('overview');
   const [expandedFiles, setExpandedFiles] = useState<Record<number, boolean>>({});
@@ -213,13 +216,32 @@ ${v.override_reason || overrideReasons[v.metric_name] ? `- **Human Override Just
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-8 h-8 rounded-full bg-canvas text-text-secondary hover:text-text-primary hover:bg-surface-subtle flex items-center justify-center transition-colors"
-          >
-            <IonIcon icon={closeOutline} className="text-xl" />
-          </button>
+          <div className="flex items-center gap-2">
+            {onDeleteRun && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirm(`Delete run ${run.run_id}?`)) {
+                    onDeleteRun(run.run_id);
+                    onClose();
+                  }
+                }}
+                className="px-2.5 py-1.5 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="Delete this run"
+              >
+                <IonIcon icon={trashOutline} className="text-sm" />
+                <span>Delete Run</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-8 h-8 rounded-full bg-canvas text-text-secondary hover:text-text-primary hover:bg-surface-subtle flex items-center justify-center transition-colors"
+            >
+              <IonIcon icon={closeOutline} className="text-xl" />
+            </button>
+          </div>
         </div>
 
         {/* Tab Navigation Segment */}

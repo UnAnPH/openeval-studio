@@ -452,6 +452,31 @@ async def get_run_details(run_id: str) -> RunRecord:
     raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found")
 
 
+@app.delete("/api/eval/runs/{run_id}")
+async def delete_single_run(run_id: str) -> dict[str, str]:
+    """Delete a specific evaluation run from memory store and disk logs."""
+    # 1. Remove from in-memory run store
+    global_run_store.delete_run(run_id)
+
+    # 2. Remove matching .eval file from LOGS_DIR if present
+    for eval_file in LOGS_DIR.glob("*.eval"):
+        if run_id in eval_file.name:
+            with contextlib.suppress(Exception):
+                eval_file.unlink()
+
+    return {"status": "deleted", "run_id": run_id}
+
+
+@app.delete("/api/eval/runs")
+async def clear_all_runs_endpoint() -> dict[str, str]:
+    """Delete all evaluation runs from memory store and disk logs."""
+    global_run_store.clear_runs()
+    for eval_file in LOGS_DIR.glob("*.eval"):
+        with contextlib.suppress(Exception):
+            eval_file.unlink()
+    return {"status": "all_deleted"}
+
+
 @app.get("/api/eval/diff")
 async def get_trajectory_diff(
     run_a: str = Query(..., description="First Run ID"),

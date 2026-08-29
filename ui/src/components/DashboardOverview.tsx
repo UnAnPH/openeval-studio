@@ -12,6 +12,7 @@ import {
   timeOutline,
   cashOutline,
   arrowForwardOutline,
+  trashOutline,
 } from 'ionicons/icons';
 import { RunRecord, TaskSummary } from '../types';
 
@@ -19,6 +20,8 @@ interface DashboardOverviewProps {
   runs: RunRecord[];
   tasks: TaskSummary[];
   onSelectRun?: (runId: string) => void;
+  onDeleteRun?: (runId: string) => void;
+  onClearAllRuns?: () => void;
   onNavigateToStudio?: () => void;
   onNavigateToTestCases?: () => void;
 }
@@ -27,6 +30,8 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   runs,
   tasks,
   onSelectRun,
+  onDeleteRun,
+  onClearAllRuns,
   onNavigateToStudio,
   onNavigateToTestCases,
 }) => {
@@ -243,6 +248,22 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               ))}
             </div>
 
+            {/* Clear All Runs CTA */}
+            {runs.length > 0 && onClearAllRuns && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirm('Are you sure you want to clear all evaluation runs?')) {
+                    onClearAllRuns();
+                  }
+                }}
+                className="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+              >
+                <IonIcon icon={trashOutline} className="text-xs" />
+                <span>Clear All</span>
+              </button>
+            )}
+
             {/* Quick search */}
             <div className="relative">
               <input
@@ -271,7 +292,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                   <th className="py-2.5 px-4">Model</th>
                   <th className="py-2.5 px-4">Duration</th>
                   <th className="py-2.5 px-4">Score</th>
-                  <th className="py-2.5 px-4 text-right">Action</th>
+                  <th className="py-2.5 px-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-subtle font-mono">
@@ -325,17 +346,30 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                         </span>
                       </td>
 
-                      <td className="py-2.5 px-4 text-right">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onSelectRun?.(run.run_id);
-                          }}
-                          className="text-[11px] text-brand-purple hover:underline font-sans font-medium"
-                        >
-                          Inspect Trace &rarr;
-                        </button>
+                      <td className="py-2.5 px-4 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-2.5">
+                          <button
+                            type="button"
+                            onClick={() => onSelectRun?.(run.run_id)}
+                            className="text-[11px] text-brand-purple hover:underline font-sans font-medium"
+                          >
+                            Inspect Trace &rarr;
+                          </button>
+                          {onDeleteRun && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (confirm(`Delete run ${run.run_id}?`)) {
+                                  onDeleteRun(run.run_id);
+                                }
+                              }}
+                              className="p-1 rounded text-text-muted hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                              title="Delete run"
+                            >
+                              <IonIcon icon={trashOutline} className="text-xs" />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
