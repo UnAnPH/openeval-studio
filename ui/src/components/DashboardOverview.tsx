@@ -44,6 +44,23 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     ? (runs.reduce((acc, r) => acc + (r.total_duration_sec || 0), 0) / totalRunsCount).toFixed(1)
     : '0.0';
 
+  // Dynamic Safety Verdict Aggregation
+  const allVerdicts = runs.flatMap((r) => r.audit_verdicts || []);
+  const planVerdicts = allVerdicts.filter((v) => v.metric_name === 'plan_adherence');
+  const planScore = planVerdicts.length > 0
+    ? Math.round((planVerdicts.reduce((acc, v) => acc + (v.score || 0), 0) / planVerdicts.length) * 100)
+    : 0;
+
+  const halluVerdicts = allVerdicts.filter((v) => v.metric_name === 'hallucination_detection');
+  const halluScore = halluVerdicts.length > 0
+    ? Math.round((halluVerdicts.reduce((acc, v) => acc + (v.score || 0), 0) / halluVerdicts.length) * 100)
+    : 0;
+
+  const rewardVerdicts = allVerdicts.filter((v) => v.metric_name === 'reward_tampering');
+  const rewardScore = rewardVerdicts.length > 0
+    ? Math.round((rewardVerdicts.reduce((acc, v) => acc + (v.score || 0), 0) / rewardVerdicts.length) * 100)
+    : 0;
+
   const filteredRuns = runs.filter((run) => {
     if (searchText) {
       const q = searchText.toLowerCase();
@@ -72,7 +89,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           </div>
           <div className="text-2xl font-bold text-text-primary font-mono">{passRate}%</div>
           <div className="text-[11px] text-text-secondary font-mono">
-            {passedRuns.length} of {totalRunsCount || tasks.length} cases verified
+            {passedRuns.length} of {totalRunsCount} cases verified
           </div>
         </div>
 
@@ -82,7 +99,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             <span className="font-medium">Total Evaluations</span>
             <IonIcon icon={sparklesOutline} className="text-brand-purple text-sm" />
           </div>
-          <div className="text-2xl font-bold text-text-primary font-mono">{totalRunsCount || 16}</div>
+          <div className="text-2xl font-bold text-text-primary font-mono">{totalRunsCount}</div>
           <div className="text-[11px] text-text-secondary font-mono">
             {failedRuns.length} failed · {totalRunsCount - passedRuns.length - failedRuns.length} running
           </div>
@@ -107,10 +124,10 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             <IonIcon icon={cashOutline} className="text-emerald-600 text-sm" />
           </div>
           <div className="text-2xl font-bold text-emerald-700 font-mono">
-            ${totalCost > 0 ? totalCost.toFixed(4) : '0.0412'}
+            ${totalCost.toFixed(4)}
           </div>
           <div className="text-[11px] text-text-secondary font-mono">
-            {totalTokens > 0 ? totalTokens.toLocaleString() : '84,210'} tokens consumed
+            {totalTokens.toLocaleString()} tokens consumed
           </div>
         </div>
       </div>
@@ -134,10 +151,10 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs">
                 <span className="font-medium text-text-primary">Plan Adherence</span>
-                <span className="font-mono font-bold text-text-primary">94%</span>
+                <span className="font-mono font-bold text-text-primary">{planScore}%</span>
               </div>
               <div className="h-2 w-full bg-canvas rounded-full overflow-hidden border border-border-subtle/50">
-                <div className="h-full bg-[#6B46C1] rounded-full" style={{ width: '94%' }} />
+                <div className="h-full bg-[#6B46C1] rounded-full transition-all duration-500" style={{ width: `${planScore}%` }} />
               </div>
             </div>
 
@@ -145,10 +162,10 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs">
                 <span className="font-medium text-text-primary">Hallucination & Error Defense</span>
-                <span className="font-mono font-bold text-text-primary">100%</span>
+                <span className="font-mono font-bold text-text-primary">{halluScore}%</span>
               </div>
               <div className="h-2 w-full bg-canvas rounded-full overflow-hidden border border-border-subtle/50">
-                <div className="h-full bg-status-cleared rounded-full" style={{ width: '100%' }} />
+                <div className="h-full bg-status-cleared rounded-full transition-all duration-500" style={{ width: `${halluScore}%` }} />
               </div>
             </div>
 
@@ -156,10 +173,10 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs">
                 <span className="font-medium text-text-primary">Reward Tampering Defense</span>
-                <span className="font-mono font-bold text-text-primary">100%</span>
+                <span className="font-mono font-bold text-text-primary">{rewardScore}%</span>
               </div>
               <div className="h-2 w-full bg-canvas rounded-full overflow-hidden border border-border-subtle/50">
-                <div className="h-full bg-status-cleared rounded-full" style={{ width: '100%' }} />
+                <div className="h-full bg-status-cleared rounded-full transition-all duration-500" style={{ width: `${rewardScore}%` }} />
               </div>
             </div>
           </div>
