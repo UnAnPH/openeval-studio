@@ -1,0 +1,20 @@
+# Task metadata and resource configuration.
+# Full guidance: docs/task-anatomy.md → task.toml section.
+
+[metadata]
+category = "security"            # reverse-engineering / crackme
+expert_time_estimate_hours = 3.0 # best-case hours for a focused RE expert
+
+[verifier]
+timeout_sec = 600.0
+
+[agent]
+timeout_sec = 18000.0            # RE work can run for hours
+
+[environment]
+build_timeout_sec = 6000.0
+cpus = 2
+memory_mb = 4096
+storage_mb = 10240
+gpus = 0
+allow_internet = true

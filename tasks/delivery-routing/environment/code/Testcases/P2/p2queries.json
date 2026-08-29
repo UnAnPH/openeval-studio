@@ -1,0 +1,851 @@
+{
+    "meta": {
+        "id": "qset_nx_v4"
+    },
+    "events": [
+        {
+            "type": "k_shortest_paths",
+            "id": 1,
+            "source": 994,
+            "target": 696,
+            "k": 17,
+            "mode": "distance"
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 2,
+            "source": 37,
+            "target": 113,
+            "k": 5,
+            "overlap_threshold": 70
+        },
+        {
+            "type": "k_shortest_paths",
+            "id": 3,
+            "source": 540,
+            "target": 986,
+            "k": 2,
+            "mode": "distance"
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 4,
+            "source": 892,
+            "target": 921,
+            "k": 7,
+            "overlap_threshold": 44
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 5,
+            "source": 428,
+            "target": 358,
+            "k": 4,
+            "overlap_threshold": 55
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 6,
+            "source": 673,
+            "target": 843,
+            "k": 3,
+            "overlap_threshold": 44
+        },
+        {
+            "type": "k_shortest_paths",
+            "id": 7,
+            "source": 203,
+            "target": 18,
+            "k": 17,
+            "mode": "distance"
+        },
+        {
+            "type": "approx_shortest_path",
+            "id": 8,
+            "queries": [
+                {
+                    "source": 472,
+                    "target": 702
+                },
+                {
+                    "source": 50,
+                    "target": 884
+                },
+                {
+                    "source": 801,
+                    "target": 351
+                },
+                {
+                    "source": 288,
+                    "target": 905
+                },
+                {
+                    "source": 835,
+                    "target": 238
+                },
+                {
+                    "source": 636,
+                    "target": 885
+                },
+                {
+                    "source": 102,
+                    "target": 985
+                },
+                {
+                    "source": 836,
+                    "target": 625
+                },
+                {
+                    "source": 960,
+                    "target": 125
+                },
+                {
+                    "source": 810,
+                    "target": 441
+                },
+                {
+                    "source": 227,
+                    "target": 587
+                },
+                {
+                    "source": 823,
+                    "target": 163
+                },
+                {
+                    "source": 311,
+                    "target": 164
+                },
+                {
+                    "source": 728,
+                    "target": 727
+                },
+                {
+                    "source": 351,
+                    "target": 630
+                },
+                {
+                    "source": 893,
+                    "target": 627
+                }
+            ],
+            "time_budget_ms": 5,
+            "acceptable_error_pct": 5.0
+        },
+        {
+            "type": "k_shortest_paths",
+            "id": 9,
+            "source": 559,
+            "target": 705,
+            "k": 15,
+            "mode": "distance"
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 10,
+            "source": 129,
+            "target": 373,
+            "k": 5,
+            "overlap_threshold": 31
+        },
+        {
+            "type": "approx_shortest_path",
+            "id": 11,
+            "queries": [
+                {
+                    "source": 605,
+                    "target": 553
+                },
+                {
+                    "source": 641,
+                    "target": 518
+                },
+                {
+                    "source": 162,
+                    "target": 688
+                },
+                {
+                    "source": 165,
+                    "target": 53
+                },
+                {
+                    "source": 856,
+                    "target": 467
+                },
+                {
+                    "source": 703,
+                    "target": 872
+                },
+                {
+                    "source": 458,
+                    "target": 275
+                },
+                {
+                    "source": 671,
+                    "target": 240
+                },
+                {
+                    "source": 540,
+                    "target": 839
+                },
+                {
+                    "source": 676,
+                    "target": 479
+                },
+                {
+                    "source": 421,
+                    "target": 777
+                },
+                {
+                    "source": 298,
+                    "target": 546
+                },
+                {
+                    "source": 172,
+                    "target": 304
+                },
+                {
+                    "source": 720,
+                    "target": 521
+                },
+                {
+                    "source": 975,
+                    "target": 778
+                },
+                {
+                    "source": 763,
+                    "target": 240
+                },
+                {
+                    "source": 970,
+                    "target": 267
+                },
+                {
+                    "source": 945,
+                    "target": 525
+                },
+                {
+                    "source": 199,
+                    "target": 723
+                },
+                {
+                    "source": 334,
+                    "target": 426
+                }
+            ],
+            "time_budget_ms": 5,
+            "acceptable_error_pct": 5.0
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 12,
+            "source": 169,
+            "target": 97,
+            "k": 6,
+            "overlap_threshold": 67
+        },
+        {
+            "type": "k_shortest_paths",
+            "id": 13,
+            "source": 721,
+            "target": 964,
+            "k": 15,
+            "mode": "distance"
+        },
+        {
+            "type": "approx_shortest_path",
+            "id": 14,
+            "queries": [
+                {
+                    "source": 555,
+                    "target": 434
+                },
+                {
+                    "source": 290,
+                    "target": 88
+                },
+                {
+                    "source": 371,
+                    "target": 43
+                },
+                {
+                    "source": 239,
+                    "target": 500
+                },
+                {
+                    "source": 92,
+                    "target": 757
+                },
+                {
+                    "source": 66,
+                    "target": 999
+                },
+                {
+                    "source": 758,
+                    "target": 415
+                },
+                {
+                    "source": 45,
+                    "target": 597
+                },
+                {
+                    "source": 309,
+                    "target": 620
+                },
+                {
+                    "source": 27,
+                    "target": 959
+                },
+                {
+                    "source": 374,
+                    "target": 67
+                },
+                {
+                    "source": 422,
+                    "target": 745
+                }
+            ],
+            "time_budget_ms": 5,
+            "acceptable_error_pct": 5.0
+        },
+        {
+            "type": "k_shortest_paths",
+            "id": 15,
+            "source": 599,
+            "target": 626,
+            "k": 13,
+            "mode": "distance"
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 16,
+            "source": 763,
+            "target": 563,
+            "k": 6,
+            "overlap_threshold": 48
+        },
+        {
+            "type": "k_shortest_paths",
+            "id": 17,
+            "source": 29,
+            "target": 727,
+            "k": 9,
+            "mode": "distance"
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 18,
+            "source": 836,
+            "target": 414,
+            "k": 7,
+            "overlap_threshold": 57
+        },
+        {
+            "type": "k_shortest_paths",
+            "id": 19,
+            "source": 300,
+            "target": 380,
+            "k": 15,
+            "mode": "distance"
+        },
+        {
+            "type": "approx_shortest_path",
+            "id": 20,
+            "queries": [
+                {
+                    "source": 405,
+                    "target": 388
+                },
+                {
+                    "source": 503,
+                    "target": 488
+                },
+                {
+                    "source": 695,
+                    "target": 354
+                },
+                {
+                    "source": 13,
+                    "target": 808
+                },
+                {
+                    "source": 791,
+                    "target": 832
+                },
+                {
+                    "source": 933,
+                    "target": 98
+                },
+                {
+                    "source": 922,
+                    "target": 588
+                },
+                {
+                    "source": 632,
+                    "target": 975
+                },
+                {
+                    "source": 668,
+                    "target": 497
+                },
+                {
+                    "source": 370,
+                    "target": 38
+                },
+                {
+                    "source": 503,
+                    "target": 823
+                },
+                {
+                    "source": 359,
+                    "target": 523
+                },
+                {
+                    "source": 772,
+                    "target": 332
+                },
+                {
+                    "source": 372,
+                    "target": 374
+                },
+                {
+                    "source": 457,
+                    "target": 68
+                },
+                {
+                    "source": 680,
+                    "target": 286
+                }
+            ],
+            "time_budget_ms": 5,
+            "acceptable_error_pct": 5.0
+        },
+        {
+            "type": "approx_shortest_path",
+            "id": 21,
+            "queries": [
+                {
+                    "source": 719,
+                    "target": 62
+                },
+                {
+                    "source": 739,
+                    "target": 295
+                },
+                {
+                    "source": 44,
+                    "target": 189
+                },
+                {
+                    "source": 624,
+                    "target": 367
+                },
+                {
+                    "source": 226,
+                    "target": 497
+                },
+                {
+                    "source": 419,
+                    "target": 623
+                },
+                {
+                    "source": 704,
+                    "target": 971
+                },
+                {
+                    "source": 826,
+                    "target": 39
+                },
+                {
+                    "source": 691,
+                    "target": 85
+                },
+                {
+                    "source": 638,
+                    "target": 194
+                },
+                {
+                    "source": 51,
+                    "target": 905
+                },
+                {
+                    "source": 413,
+                    "target": 561
+                }
+            ],
+            "time_budget_ms": 5,
+            "acceptable_error_pct": 5.0
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 22,
+            "source": 567,
+            "target": 605,
+            "k": 3,
+            "overlap_threshold": 56
+        },
+        {
+            "type": "approx_shortest_path",
+            "id": 23,
+            "queries": [
+                {
+                    "source": 168,
+                    "target": 709
+                },
+                {
+                    "source": 128,
+                    "target": 33
+                },
+                {
+                    "source": 361,
+                    "target": 301
+                },
+                {
+                    "source": 893,
+                    "target": 717
+                },
+                {
+                    "source": 546,
+                    "target": 235
+                },
+                {
+                    "source": 982,
+                    "target": 76
+                },
+                {
+                    "source": 424,
+                    "target": 830
+                },
+                {
+                    "source": 402,
+                    "target": 586
+                },
+                {
+                    "source": 543,
+                    "target": 799
+                },
+                {
+                    "source": 732,
+                    "target": 684
+                },
+                {
+                    "source": 421,
+                    "target": 933
+                },
+                {
+                    "source": 410,
+                    "target": 104
+                },
+                {
+                    "source": 39,
+                    "target": 101
+                },
+                {
+                    "source": 983,
+                    "target": 958
+                },
+                {
+                    "source": 456,
+                    "target": 801
+                },
+                {
+                    "source": 757,
+                    "target": 963
+                },
+                {
+                    "source": 706,
+                    "target": 739
+                },
+                {
+                    "source": 146,
+                    "target": 462
+                },
+                {
+                    "source": 355,
+                    "target": 475
+                }
+            ],
+            "time_budget_ms": 5,
+            "acceptable_error_pct": 5.0
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 24,
+            "source": 969,
+            "target": 704,
+            "k": 2,
+            "overlap_threshold": 39
+        },
+        {
+            "type": "approx_shortest_path",
+            "id": 25,
+            "queries": [
+                {
+                    "source": 830,
+                    "target": 727
+                },
+                {
+                    "source": 421,
+                    "target": 616
+                },
+                {
+                    "source": 581,
+                    "target": 299
+                },
+                {
+                    "source": 263,
+                    "target": 557
+                },
+                {
+                    "source": 74,
+                    "target": 225
+                },
+                {
+                    "source": 806,
+                    "target": 159
+                },
+                {
+                    "source": 931,
+                    "target": 56
+                },
+                {
+                    "source": 716,
+                    "target": 815
+                },
+                {
+                    "source": 376,
+                    "target": 860
+                },
+                {
+                    "source": 981,
+                    "target": 354
+                },
+                {
+                    "source": 22,
+                    "target": 462
+                },
+                {
+                    "source": 645,
+                    "target": 868
+                },
+                {
+                    "source": 292,
+                    "target": 581
+                },
+                {
+                    "source": 479,
+                    "target": 937
+                },
+                {
+                    "source": 778,
+                    "target": 796
+                },
+                {
+                    "source": 303,
+                    "target": 54
+                },
+                {
+                    "source": 22,
+                    "target": 79
+                }
+            ],
+            "time_budget_ms": 5,
+            "acceptable_error_pct": 5.0
+        },
+        {
+            "type": "k_shortest_paths",
+            "id": 26,
+            "source": 65,
+            "target": 640,
+            "k": 16,
+            "mode": "distance"
+        },
+        {
+            "type": "k_shortest_paths",
+            "id": 27,
+            "source": 717,
+            "target": 51,
+            "k": 2,
+            "mode": "distance"
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 28,
+            "source": 646,
+            "target": 154,
+            "k": 2,
+            "overlap_threshold": 60
+        },
+        {
+            "type": "approx_shortest_path",
+            "id": 29,
+            "queries": [
+                {
+                    "source": 99,
+                    "target": 577
+                },
+                {
+                    "source": 780,
+                    "target": 365
+                },
+                {
+                    "source": 41,
+                    "target": 778
+                },
+                {
+                    "source": 362,
+                    "target": 631
+                },
+                {
+                    "source": 188,
+                    "target": 364
+                },
+                {
+                    "source": 426,
+                    "target": 880
+                },
+                {
+                    "source": 821,
+                    "target": 735
+                },
+                {
+                    "source": 549,
+                    "target": 343
+                },
+                {
+                    "source": 521,
+                    "target": 578
+                },
+                {
+                    "source": 411,
+                    "target": 975
+                },
+                {
+                    "source": 285,
+                    "target": 368
+                },
+                {
+                    "source": 354,
+                    "target": 521
+                },
+                {
+                    "source": 270,
+                    "target": 480
+                },
+                {
+                    "source": 759,
+                    "target": 652
+                },
+                {
+                    "source": 30,
+                    "target": 576
+                },
+                {
+                    "source": 270,
+                    "target": 704
+                }
+            ],
+            "time_budget_ms": 5,
+            "acceptable_error_pct": 5.0
+        },
+        {
+            "type": "k_shortest_paths",
+            "id": 30,
+            "source": 84,
+            "target": 660,
+            "k": 8,
+            "mode": "distance"
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 31,
+            "source": 376,
+            "target": 738,
+            "k": 5,
+            "overlap_threshold": 58
+        },
+        {
+            "type": "k_shortest_paths",
+            "id": 32,
+            "source": 357,
+            "target": 420,
+            "k": 13,
+            "mode": "distance"
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 33,
+            "source": 325,
+            "target": 197,
+            "k": 7,
+            "overlap_threshold": 51
+        },
+        {
+            "type": "approx_shortest_path",
+            "id": 34,
+            "queries": [
+                {
+                    "source": 96,
+                    "target": 264
+                },
+                {
+                    "source": 471,
+                    "target": 20
+                },
+                {
+                    "source": 99,
+                    "target": 932
+                },
+                {
+                    "source": 531,
+                    "target": 482
+                },
+                {
+                    "source": 57,
+                    "target": 539
+                },
+                {
+                    "source": 781,
+                    "target": 237
+                },
+                {
+                    "source": 714,
+                    "target": 441
+                },
+                {
+                    "source": 564,
+                    "target": 141
+                },
+                {
+                    "source": 321,
+                    "target": 871
+                },
+                {
+                    "source": 118,
+                    "target": 890
+                },
+                {
+                    "source": 985,
+                    "target": 834
+                },
+                {
+                    "source": 708,
+                    "target": 216
+                },
+                {
+                    "source": 531,
+                    "target": 134
+                },
+                {
+                    "source": 863,
+                    "target": 686
+                },
+                {
+                    "source": 234,
+                    "target": 259
+                }
+            ],
+            "time_budget_ms": 5,
+            "acceptable_error_pct": 5.0
+        }
+    ]
+} 

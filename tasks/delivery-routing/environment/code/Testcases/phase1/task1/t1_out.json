@@ -1,0 +1,695 @@
+{
+    "meta": {
+        "id": "./task1/t1.json"
+    },
+    "results": [
+        {
+            "id": 0,
+            "possible": false
+        },
+        {
+            "id": 1,
+            "possible": true,
+            "minimum_time/minimum_distance": 181.45736981381287,
+            "path": [
+                30789,
+                24029,
+                24024,
+                30778,
+                30781
+            ]
+        },
+        {
+            "id": 2,
+            "done": true
+        },
+        {
+            "id": 3,
+            "done": true
+        },
+        {
+            "id": 4,
+            "done": true
+        },
+        {
+            "id": 5,
+            "possible": true,
+            "minimum_time/minimum_distance": 199.74172963677253,
+            "path": [
+                34125,
+                34127,
+                34126
+            ]
+        },
+        {
+            "id": 6,
+            "possible": false
+        },
+        {
+            "id": 7,
+            "possible": true,
+            "minimum_time/minimum_distance": 1887.8366081945956,
+            "path": [
+                57175,
+                61089,
+                61090,
+                53140
+            ]
+        },
+        {
+            "id": 8,
+            "possible": true,
+            "minimum_time/minimum_distance": 1679.6917480188117,
+            "path": [
+                6468,
+                12192,
+                57217,
+                5794
+            ]
+        },
+        {
+            "id": 9,
+            "done": true
+        },
+        {
+            "id": 10,
+            "done": true
+        },
+        {
+            "id": 11,
+            "possible": false
+        },
+        {
+            "id": 12,
+            "done": true
+        },
+        {
+            "id": 13,
+            "done": true
+        },
+        {
+            "id": 14,
+            "done": true
+        },
+        {
+            "id": 15,
+            "possible": false
+        },
+        {
+            "id": 16,
+            "possible": true,
+            "minimum_time/minimum_distance": 177.4636210541132,
+            "path": [
+                46837,
+                46777,
+                32723,
+                32724
+            ]
+        },
+        {
+            "id": 17,
+            "possible": true,
+            "minimum_time/minimum_distance": 122.07478480725311,
+            "path": [
+                61231,
+                17875,
+                27067,
+                27064
+            ]
+        },
+        {
+            "id": 18,
+            "done": true
+        },
+        {
+            "id": 19,
+            "possible": false
+        },
+        {
+            "id": 20,
+            "possible": false
+        },
+        {
+            "id": 21,
+            "possible": true,
+            "minimum_time/minimum_distance": 400.9402777927623,
+            "path": [
+                41892,
+                53825,
+                40602,
+                43823,
+                43822
+            ]
+        },
+        {
+            "id": 22,
+            "done": true
+        },
+        {
+            "id": 23,
+            "possible": false
+        },
+        {
+            "id": 24,
+            "possible": true,
+            "minimum_time/minimum_distance": 140.29824692925922,
+            "path": [
+                56982,
+                56970,
+                56980,
+                56983,
+                56985
+            ]
+        },
+        {
+            "id": 25,
+            "possible": false
+        },
+        {
+            "id": 26,
+            "done": true
+        },
+        {
+            "id": 27,
+            "possible": true,
+            "minimum_time/minimum_distance": 128.9408380506463,
+            "path": [
+                27836,
+                32582,
+                55100,
+                60981,
+                60982
+            ]
+        },
+        {
+            "id": 28,
+            "possible": false
+        },
+        {
+            "id": 29,
+            "done": true
+        },
+        {
+            "id": 30,
+            "possible": true,
+            "minimum_time/minimum_distance": 172.21810182215302,
+            "path": [
+                42929,
+                5586,
+                5587,
+                5617,
+                5588
+            ]
+        },
+        {
+            "id": 31,
+            "possible": false
+        },
+        {
+            "id": 32,
+            "done": true
+        },
+        {
+            "id": 33,
+            "done": true
+        },
+        {
+            "id": 34,
+            "possible": true,
+            "minimum_time/minimum_distance": 139.5232038590265,
+            "path": [
+                72955,
+                32582
+            ]
+        },
+        {
+            "id": 35,
+            "possible": true,
+            "minimum_time/minimum_distance": 16.672497138757542,
+            "path": [
+                31058,
+                46279
+            ]
+        },
+        {
+            "id": 36,
+            "possible": false
+        },
+        {
+            "id": 37,
+            "possible": true,
+            "minimum_time/minimum_distance": 218.8083509686918,
+            "path": [
+                36042,
+                36041,
+                36043,
+                36047
+            ]
+        },
+        {
+            "id": 38,
+            "possible": true,
+            "minimum_time/minimum_distance": 34.99440635437135,
+            "path": [
+                34132,
+                34134
+            ]
+        },
+        {
+            "id": 39,
+            "done": true
+        },
+        {
+            "id": 40,
+            "possible": true,
+            "minimum_time/minimum_distance": 177.4636210541132,
+            "path": [
+                32724,
+                32723,
+                46777,
+                46837
+            ]
+        },
+        {
+            "id": 41,
+            "done": true
+        },
+        {
+            "id": 42,
+            "possible": false
+        },
+        {
+            "id": 43,
+            "possible": true,
+            "minimum_time/minimum_distance": 28.186298760672276,
+            "path": [
+                56978,
+                56977
+            ]
+        },
+        {
+            "id": 44,
+            "done": true
+        },
+        {
+            "id": 45,
+            "done": true
+        },
+        {
+            "id": 46,
+            "possible": true,
+            "minimum_time/minimum_distance": 202.59349383449225,
+            "path": [
+                58867,
+                58866,
+                20551
+            ]
+        },
+        {
+            "id": 47,
+            "possible": true,
+            "minimum_time/minimum_distance": 115.99256891025792,
+            "path": [
+                27343,
+                14109,
+                14108
+            ]
+        },
+        {
+            "id": 48,
+            "possible": true,
+            "minimum_time/minimum_distance": 175.55900577934815,
+            "path": [
+                36500,
+                36501,
+                36496,
+                36615,
+                36497
+            ]
+        },
+        {
+            "id": 49,
+            "possible": false
+        },
+        {
+            "id": 50,
+            "possible": true,
+            "minimum_time/minimum_distance": 306.43102519577195,
+            "path": [
+                47978,
+                47979,
+                33161,
+                33165,
+                33174
+            ]
+        },
+        {
+            "id": 51,
+            "possible": false
+        },
+        {
+            "id": 52,
+            "possible": false
+        },
+        {
+            "id": 53,
+            "possible": false
+        },
+        {
+            "id": 54,
+            "done": true
+        },
+        {
+            "id": 55,
+            "possible": true,
+            "minimum_time/minimum_distance": 88.2978723639926,
+            "path": [
+                47084,
+                5622
+            ]
+        },
+        {
+            "id": 56,
+            "possible": true,
+            "minimum_time/minimum_distance": 19513.726642892634,
+            "path": [
+                55723,
+                55724,
+                55716,
+                20695,
+                55728,
+                55722,
+                38611,
+                38613,
+                20683,
+                5470,
+                37805,
+                55590,
+                55184,
+                55593,
+                55592,
+                37773,
+                38626,
+                37780,
+                55583,
+                55575,
+                55578,
+                55580,
+                55582,
+                56843,
+                45227,
+                37770,
+                73734,
+                39011,
+                50292,
+                50404,
+                50405,
+                43289,
+                38956,
+                51247,
+                59973,
+                44399,
+                59972,
+                4767,
+                59974,
+                72357,
+                50672,
+                69991,
+                61945,
+                50663,
+                44618,
+                43002,
+                44613,
+                18767,
+                44604,
+                43066,
+                51486,
+                51484,
+                45035,
+                18769,
+                72280,
+                51501,
+                36,
+                20546,
+                60913,
+                25565,
+                25752,
+                15264,
+                11143,
+                11144,
+                11146,
+                11145,
+                72512,
+                14124,
+                14123,
+                14121,
+                14122,
+                40792,
+                40793,
+                18923,
+                20599,
+                20569,
+                20604,
+                11877,
+                20608,
+                11876,
+                59439,
+                42373,
+                11878,
+                58463,
+                14903,
+                74608,
+                60818,
+                98,
+                63702,
+                14878,
+                11872,
+                42375,
+                5165,
+                23535,
+                74303,
+                74304,
+                73905,
+                5169,
+                58075,
+                62021,
+                10375,
+                62011,
+                72753,
+                9079,
+                74437,
+                41366,
+                20854,
+                5243,
+                60739,
+                5101,
+                62339,
+                74344,
+                9105,
+                9102,
+                2248,
+                44090,
+                2243,
+                11035,
+                62018,
+                62017,
+                42,
+                11034,
+                9098,
+                29321,
+                29319,
+                60531,
+                60530,
+                5362,
+                2257,
+                10042,
+                15041,
+                5698,
+                42078,
+                60513,
+                15005,
+                15057,
+                43,
+                15555,
+                44,
+                15146,
+                45,
+                15078,
+                5711,
+                15065,
+                15074,
+                15132,
+                15072,
+                15137,
+                5710,
+                15038,
+                15071,
+                5705,
+                74236,
+                63210,
+                64246,
+                64244,
+                57718,
+                64248,
+                57723,
+                26217,
+                41934,
+                15126,
+                64254,
+                15125,
+                15021,
+                15046,
+                15026,
+                15020,
+                15043
+            ]
+        },
+        {
+            "id": 57,
+            "possible": true,
+            "minimum_time/minimum_distance": 39.86777237329399,
+            "path": [
+                72443,
+                1776,
+                1775
+            ]
+        },
+        {
+            "id": 58,
+            "possible": true,
+            "minimum_time/minimum_distance": 300.2261909302564,
+            "path": [
+                33162,
+                33165,
+                33161,
+                47979,
+                47978
+            ]
+        },
+        {
+            "id": 59,
+            "possible": false
+        },
+        {
+            "id": 60,
+            "possible": true,
+            "minimum_time/minimum_distance": 17.754864984262394,
+            "path": [
+                27064,
+                47482
+            ]
+        },
+        {
+            "id": 61,
+            "possible": true,
+            "minimum_time/minimum_distance": 77.056019375147,
+            "path": [
+                709,
+                705,
+                305
+            ]
+        },
+        {
+            "id": 62,
+            "possible": true,
+            "minimum_time/minimum_distance": 202.59349383449225,
+            "path": [
+                58867,
+                58866,
+                20551
+            ]
+        },
+        {
+            "id": 63,
+            "possible": false
+        },
+        {
+            "id": 64,
+            "possible": true,
+            "minimum_time/minimum_distance": 224.4249388816301,
+            "path": [
+                34046,
+                34058,
+                72143,
+                34585
+            ]
+        },
+        {
+            "id": 65,
+            "possible": true,
+            "minimum_time/minimum_distance": 103.15601729256797,
+            "path": [
+                56977,
+                56978,
+                56979,
+                56970,
+                56982
+            ]
+        },
+        {
+            "id": 66,
+            "possible": true,
+            "minimum_time/minimum_distance": 10.92013074805639,
+            "path": [
+                14109,
+                1364
+            ]
+        },
+        {
+            "id": 67,
+            "done": true
+        },
+        {
+            "id": 68,
+            "done": true
+        },
+        {
+            "id": 69,
+            "possible": false
+        },
+        {
+            "id": 70,
+            "possible": true,
+            "minimum_time/minimum_distance": 140.24184346915263,
+            "path": [
+                30792,
+                7477,
+                24030,
+                24026,
+                24028
+            ]
+        },
+        {
+            "id": 71,
+            "possible": false
+        },
+        {
+            "id": 72,
+            "possible": false
+        },
+        {
+            "id": 73,
+            "done": true
+        },
+        {
+            "id": 74,
+            "possible": false
+        },
+        {
+            "id": 75,
+            "possible": false
+        },
+        {
+            "id": 76,
+            "done": true
+        },
+        {
+            "id": 77,
+            "possible": false
+        },
+        {
+            "id": 78,
+            "done": true
+        }
+    ]
+} 

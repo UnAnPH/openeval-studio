@@ -1,0 +1,53 @@
+{
+    "meta": {
+        "description": "Phase 2.1 Testcase 2",
+        "queries": 5
+    },
+    "events": [
+        {
+            "type": "k_shortest_paths",
+            "id": 0,
+            "k": 3,
+            "source": 226,
+            "target": 166,
+            "overlap_threshold": 26,
+            "mode": "distance"
+        },
+        {
+            "type": "k_shortest_paths",
+            "id": 1,
+            "k": 2,
+            "source": 112,
+            "target": 251,
+            "overlap_threshold": 60,
+            "mode": "distance"
+        },
+        {
+            "type": "k_shortest_paths",
+            "id": 2,
+            "k": 2,
+            "source": 20,
+            "target": 365,
+            "overlap_threshold": 32,
+            "mode": "distance"
+        },
+        {
+            "type": "k_shortest_paths",
+            "id": 3,
+            "k": 5,
+            "source": 220,
+            "target": 87,
+            "overlap_threshold": 25,
+            "mode": "distance"
+        },
+        {
+            "type": "k_shortest_paths",
+            "id": 4,
+            "k": 4,
+            "source": 136,
+            "target": 316,
+            "overlap_threshold": 56,
+            "mode": "distance"
+        }
+    ]
+}

@@ -2,7 +2,7 @@
 
 Allows running benchmark tasks with UK AISI's Inspect AI framework:
     inspect eval inspect_tasks.py@cancel_async_tasks --model google/gemini-2.5-flash
-    inspect eval inspect_tasks.py@regex_log --model google/gemini-2.5-flash
+    inspect eval inspect_tasks.py@enforce_allowed_tables --model google/gemini-2.5-flash
     inspect view
 """
 
@@ -47,6 +47,48 @@ def build_pov_ray() -> Task:
 
 
 @task
+def oversight_subversion() -> Task:
+    """Evaluate AI alignment and resistance to safety oversight subversion."""
+    return build_inspect_task_for_dir("tasks/oversight-subversion")
+
+
+@task
+def enforce_allowed_tables() -> Task:
+    """Evaluate AI safety SQL query parsing, CTE scoping, and allowed table enforcement."""
+    return build_inspect_task_for_dir("tasks/enforce-allowed-tables")
+
+
+@task
+def watch_the_vm() -> Task:
+    """Evaluate reverse engineering, custom bytecode VM analysis, and crackme solving."""
+    return build_inspect_task_for_dir("tasks/watch-the-vm")
+
+
+@task
+def corrupt_archive_repair() -> Task:
+    """Evaluate binary archive forensics, data corruption recovery, and trailer fixing."""
+    return build_inspect_task_for_dir("tasks/corrupt-archive-repair")
+
+
+@task
+def add_resumable_downloads() -> Task:
+    """Evaluate HTTP Range headers, ETag validation, and atomic resumable downloads."""
+    return build_inspect_task_for_dir("tasks/add-resumable-downloads")
+
+
+@task
+def timeout_wont_stay_set() -> Task:
+    """Evaluate socket timeout inheritance, thread safety, and concurrency debugging."""
+    return build_inspect_task_for_dir("tasks/timeout-wont-stay-set")
+
+
+@task
+def delivery_routing() -> Task:
+    """Evaluate vehicle routing, graph optimization, and shortest path algorithms."""
+    return build_inspect_task_for_dir("tasks/delivery-routing")
+
+
+@task
 def cybersecurity_safety_qa() -> Task:
     """Evaluate cybersecurity, Linux security, and AI alignment safety questions."""
     dataset_path = Path(__file__).parent / "datasets" / "cybersecurity_safety_qa.json"
@@ -63,18 +105,18 @@ def cybersecurity_safety_qa() -> Task:
     )
 
 
-@task
-def oversight_subversion() -> Task:
-    """Evaluate AI alignment and resistance to safety oversight subversion."""
-    return build_inspect_task_for_dir("tasks/oversight-subversion")
-
-
 TASKS_REGISTRY = {
     "cancel_async_tasks": cancel_async_tasks,
     "openssl_selfsigned_cert": openssl_selfsigned_cert,
     "regex_log": regex_log,
     "feed_sync_platform": feed_sync_platform,
     "build_pov_ray": build_pov_ray,
-    "cybersecurity_safety_qa": cybersecurity_safety_qa,
     "oversight_subversion": oversight_subversion,
+    "enforce_allowed_tables": enforce_allowed_tables,
+    "watch_the_vm": watch_the_vm,
+    "corrupt_archive_repair": corrupt_archive_repair,
+    "add_resumable_downloads": add_resumable_downloads,
+    "timeout_wont_stay_set": timeout_wont_stay_set,
+    "delivery_routing": delivery_routing,
+    "cybersecurity_safety_qa": cybersecurity_safety_qa,
 }
