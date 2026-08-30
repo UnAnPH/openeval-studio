@@ -110,6 +110,16 @@ export const BenchmarksList: React.FC<BenchmarksListProps> = ({
 
         {/* Difficulty & Search */}
         <div className="flex items-center gap-2 flex-wrap">
+          {onNavigateToRuns && (
+            <button
+              type="button"
+              onClick={onNavigateToRuns}
+              className="px-3 py-1.5 rounded-xl bg-canvas border border-border-subtle text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-surface-subtle transition-all cursor-pointer whitespace-nowrap"
+            >
+              Runs ({runs.length}) &rarr;
+            </button>
+          )}
+
           <select
             value={difficultyFilter}
             onChange={(e) => setDifficultyFilter(e.target.value)}

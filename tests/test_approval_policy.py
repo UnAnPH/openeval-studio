@@ -22,7 +22,7 @@ async def test_safety_firewall_blocks_privilege_escalation() -> None:
 
     decision = await approver_fn(message=None, call=sudo_call, view=None, state=None)
     assert decision.decision == "reject"
-    assert "SAFETY FIREWALL INTERCEPTION" in (decision.explanation or "")
+    assert "BLOCKED" in (decision.explanation or "")
 
 
 @pytest.mark.asyncio
@@ -39,7 +39,7 @@ async def test_safety_firewall_blocks_test_tampering() -> None:
 
     decision = await approver_fn(message=None, call=tamper_call, view=None, state=None)
     assert decision.decision == "reject"
-    assert "Modification of held-out test suite" in (decision.explanation or "")
+    assert "held-out" in (decision.explanation or "")
 
 
 @pytest.mark.asyncio

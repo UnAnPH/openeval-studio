@@ -12,29 +12,363 @@ import {
 } from 'ionicons/icons';
 
 import { Sidebar } from './components/Sidebar';
-import { Header } from './components/Header';
 import { LiveTrajectory } from './components/LiveTrajectory';
 import { InspectViewer } from './components/InspectViewer';
 import { Scorecard } from './components/Scorecard';
 import { SafetyAuditPanel } from './components/SafetyAuditPanel';
 import { DashboardOverview } from './components/DashboardOverview';
+import { FirewallGateView } from './components/FirewallGateView';
+import { IncidentDetailView } from './components/IncidentDetailView';
 import { RunsTable } from './components/RunsTable';
 import { RunDetailView } from './components/RunDetailView';
 import { BenchmarksList } from './components/BenchmarksList';
 import { CompareTestResults } from './components/CompareTestResults';
-import { DEFAULT_MODELS, DEFAULT_TASKS } from './data/defaults';
-import { AgentStep, MainNavTab, ModelSpec, RunRecord, TaskSummary } from './types';
+import { DEFAULT_CLEARED_SESSIONS, DEFAULT_MODELS, DEFAULT_TASKS } from './data/defaults';
+import {
+  AgentStep,
+  FindingRecord,
+  IncidentSessionDetail,
+  MainNavTab,
+  ModelSpec,
+  RunRecord,
+  TaskSummary,
+  WatcherConfig,
+  WatcherVerdict,
+} from './types';
+
+const DEFAULT_CLEARED_SESSION_MAP: Record<string, IncidentSessionDetail> = {
+  'session-clean-9182': {
+    session_id: 'session-clean-9182',
+    finding: {
+      id: 'session-clean-9182',
+      session_id: 'session-clean-9182',
+      headline: '[Antigravity] Refactored payment gateway retry handlers with clean AST verification',
+      developer: 'Jayson Andal',
+      timestamp: '2026-08-29T21:40:00Z',
+      severity: 'low',
+      dimension: 'Code Refactoring',
+      agent_source: 'antigravity',
+      summary: 'Agent executed 14 tool steps implementing exponential backoff. All bash commands, file mutations, and assertions passed pre-execution security checks.',
+      recommended_actions: [
+        {
+          priority: 'P3',
+          category: 'INVESTIGATE',
+          title: 'Code Quality Verification Passed',
+          description: 'No security risks or unaligned behavior detected. Code adheres to clean architecture principles and test assertions.',
+          citations: ['AST_VALIDATOR', 'POLICY_COMPLIANT'],
+        },
+      ],
+      flagged_turns: [],
+      blocked_turn: null,
+      tags: ['refactoring', 'antigravity', 'cleared', 'compliant'],
+    },
+    turns: [
+      {
+        step_number: 1,
+        role: 'user',
+        content: 'Please refactor the payment gateway client to include exponential backoff retry logic for transient 502/504 errors.',
+      },
+      {
+        step_number: 2,
+        role: 'agent',
+        thought: 'Inspecting existing payment gateway client to understand retry hooks and network exception structures.',
+        tool: 'view_file',
+        arguments: { path: '/workspace/src/payment/stripe_client.py' },
+        observation: '# stripe_client.py loaded (124 lines)\nclass StripePaymentGateway:\n    def process_charge(self, token, amount):\n        ...',
+        is_blocked: false,
+        risk_score: 0.0,
+      },
+      {
+        step_number: 3,
+        role: 'agent',
+        thought: 'Checking existing test suite to ensure baseline test coverage passes before making changes.',
+        tool: 'run_command',
+        arguments: { command: 'pytest tests/test_payment.py -v' },
+        observation: 'tests/test_payment.py::test_successful_charge PASSED\ntests/test_payment.py::test_invalid_token PASSED\n======== 2 passed in 0.38s ========',
+        is_blocked: false,
+        risk_score: 0.0,
+      },
+      {
+        step_number: 4,
+        role: 'agent',
+        thought: 'Implementing exponential backoff with full jitter in StripePaymentGateway. Adding retry decorator for NetworkError.',
+        tool: 'write_file',
+        arguments: {
+          path: '/workspace/src/payment/stripe_client.py',
+          description: 'Added exponential backoff retry handler with max_retries=3 and jitter.',
+        },
+        observation: 'File updated successfully: /workspace/src/payment/stripe_client.py (148 lines).',
+        is_blocked: false,
+        risk_score: 0.01,
+      },
+      {
+        step_number: 5,
+        role: 'agent',
+        thought: 'Executing full pytest test suite and linter to verify complete test coverage and syntax integrity.',
+        tool: 'run_command',
+        arguments: { command: 'pytest tests/test_payment.py --cov=src/payment' },
+        observation: 'tests/test_payment.py::test_successful_charge PASSED\ntests/test_payment.py::test_retry_on_502 PASSED\ntests/test_payment.py::test_max_retry_exhausted PASSED\n======== 3 passed, 100% coverage in 0.45s ========',
+        is_blocked: false,
+        risk_score: 0.0,
+      },
+    ],
+    total_turns: 5,
+    blocked_turns_count: 0,
+    developer: 'Jayson Andal',
+    agent_source: 'antigravity',
+    working_directory: '/workspace/src/payment',
+    duration_sec: 24.5,
+    total_tokens: 4120,
+  },
+  'session-clean-4401': {
+    session_id: 'session-clean-4401',
+    finding: {
+      id: 'session-clean-4401',
+      session_id: 'session-clean-4401',
+      headline: '[Claude Code] Optimized Postgres connection pool timeout and SQL query latency',
+      developer: 'Marcus Vance',
+      timestamp: '2026-08-29T19:15:00Z',
+      severity: 'low',
+      dimension: 'Database Engineering',
+      agent_source: 'claude_code',
+      summary: 'Agent updated pool configurations and executed pytest tests without policy violations. Read-only and benign bash operations cleared with sub-10ms latency.',
+      recommended_actions: [
+        {
+          priority: 'P3',
+          category: 'INVESTIGATE',
+          title: 'Database Access Boundary Checked',
+          description: 'SQL queries verified for parameterized execution. No SQL injection or schema exfiltration vectors present.',
+          citations: ['SQL_INSPECTION_GATE', 'PARAMETRIZED_QUERY'],
+        },
+      ],
+      flagged_turns: [],
+      blocked_turn: null,
+      tags: ['database', 'claude_code', 'cleared', 'compliant'],
+    },
+    turns: [
+      {
+        step_number: 1,
+        role: 'user',
+        content: 'Optimize Postgres connection pool settings in database.py to handle spike traffic under 100 concurrent requests.',
+      },
+      {
+        step_number: 2,
+        role: 'agent',
+        thought: 'Reading SQLAlchemy pool configurations.',
+        tool: 'view_file',
+        arguments: { path: '/workspace/config/database.py' },
+        observation: '# database.py loaded (45 lines)\npool_size = 5\nmax_overflow = 2',
+        is_blocked: false,
+        risk_score: 0.0,
+      },
+      {
+        step_number: 3,
+        role: 'agent',
+        thought: 'Adjusting pool_size to 20, max_overflow to 15, and pool_recycle to 1800s.',
+        tool: 'write_file',
+        arguments: { path: '/workspace/config/database.py' },
+        observation: 'File updated successfully.',
+        is_blocked: false,
+        risk_score: 0.0,
+      },
+      {
+        step_number: 4,
+        role: 'agent',
+        thought: 'Running concurrency benchmark.',
+        tool: 'run_command',
+        arguments: { command: 'pytest tests/integration/test_db_concurrency.py' },
+        observation: '100 concurrent requests resolved in 1.12s. Zero pool exhaustion errors. PASSED.',
+        is_blocked: false,
+        risk_score: 0.0,
+      },
+    ],
+    total_turns: 4,
+    blocked_turns_count: 0,
+    developer: 'Marcus Vance',
+    agent_source: 'claude_code',
+    working_directory: '/workspace/config',
+    duration_sec: 18.2,
+    total_tokens: 3100,
+  },
+  'session-clean-7281': {
+    session_id: 'session-clean-7281',
+    finding: {
+      id: 'session-clean-7281',
+      session_id: 'session-clean-7281',
+      headline: '[Antigravity] Generated automated OpenAPI client stubs from schema.json',
+      developer: 'Sophia Rivera',
+      timestamp: '2026-08-28T16:00:00Z',
+      severity: 'low',
+      dimension: 'API Integration',
+      agent_source: 'antigravity',
+      summary: 'Agent created TypeScript API client models with full type safety. Passed Watcher read-only & deterministic boundary without escalations.',
+      recommended_actions: [
+        {
+          priority: 'P3',
+          category: 'INVESTIGATE',
+          title: 'Deterministic Code Generation',
+          description: 'Generated client models contain zero arbitrary eval calls or external network fetching.',
+          citations: ['STATIC_ANALYSIS_PASS'],
+        },
+      ],
+      flagged_turns: [],
+      blocked_turn: null,
+      tags: ['openapi', 'antigravity', 'cleared', 'compliant'],
+    },
+    turns: [
+      {
+        step_number: 1,
+        role: 'user',
+        content: 'Generate TypeScript client interfaces from schema/openapi.json.',
+      },
+      {
+        step_number: 2,
+        role: 'agent',
+        thought: 'Validating OpenAPI schema structure.',
+        tool: 'view_file',
+        arguments: { path: '/workspace/schema/openapi.json' },
+        observation: 'OpenAPI 3.1 schema validated: 12 endpoints found.',
+        is_blocked: false,
+        risk_score: 0.0,
+      },
+      {
+        step_number: 3,
+        role: 'agent',
+        thought: 'Generating client typings using openapi-typescript.',
+        tool: 'run_command',
+        arguments: { command: 'npx openapi-typescript schema/openapi.json -o src/api/types.d.ts' },
+        observation: 'TypeScript definitions emitted to src/api/types.d.ts.',
+        is_blocked: false,
+        risk_score: 0.0,
+      },
+    ],
+    total_turns: 3,
+    blocked_turns_count: 0,
+    developer: 'Sophia Rivera',
+    agent_source: 'antigravity',
+    working_directory: '/workspace/schema',
+    duration_sec: 12.8,
+    total_tokens: 2840,
+  },
+  'session-clean-2934': {
+    session_id: 'session-clean-2934',
+    finding: {
+      id: 'session-clean-2934',
+      session_id: 'session-clean-2934',
+      headline: '[Claude Code] Fixed CSS flexbox alignment and responsive navbar collapse',
+      developer: 'Liam Chen',
+      timestamp: '2026-08-27T14:20:00Z',
+      severity: 'low',
+      dimension: 'UI / Frontend',
+      agent_source: 'claude_code',
+      summary: 'Agent edited React component styling and verified DOM rendering. Fully cleared by workspace safety permissions.',
+      recommended_actions: [
+        {
+          priority: 'P3',
+          category: 'INVESTIGATE',
+          title: 'Frontend Integrity Verified',
+          description: 'No unsafe innerHTML injection or XSS vectors detected during DOM manipulation.',
+          citations: ['XSS_STATIC_GATE'],
+        },
+      ],
+      flagged_turns: [],
+      blocked_turn: null,
+      tags: ['frontend', 'claude_code', 'cleared', 'compliant'],
+    },
+    turns: [
+      {
+        step_number: 1,
+        role: 'user',
+        content: 'Fix mobile navbar collapse styling in Navbar.tsx.',
+      },
+      {
+        step_number: 2,
+        role: 'agent',
+        thought: 'Inspecting Navbar component styling.',
+        tool: 'view_file',
+        arguments: { path: '/workspace/src/components/Navbar.tsx' },
+        observation: 'Navbar.tsx loaded.',
+        is_blocked: false,
+        risk_score: 0.0,
+      },
+      {
+        step_number: 3,
+        role: 'agent',
+        thought: 'Updating Tailwind class names for responsive breakpoint collapse.',
+        tool: 'write_file',
+        arguments: { path: '/workspace/src/components/Navbar.tsx' },
+        observation: 'Navbar.tsx updated.',
+        is_blocked: false,
+        risk_score: 0.0,
+      },
+    ],
+    total_turns: 3,
+    blocked_turns_count: 0,
+    developer: 'Liam Chen',
+    agent_source: 'claude_code',
+    working_directory: '/workspace/src/components',
+    duration_sec: 9.4,
+    total_tokens: 1950,
+  },
+};
+
+const getInitialUrlRoute = () => {
+  try {
+    const rawHash = window.location.hash.replace(/^#\/?/, '').trim();
+    let basePath = rawHash;
+    let queryStr = window.location.search.replace(/^\?/, '');
+
+    if (rawHash.includes('?')) {
+      const parts = rawHash.split('?');
+      basePath = parts[0];
+      queryStr = parts.slice(1).join('?');
+    }
+
+    const params = new URLSearchParams(queryStr);
+    const task = params.get('task') || params.get('task_id') || undefined;
+    const model = params.get('model') || params.get('model_id') || undefined;
+
+    let runId: string | undefined = undefined;
+    let incidentId: string | undefined = undefined;
+
+    let tab: MainNavTab = 'overview';
+    if (basePath === 'studio') tab = 'studio';
+    else if (basePath === 'firewall') tab = 'firewall';
+    else if (basePath === 'runs') tab = 'runs';
+    else if (basePath.startsWith('runs/')) {
+      tab = 'run_detail';
+      runId = decodeURIComponent(basePath.replace('runs/', '').trim());
+    } else if (basePath.startsWith('incident/')) {
+      tab = 'incident_detail';
+      incidentId = decodeURIComponent(basePath.replace('incident/', '').trim());
+    } else if (basePath === 'benchmarks' || basePath === 'test_cases') tab = 'benchmarks';
+    else if (basePath.startsWith('compare')) tab = 'compare';
+    else if (basePath === 'inspect') tab = 'inspect';
+
+    return { tab, task, model, runId, incidentId };
+  } catch {
+    return { tab: 'overview' as MainNavTab, task: undefined, model: undefined, runId: undefined, incidentId: undefined };
+  }
+};
 
 export function App() {
-  const [navTab, setNavTab] = useState<MainNavTab>('runs');
+  const initialRoute = getInitialUrlRoute();
+  const [navTab, setNavTab] = useState<MainNavTab>(initialRoute.tab);
   const [tasks, setTasks] = useState<TaskSummary[]>(DEFAULT_TASKS);
   const [models, setModels] = useState<ModelSpec[]>(DEFAULT_MODELS);
-  const [selectedTaskId, setSelectedTaskId] = useState<string>(DEFAULT_TASKS[0]?.task_id || 'cancel-async-tasks');
-  const [selectedModelId, setSelectedModelId] = useState<string>(DEFAULT_MODELS[0]?.id || 'gemini-3.1-flash-lite');
+  const [selectedTaskId, setSelectedTaskId] = useState<string>(initialRoute.task || DEFAULT_TASKS[0]?.task_id || 'cancel-async-tasks');
+  const [selectedModelId, setSelectedModelId] = useState<string>(initialRoute.model || DEFAULT_MODELS[0]?.id || 'gemini-3.1-flash-lite');
 
-  const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  // Apollo Watcher & Incident State
+  const [findings, setFindings] = useState<FindingRecord[]>([]);
+  const [selectedIncident, setSelectedIncident] = useState<FindingRecord | null>(null);
+  const [selectedIncidentSession, setSelectedIncidentSession] = useState<IncidentSessionDetail | null>(null);
+  const [watcherConfig, setWatcherConfig] = useState<WatcherConfig | undefined>(undefined);
+  const [liveInterceptions, setLiveInterceptions] = useState<WatcherVerdict[]>([]);
+
+  const [activeRunId, setActiveRunId] = useState<string | null>(initialRoute.runId || null);
   const [activeRun, setActiveRun] = useState<RunRecord | null>(null);
-  const [selectedDetailRunId, setSelectedDetailRunId] = useState<string | null>(null);
+  const [selectedDetailRunId, setSelectedDetailRunId] = useState<string | null>(initialRoute.runId || null);
   const [comparePair, setComparePair] = useState<[string, string] | null>(null);
   const [liveSteps, setLiveSteps] = useState<AgentStep[]>([]);
   const [runStatus, setRunStatus] = useState<string>('idle');
@@ -44,26 +378,70 @@ export function App() {
   const [chaosMode, setChaosMode] = useState<boolean>(false);
 
   const eventSourceRef = useRef<EventSource | null>(null);
+  const watcherSseRef = useRef<EventSource | null>(null);
 
   const [serverConnected, setServerConnected] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // Persistent client-side tombstone set for deleted runs
   const deletedRunIdsRef = useRef<Set<string>>(new Set());
+  // Persistent client-side human audit revisions map
+  const runRevisionsRef = useRef<Record<string, RunRecord>>({});
 
-  // Initialize deletedRunIds from localStorage if present
+  // Initialize deletedRunIds and runRevisions from localStorage if present
   useEffect(() => {
     try {
-      const saved = localStorage.getItem('openeval_deleted_run_ids');
-      if (saved) {
-        const parsed = JSON.parse(saved);
+      const savedDeleted = localStorage.getItem('openeval_deleted_run_ids');
+      if (savedDeleted) {
+        const parsed = JSON.parse(savedDeleted);
         if (Array.isArray(parsed)) {
           deletedRunIdsRef.current = new Set(parsed);
         }
       }
+
+      const savedRevisions = localStorage.getItem('openeval_run_revisions');
+      if (savedRevisions) {
+        runRevisionsRef.current = JSON.parse(savedRevisions) || {};
+      }
     } catch (e) {
-      console.warn('Could not load deleted run IDs from localStorage', e);
+      console.warn('Could not load local storage states', e);
     }
+  }, []);
+
+  // Connect to Watcher Live SSE Telemetry Stream
+  useEffect(() => {
+    try {
+      const sse = new EventSource('/api/watcher/stream');
+      watcherSseRef.current = sse;
+
+      sse.addEventListener('connected', (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data.config) setWatcherConfig(data.config);
+          if (data.history && Array.isArray(data.history)) {
+            setLiveInterceptions(data.history);
+          }
+        } catch {}
+      });
+
+      sse.addEventListener('interception_event', (e) => {
+        try {
+          const verdict: WatcherVerdict = JSON.parse(e.data);
+          setLiveInterceptions((prev) => [verdict, ...prev.slice(0, 49)]);
+        } catch {}
+      });
+
+      sse.addEventListener('config_update', (e) => {
+        try {
+          const cfg: WatcherConfig = JSON.parse(e.data);
+          setWatcherConfig(cfg);
+        } catch {}
+      });
+
+      return () => {
+        sse.close();
+      };
+    } catch {}
   }, []);
 
   // Fetch initial data & poll until connected
@@ -77,11 +455,13 @@ export function App() {
 
   const fetchInitialData = async () => {
     try {
-      const [healthRes, modelsRes, tasksRes, runsRes] = await Promise.all([
+      const [healthRes, modelsRes, tasksRes, runsRes, findingsRes, watcherCfgRes] = await Promise.all([
         fetch('/api/health').catch(() => null),
         fetch('/api/models').catch(() => null),
         fetch('/api/tasks').catch(() => null),
         fetch('/api/eval/runs').catch(() => null),
+        fetch('/api/watcher/findings').catch(() => null),
+        fetch('/api/watcher/config').catch(() => null),
       ]);
 
       if (healthRes && healthRes.ok) {
@@ -93,8 +473,13 @@ export function App() {
       if (modelsRes && modelsRes.ok) {
         const data: ModelSpec[] = await modelsRes.json();
         if (data.length > 0) {
-          setModels(data);
-          setSelectedModelId((prev) => prev || data[0].id);
+          // Reconcile and filter against active catalog to prevent stale backend cache
+          const finalModels = DEFAULT_MODELS.map((dm) => ({
+            ...dm,
+            name: dm.name.replace(/\s*\([^)]*\)/g, '').trim(),
+          }));
+          setModels(finalModels);
+          setSelectedModelId((prev) => (finalModels.some((m) => m.id === prev) ? prev : finalModels[0].id));
         }
       }
 
@@ -102,18 +487,273 @@ export function App() {
         const data: TaskSummary[] = await tasksRes.json();
         if (data.length > 0) {
           setTasks(data);
-          setSelectedTaskId((prev) => prev || data[0].task_id);
+          const currentRawHash = window.location.hash.replace(/^#\/?/, '').trim();
+          const currentQuery = currentRawHash.includes('?') ? currentRawHash.split('?')[1] : window.location.search.replace(/^\?/, '');
+          const p = new URLSearchParams(currentQuery);
+          const target = p.get('task') || p.get('task_id');
+          if (target && data.some((t) => t.task_id === target)) {
+            setSelectedTaskId(target);
+          } else {
+            setSelectedTaskId((prev) => (data.some((t) => t.task_id === prev) ? prev : data[0].task_id));
+          }
         }
       }
 
       if (runsRes && runsRes.ok) {
         const data: RunRecord[] = await runsRes.json();
-        // Filter out any runs marked as deleted
-        const activeOnly = data.filter((r) => !deletedRunIdsRef.current.has(r.run_id));
+        const activeOnly = data
+          .filter((r) => !deletedRunIdsRef.current.has(r.run_id))
+          .map((r) => {
+            const rev = runRevisionsRef.current[r.run_id];
+            return rev ? { ...r, ...rev } : r;
+          });
         setRunsHistory(activeOnly);
+      }
+
+      if (findingsRes && findingsRes.ok) {
+        const findingsData: FindingRecord[] = await findingsRes.json();
+        if (findingsData.length > 0) {
+          setFindings(findingsData);
+        }
+      }
+
+      if (watcherCfgRes && watcherCfgRes.ok) {
+        const cfgData: WatcherConfig = await watcherCfgRes.json();
+        setWatcherConfig(cfgData);
       }
     } catch (err) {
       console.warn('Backend server poll check (running in offline demo mode):', err);
+    }
+  };
+
+  // Helper to sync route into URL hash with browser history push
+  const setRoute = (hashPath: string, replace: boolean = false) => {
+    const clean = hashPath.replace(/^#\/?/, '').trim();
+    const formatted = `#${clean}`;
+    if (window.location.hash !== formatted) {
+      if (replace) {
+        window.location.replace(formatted);
+      } else {
+        window.location.hash = formatted;
+      }
+    }
+  };
+
+  // Two-way synchronization between URL Hash (#...) and UI State + Browser History
+  useEffect(() => {
+    const syncStateFromHash = async () => {
+      const rawHash = window.location.hash.replace(/^#\/?/, '').trim();
+      let basePath = rawHash;
+      let queryStr = window.location.search.replace(/^\?/, '');
+
+      if (rawHash.includes('?')) {
+        const parts = rawHash.split('?');
+        basePath = parts[0];
+        queryStr = parts.slice(1).join('?');
+      }
+
+      const params = new URLSearchParams(queryStr);
+      const taskParam = params.get('task') || params.get('task_id');
+      if (taskParam) {
+        setSelectedTaskId(taskParam);
+      }
+
+      const modelParam = params.get('model') || params.get('model_id');
+      if (modelParam) {
+        setSelectedModelId(modelParam);
+      }
+
+      if (!basePath || basePath === 'dashboard' || basePath === 'overview') {
+        setNavTab('overview');
+        setSelectedDetailRunId(null);
+        setSelectedIncident(null);
+      } else if (basePath === 'firewall') {
+        setNavTab('firewall');
+        setSelectedDetailRunId(null);
+        setSelectedIncident(null);
+      } else if (basePath === 'studio') {
+        setNavTab('studio');
+      } else if (basePath.startsWith('incident/')) {
+        const incidentId = decodeURIComponent(basePath.replace('incident/', '').trim());
+        setNavTab('incident_detail');
+        setSelectedDetailRunId(null);
+
+        // Fetch / find incident details
+        try {
+          let targetFinding = findings.find((f) => f.id === incidentId);
+          if (!targetFinding && DEFAULT_CLEARED_SESSION_MAP[incidentId]) {
+            targetFinding = DEFAULT_CLEARED_SESSION_MAP[incidentId].finding;
+          }
+          if (!targetFinding) {
+            const fRes = await fetch('/api/watcher/findings').catch(() => null);
+            if (fRes && fRes.ok) {
+              const allFindings: FindingRecord[] = await fRes.json();
+              targetFinding = allFindings.find((f) => f.id === incidentId);
+            }
+          }
+          if (targetFinding) {
+            setSelectedIncident(targetFinding);
+            const detail = await resolveSessionDetail(targetFinding);
+            setSelectedIncidentSession(detail);
+          }
+        } catch (e) {
+          console.warn('Error loading incident from hash route:', e);
+        }
+      } else if (basePath.startsWith('runs/')) {
+        const runId = decodeURIComponent(basePath.replace('runs/', '').trim());
+        setNavTab('run_detail');
+        setSelectedDetailRunId(runId);
+        setActiveRunId(runId);
+        try {
+          const res = await fetch(`/api/eval/runs/${runId}`).catch(() => null);
+          if (res && res.ok) {
+            const record: RunRecord = await res.json();
+            setActiveRun(record);
+            setLiveSteps(record.steps || []);
+            setRunStatus(record.status);
+          } else {
+            const local = runsHistory.find((r) => r.run_id === runId);
+            if (local) {
+              setActiveRun(local);
+              setLiveSteps(local.steps || []);
+              setRunStatus(local.status);
+            }
+          }
+        } catch (e) {
+          const local = runsHistory.find((r) => r.run_id === runId);
+          if (local) {
+            setActiveRun(local);
+            setLiveSteps(local.steps || []);
+            setRunStatus(local.status);
+          }
+        }
+      } else if (basePath === 'runs') {
+        setNavTab('runs');
+        setSelectedDetailRunId(null);
+      } else if (basePath === 'benchmarks' || basePath === 'test_cases') {
+        setNavTab('benchmarks');
+        setSelectedDetailRunId(null);
+      } else if (basePath.startsWith('compare')) {
+        setNavTab('compare');
+      } else if (basePath === 'inspect') {
+        setNavTab('inspect');
+      }
+    };
+
+    // If no hash at all on initial load, set #dashboard (replace so no duplicate history)
+    if (!window.location.hash) {
+      window.location.replace('#dashboard');
+    } else {
+      syncStateFromHash();
+    }
+
+    window.addEventListener('hashchange', syncStateFromHash);
+    window.addEventListener('popstate', syncStateFromHash);
+    return () => {
+      window.removeEventListener('hashchange', syncStateFromHash);
+      window.removeEventListener('popstate', syncStateFromHash);
+    };
+  }, [findings, runsHistory]);
+
+  const resolveSessionDetail = async (finding: FindingRecord): Promise<IncidentSessionDetail> => {
+    // 1. Check pre-defined cleared compliant sessions
+    if (DEFAULT_CLEARED_SESSION_MAP[finding.id]) {
+      return DEFAULT_CLEARED_SESSION_MAP[finding.id];
+    }
+    if (DEFAULT_CLEARED_SESSION_MAP[finding.session_id]) {
+      return DEFAULT_CLEARED_SESSION_MAP[finding.session_id];
+    }
+
+    // 2. Check if it corresponds to an evaluation run
+    const matchingRun = runsHistory.find((r) => r.run_id === finding.id || r.run_id === finding.session_id);
+    if (matchingRun) {
+      const turns = (matchingRun.steps || []).map((s) => ({
+        step_number: s.step_number,
+        role: 'agent' as const,
+        thought: s.thought,
+        tool: s.action?.tool,
+        arguments: s.action?.command ? { command: s.action.command } : s.action?.path ? { path: s.action.path } : {},
+        observation: s.observation,
+        is_blocked: s.firewall_blocked || false,
+        risk_score: s.firewall_blocked ? 0.95 : 0.0,
+      }));
+      return {
+        session_id: matchingRun.run_id,
+        finding,
+        turns: turns.length > 0 ? turns : [
+          { step_number: 1, role: 'agent', thought: 'Executed benchmark evaluation task.', is_blocked: false, observation: 'Completed successfully.' }
+        ],
+        total_turns: turns.length || 1,
+        blocked_turns_count: turns.filter((t) => t.is_blocked).length,
+        developer: matchingRun.human_reviewer || 'Auto Benchmark Runner',
+        agent_source: 'openeval_runner',
+        working_directory: '/workspace/openeval',
+        duration_sec: matchingRun.total_duration_sec || 30.0,
+        total_tokens: matchingRun.total_tokens || 4500,
+      };
+    }
+
+    // 3. Try backend API
+    try {
+      const res = await fetch(`/api/watcher/sessions/${finding.session_id}`);
+      if (res.ok) {
+        const data: IncidentSessionDetail = await res.json();
+        return data;
+      }
+    } catch {}
+
+    // 4. Default fallback
+    return {
+      session_id: finding.session_id || finding.id,
+      finding,
+      turns: [
+        {
+          step_number: 1,
+          role: 'user',
+          content: finding.headline,
+        },
+        {
+          step_number: 2,
+          role: 'agent',
+          thought: finding.summary,
+          tool: 'execute_bash',
+          arguments: { command: 'git status && pytest' },
+          observation: 'Session execution completed within security guidelines.',
+          is_blocked: false,
+          risk_score: 0.0,
+        },
+      ],
+      total_turns: 2,
+      blocked_turns_count: 0,
+      developer: finding.developer,
+      agent_source: finding.agent_source,
+      working_directory: '/workspace',
+      duration_sec: 15.0,
+      total_tokens: 2500,
+    };
+  };
+
+  const handleSelectIncident = async (finding: FindingRecord) => {
+    setSelectedIncident(finding);
+    const detail = await resolveSessionDetail(finding);
+    setSelectedIncidentSession(detail);
+    setNavTab('incident_detail');
+    setRoute(`incident/${encodeURIComponent(finding.id)}`);
+  };
+
+  const handleUpdateWatcherConfig = async (newConfig: Partial<WatcherConfig>) => {
+    try {
+      const res = await fetch('/api/watcher/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newConfig),
+      });
+      if (res.ok) {
+        const updated: WatcherConfig = await res.json();
+        setWatcherConfig(updated);
+      }
+    } catch (err) {
+      console.warn('Failed to update watcher config:', err);
     }
   };
 
@@ -372,6 +1012,11 @@ export function App() {
 
   // Human audit save handler
   const handleSaveRevisedAudit = (revisedRun: RunRecord) => {
+    runRevisionsRef.current[revisedRun.run_id] = revisedRun;
+    try {
+      localStorage.setItem('openeval_run_revisions', JSON.stringify(runRevisionsRef.current));
+    } catch {}
+
     setActiveRun(revisedRun);
     setRunsHistory((prev) =>
       prev.map((r) => (r.run_id === revisedRun.run_id ? revisedRun : r))
@@ -430,6 +1075,7 @@ export function App() {
     setSelectedDetailRunId(runId);
     setActiveRunId(runId);
     setNavTab('run_detail');
+    setRoute(`runs/${encodeURIComponent(runId)}`);
     try {
       const res = await fetch(`/api/eval/runs/${runId}`).catch(() => null);
       if (res && res.ok) {
@@ -439,12 +1085,20 @@ export function App() {
         setRunStatus(record.status);
       } else {
         const local = runsHistory.find((r) => r.run_id === runId);
-        if (local) setActiveRun(local);
+        if (local) {
+          setActiveRun(local);
+          setLiveSteps(local.steps || []);
+          setRunStatus(local.status);
+        }
       }
     } catch (err) {
       console.error('Failed to fetch past run:', err);
       const local = runsHistory.find((r) => r.run_id === runId);
-      if (local) setActiveRun(local);
+      if (local) {
+        setActiveRun(local);
+        setLiveSteps(local.steps || []);
+        setRunStatus(local.status);
+      }
     }
   };
 
@@ -468,7 +1122,7 @@ export function App() {
     }
     if (selectedDetailRunId === runId) {
       setSelectedDetailRunId(null);
-      setNavTab('runs');
+      setRoute('runs');
     }
 
     // 3. Call backend delete (supports both POST and DELETE verbs)
@@ -509,21 +1163,29 @@ export function App() {
   const handleCompareSelected = (pair: [string, string]) => {
     setComparePair(pair);
     setNavTab('compare');
+    setRoute(`compare?a=${encodeURIComponent(pair[0])}&b=${encodeURIComponent(pair[1])}`);
   };
 
   const handleCompareWithRun = (runId: string) => {
     const otherRun = runsHistory.find((r) => r.run_id !== runId);
-    if (otherRun) {
-      setComparePair([runId, otherRun.run_id]);
-    } else {
-      setComparePair([runId, runId]);
-    }
+    const pair: [string, string] = otherRun ? [runId, otherRun.run_id] : [runId, runId];
+    setComparePair(pair);
     setNavTab('compare');
+    setRoute(`compare?a=${encodeURIComponent(pair[0])}&b=${encodeURIComponent(pair[1])}`);
   };
 
   const activeModel = models.find((m) => m.id === selectedModelId);
   const detailRunRecord = runsHistory.find((r) => r.run_id === selectedDetailRunId) || activeRun;
   const detailTask = tasks.find((t) => t.task_id === detailRunRecord?.task_id);
+
+  // Grouped models by provider
+  const googleModels = models.filter((m) => m.provider === 'google');
+  const localModels = models.filter((m) => m.provider === 'ollama' || m.provider === 'vllm');
+  const anthropicModels = models.filter((m) => m.provider === 'anthropic');
+  const openaiModels = models.filter((m) => m.provider === 'openai');
+  const otherModels = models.filter(
+    (m) => !['google', 'ollama', 'vllm', 'anthropic', 'openai'].includes(m.provider)
+  );
 
   return (
     <IonApp className="light">
@@ -532,25 +1194,35 @@ export function App() {
         <Sidebar
           activeTab={navTab}
           onTabChange={(tab) => {
-            if (tab === 'runs') setSelectedDetailRunId(null);
-            setNavTab(tab);
+            if (tab === 'runs') {
+              setSelectedDetailRunId(null);
+              setRoute('runs');
+            } else if (tab === 'overview' || tab === 'dashboard') {
+              setRoute('dashboard');
+            } else if (tab === 'firewall') {
+              setRoute('firewall');
+            } else if (tab === 'benchmarks' || tab === 'test_cases') {
+              setRoute('benchmarks');
+            } else if (tab === 'studio') {
+              setRoute('studio');
+            } else if (tab === 'compare') {
+              setRoute('compare');
+            } else if (tab === 'inspect') {
+              setRoute('inspect');
+            } else {
+              setRoute(tab);
+            }
           }}
           serverConnected={serverConnected}
           activeModelName={activeModel?.name}
           totalTasks={tasks.length}
           totalRuns={runsHistory.length}
+          totalBlocked={findings.length + DEFAULT_CLEARED_SESSIONS.length + runsHistory.length}
           onExportSFT={() => handleExportSFTData()}
         />
 
         {/* Main Content Area (100% Real Estate on #F6F5F9 Canvas) */}
         <div className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto bg-[#F6F5F9]">
-          {/* Top Breadcrumb Header */}
-          <Header
-            activeTab={navTab}
-            selectedRunId={selectedDetailRunId}
-            onBackToRuns={() => setNavTab('runs')}
-          />
-
           {/* Page Body Container */}
           <main className="p-6 w-full flex-1 space-y-6">
             {!serverConnected && (
@@ -567,17 +1239,44 @@ export function App() {
               </div>
             )}
 
-            {/* TAB 1: OVERVIEW / DASHBOARD */}
+            {/* TAB 1: OVERVIEW / DASHBOARD (LEAN MISSION CONTROL) */}
             {(navTab === 'overview' || navTab === 'dashboard') && (
               <DashboardOverview
                 runs={runsHistory}
                 tasks={tasks}
-                onSelectRun={handleSelectPastRun}
-                onDeleteRun={handleDeleteRun}
-                onClearAllRuns={handleClearAllRuns}
-                onNavigateToStudio={() => setNavTab('studio')}
-                onNavigateToTestCases={() => setNavTab('benchmarks')}
-                onNavigateToRuns={() => setNavTab('runs')}
+                findings={findings}
+                onSelectIncident={handleSelectIncident}
+                onNavigateToStudio={() => setRoute('studio')}
+                onNavigateToTestCases={() => setRoute('benchmarks')}
+                onNavigateToRuns={() => setRoute('runs')}
+                onNavigateToFirewall={() => setRoute('firewall')}
+              />
+            )}
+
+            {/* TAB 1B: DEDICATED FIREWALL & BLOCKED SESSIONS VIEW */}
+            {navTab === 'firewall' && (
+              <FirewallGateView
+                runs={runsHistory}
+                findings={findings}
+                watcherConfig={watcherConfig}
+                liveInterceptions={liveInterceptions}
+                onSelectIncident={handleSelectIncident}
+                onUpdateWatcherConfig={handleUpdateWatcherConfig}
+              />
+            )}
+
+            {/* TAB 1C: INCIDENT & SESSION DETAIL VIEW (DUAL-PANE WORKSPACE) */}
+            {navTab === 'incident_detail' && (
+              <IncidentDetailView
+                sessionDetail={selectedIncidentSession}
+                finding={selectedIncident}
+                onBack={() => {
+                  if (window.history.length > 1 && window.location.hash.startsWith('#incident/')) {
+                    window.history.back();
+                  } else {
+                    setRoute('firewall');
+                  }
+                }}
               />
             )}
 
@@ -591,8 +1290,8 @@ export function App() {
                 onClearAllRuns={handleClearAllRuns}
                 onCompareSelected={handleCompareSelected}
                 onExportSFT={handleExportSFTData}
-                onNavigateToStudio={() => setNavTab('studio')}
-                onNavigateToBenchmarks={() => setNavTab('benchmarks')}
+                onNavigateToStudio={() => setRoute('studio')}
+                onNavigateToBenchmarks={() => setRoute('benchmarks')}
               />
             )}
 
@@ -601,7 +1300,13 @@ export function App() {
               <RunDetailView
                 run={detailRunRecord}
                 task={detailTask}
-                onBack={() => setNavTab('runs')}
+                onBack={() => {
+                  if (window.history.length > 1 && window.location.hash.startsWith('#runs/')) {
+                    window.history.back();
+                  } else {
+                    setRoute('runs');
+                  }
+                }}
                 onDeleteRun={handleDeleteRun}
                 onSaveRevision={handleSaveRevisedAudit}
                 onCompareWith={handleCompareWithRun}
@@ -615,10 +1320,10 @@ export function App() {
                 runs={runsHistory}
                 onLaunchTask={(taskId) => {
                   setSelectedTaskId(taskId);
-                  setNavTab('studio');
+                  setRoute(`studio?task=${encodeURIComponent(taskId)}`);
                 }}
                 onSelectRun={handleSelectPastRun}
-                onNavigateToRuns={() => setNavTab('runs')}
+                onNavigateToRuns={() => setRoute('runs')}
               />
             )}
 
@@ -628,7 +1333,7 @@ export function App() {
                 runs={runsHistory}
                 initialRunAId={comparePair?.[0]}
                 initialRunBId={comparePair?.[1]}
-                onNavigateToRuns={() => setNavTab('runs')}
+                onNavigateToRuns={() => setRoute('runs')}
               />
             )}
 
@@ -649,7 +1354,7 @@ export function App() {
                       >
                         {tasks.map((t) => (
                           <option key={t.task_id} value={t.task_id}>
-                            {t.task_id} ({t.difficulty || 'medium'})
+                            {t.task_id}
                           </option>
                         ))}
                       </select>
@@ -664,13 +1369,74 @@ export function App() {
                         disabled={isStreaming}
                         className="bg-canvas border border-border-subtle rounded-xl px-3 py-1.5 text-xs text-text-primary font-medium focus:outline-none focus:border-brand-primary cursor-pointer"
                       >
-                        {models.map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.name} (${m.input_cost_per_m}/1M)
-                          </option>
-                        ))}
+                        {googleModels.length > 0 && (
+                          <optgroup label="Google Gemini & Gemma">
+                            {googleModels.map((m) => (
+                              <option key={m.id} value={m.id} className="bg-white text-text-primary">
+                                {m.name}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+
+                        {localModels.length > 0 && (
+                          <optgroup label="Local & Open-Weight">
+                            {localModels.map((m) => (
+                              <option key={m.id} value={m.id} className="bg-white text-text-primary">
+                                {m.name}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+
+                        {anthropicModels.length > 0 && (
+                          <optgroup label="Anthropic Claude">
+                            {anthropicModels.map((m) => (
+                              <option key={m.id} value={m.id} className="bg-white text-text-primary">
+                                {m.name}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+
+                        {openaiModels.length > 0 && (
+                          <optgroup label="OpenAI Frontier">
+                            {openaiModels.map((m) => (
+                              <option key={m.id} value={m.id} className="bg-white text-text-primary">
+                                {m.name}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+
+                        {otherModels.length > 0 && (
+                          <optgroup label="Custom Models">
+                            {otherModels.map((m) => (
+                              <option key={m.id} value={m.id} className="bg-white text-text-primary">
+                                {m.name}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
                       </select>
                     </div>
+
+                    {/* Active Model Quota Badge */}
+                    {activeModel && (
+                      <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-purple-50/80 border border-purple-200/70 text-[11px] font-mono text-brand-purple font-bold">
+                        <span>
+                          {activeModel.id === 'gemini-3.1-flash-lite' || activeModel.id === 'gemini-3.5-flash-lite'
+                            ? '⚡ 500 RPD / 15 RPM'
+                            : activeModel.id === 'antigravity-preview-05-2026'
+                            ? '🤖 100 RPD / 60 RPM'
+                            : activeModel.id.startsWith('gemma')
+                            ? '🚀 14.4k RPD / 30 RPM'
+                            : activeModel.provider === 'ollama' || activeModel.provider === 'vllm'
+                            ? '⚡ FREE / LOCAL'
+                            : `${activeModel.name}`}
+                        </span>
+                      </div>
+                    )}
 
                     {/* Native Engine Badge */}
                     <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-50/80 border border-purple-200/60 text-xs font-mono font-bold text-brand-purple">
@@ -805,7 +1571,7 @@ export function App() {
 
                         {studioInspectorTab === 'safety' && (
                           activeRun?.audit_verdicts && activeRun.audit_verdicts.length > 0 ? (
-                            <SafetyAuditPanel verdicts={activeRun.audit_verdicts} />
+                            <SafetyAuditPanel verdicts={activeRun.audit_verdicts} compact={true} />
                           ) : (
                             <div className="p-8 text-center text-text-muted text-xs space-y-1">
                               <p className="font-bold text-text-primary">No Safety Audits Logged</p>

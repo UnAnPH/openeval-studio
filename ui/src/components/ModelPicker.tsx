@@ -25,6 +25,17 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
 }) => {
   const selectedModel = models.find((m) => m.id === selectedModelId);
 
+  // Group models by category
+  const localModels = models.filter((m) => m.provider === 'ollama' || m.provider === 'vllm');
+  const googleModels = models.filter((m) => m.provider === 'google');
+  const anthropicModels = models.filter((m) => m.provider === 'anthropic');
+  const openaiModels = models.filter((m) => m.provider === 'openai');
+  const otherModels = models.filter(
+    (m) => !['ollama', 'vllm', 'google', 'anthropic', 'openai'].includes(m.provider)
+  );
+
+  const isLocal = selectedModel?.provider === 'ollama' || selectedModel?.provider === 'vllm' || selectedModel?.input_cost_per_m === 0;
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -33,9 +44,16 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
           Target Evaluation Model
         </label>
         {selectedModel && (
-          <span className="text-[10px] uppercase font-mono font-bold px-2 py-0.5 rounded-full bg-surface-subtle text-brand-primary border border-border-subtle">
-            {selectedModel.tier}
-          </span>
+          <div className="flex items-center gap-1.5">
+            {isLocal && (
+              <span className="text-[10px] uppercase font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                ⚡ FREE / LOCAL
+              </span>
+            )}
+            <span className="text-[10px] uppercase font-mono font-bold px-2 py-0.5 rounded-full bg-surface-subtle text-brand-primary border border-border-subtle">
+              {selectedModel.tier}
+            </span>
+          </div>
         )}
       </div>
 
@@ -46,11 +64,55 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
           disabled={disabled}
           className="w-full bg-canvas border border-border-subtle rounded-xl px-3.5 py-2.5 text-xs text-text-primary font-medium focus:outline-none focus:border-brand-primary transition-all disabled:opacity-50 appearance-none cursor-pointer"
         >
-          {models.map((m) => (
-            <option key={m.id} value={m.id} className="bg-white text-text-primary">
-              {m.name} ({m.provider.toUpperCase()}) — ${m.input_cost_per_m}/1M in
-            </option>
-          ))}
+          {googleModels.length > 0 && (
+            <optgroup label="Google Gemini & Gemma">
+              {googleModels.map((m) => (
+                <option key={m.id} value={m.id} className="bg-white text-text-primary">
+                  {m.name}
+                </option>
+              ))}
+            </optgroup>
+          )}
+
+          {localModels.length > 0 && (
+            <optgroup label="Local & Open-Weight">
+              {localModels.map((m) => (
+                <option key={m.id} value={m.id} className="bg-white text-text-primary">
+                  {m.name}
+                </option>
+              ))}
+            </optgroup>
+          )}
+
+          {anthropicModels.length > 0 && (
+            <optgroup label="Anthropic Claude">
+              {anthropicModels.map((m) => (
+                <option key={m.id} value={m.id} className="bg-white text-text-primary">
+                  {m.name}
+                </option>
+              ))}
+            </optgroup>
+          )}
+
+          {openaiModels.length > 0 && (
+            <optgroup label="OpenAI Frontier">
+              {openaiModels.map((m) => (
+                <option key={m.id} value={m.id} className="bg-white text-text-primary">
+                  {m.name}
+                </option>
+              ))}
+            </optgroup>
+          )}
+
+          {otherModels.length > 0 && (
+            <optgroup label="Custom Models">
+              {otherModels.map((m) => (
+                <option key={m.id} value={m.id} className="bg-white text-text-primary">
+                  {m.name}
+                </option>
+              ))}
+            </optgroup>
+          )}
         </select>
         <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-text-muted">
           <IonIcon icon={sparklesOutline} className="text-accent-orange text-sm" />

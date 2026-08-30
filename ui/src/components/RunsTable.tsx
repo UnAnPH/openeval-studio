@@ -19,6 +19,7 @@ import {
   cashOutline,
   timeOutline,
   warningOutline,
+  layersOutline,
 } from 'ionicons/icons';
 import { RunRecord, TaskSummary } from '../types';
 
@@ -133,72 +134,128 @@ export const RunsTable: React.FC<RunsTableProps> = ({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <button
-            type="button"
-            onClick={onNavigateToStudio}
-            className="px-4 py-2 rounded-xl bg-dark-base text-white text-xs font-bold flex items-center gap-1.5 hover:bg-black transition-all shadow-sm active:scale-95 cursor-pointer"
-          >
-            <IonIcon icon={playSharp} className="text-xs" />
-            <span>New Live Run</span>
-          </button>
-          <button
-            type="button"
-            onClick={onNavigateToBenchmarks}
-            className="px-3.5 py-2 rounded-xl bg-canvas text-text-secondary border border-border-subtle text-xs font-medium hover:text-text-primary hover:bg-surface-subtle transition-all cursor-pointer"
-          >
-            <span>View Benchmarks ({tasks.length})</span>
-          </button>
+          {onNavigateToStudio && (
+            <button
+              type="button"
+              onClick={onNavigateToStudio}
+              className="px-4 py-2 rounded-xl bg-dark-base text-white text-xs font-bold flex items-center gap-1.5 hover:bg-black transition-all shadow-sm active:scale-95 cursor-pointer"
+            >
+              <IonIcon icon={playSharp} className="text-xs" />
+              <span>New Live Run</span>
+            </button>
+          )}
+          {onNavigateToBenchmarks && (
+            <button
+              type="button"
+              onClick={onNavigateToBenchmarks}
+              className="px-3.5 py-2 rounded-xl bg-canvas text-text-secondary border border-border-subtle text-xs font-medium hover:text-text-primary hover:bg-surface-subtle transition-all cursor-pointer flex items-center gap-1"
+            >
+              <IonIcon icon={layersOutline} className="text-xs text-brand-purple" />
+              <span>View Benchmarks ({tasks.length})</span>
+            </button>
+          )}
         </div>
       </div>
 
-      {/* 2. Key Metrics Bar */}
+      {/* 2. Key Metrics Bar (Clickable Filter Cards) */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <div className="bg-white p-4 rounded-xl border border-border-subtle shadow-sm space-y-1">
+        {/* Card 1: Total Runs */}
+        <button
+          type="button"
+          onClick={() => setStatusFilter('all')}
+          className={`p-4 rounded-xl border text-left transition-all cursor-pointer shadow-xs active:scale-[0.98] select-none ${
+            statusFilter === 'all'
+              ? 'bg-purple-50/40 border-[#6B46C1] ring-2 ring-[#6B46C1]/20 shadow-sm'
+              : 'bg-white border-border-subtle hover:border-slate-300 hover:shadow-md'
+          }`}
+        >
           <div className="text-[11px] text-text-muted font-medium flex items-center justify-between">
             <span>Total Runs</span>
             <IonIcon icon={sparklesOutline} className="text-brand-purple text-xs" />
           </div>
-          <div className="text-xl font-bold font-mono text-text-primary">{totalRuns}</div>
-        </div>
+          <div className="text-xl font-bold font-mono text-text-primary mt-1">{totalRuns}</div>
+          <div className="text-[10px] text-text-muted mt-0.5">
+            {statusFilter === 'all' ? '● Active Filter' : 'Click to show all'}
+          </div>
+        </button>
 
-        <div className="bg-white p-4 rounded-xl border border-border-subtle shadow-sm space-y-1">
+        {/* Card 2: Passed */}
+        <button
+          type="button"
+          onClick={() => setStatusFilter(statusFilter === 'passed' ? 'all' : 'passed')}
+          className={`p-4 rounded-xl border text-left transition-all cursor-pointer shadow-xs active:scale-[0.98] select-none ${
+            statusFilter === 'passed'
+              ? 'bg-emerald-50/50 border-emerald-500 ring-2 ring-emerald-500/20 shadow-sm'
+              : 'bg-white border-border-subtle hover:border-slate-300 hover:shadow-md'
+          }`}
+        >
           <div className="text-[11px] text-text-muted font-medium flex items-center justify-between">
             <span>Passed</span>
             <IonIcon icon={checkmarkCircle} className="text-status-cleared text-xs" />
           </div>
-          <div className="text-xl font-bold font-mono text-emerald-700">{passedRuns}</div>
-        </div>
+          <div className="text-xl font-bold font-mono text-emerald-700 mt-1">{passedRuns}</div>
+          <div className="text-[10px] text-text-muted mt-0.5">
+            {statusFilter === 'passed' ? '● Filter Active' : 'Click to filter'}
+          </div>
+        </button>
 
-        <div className="bg-white p-4 rounded-xl border border-border-subtle shadow-sm space-y-1">
+        {/* Card 3: Failed */}
+        <button
+          type="button"
+          onClick={() => setStatusFilter(statusFilter === 'failed' ? 'all' : 'failed')}
+          className={`p-4 rounded-xl border text-left transition-all cursor-pointer shadow-xs active:scale-[0.98] select-none ${
+            statusFilter === 'failed'
+              ? 'bg-rose-50/50 border-rose-500 ring-2 ring-rose-500/20 shadow-sm'
+              : 'bg-white border-border-subtle hover:border-slate-300 hover:shadow-md'
+          }`}
+        >
           <div className="text-[11px] text-text-muted font-medium flex items-center justify-between">
             <span>Failed</span>
             <IonIcon icon={closeCircle} className="text-risk-high text-xs" />
           </div>
-          <div className="text-xl font-bold font-mono text-rose-700">{failedRuns}</div>
-        </div>
+          <div className="text-xl font-bold font-mono text-rose-700 mt-1">{failedRuns}</div>
+          <div className="text-[10px] text-text-muted mt-0.5">
+            {statusFilter === 'failed' ? '● Filter Active' : 'Click to filter'}
+          </div>
+        </button>
 
-        <div className="bg-white p-4 rounded-xl border border-border-subtle shadow-sm space-y-1">
+        {/* Card 4: Safety Flagged */}
+        <button
+          type="button"
+          onClick={() => setStatusFilter(statusFilter === 'safety_flagged' ? 'all' : 'safety_flagged')}
+          className={`p-4 rounded-xl border text-left transition-all cursor-pointer shadow-xs active:scale-[0.98] select-none ${
+            statusFilter === 'safety_flagged'
+              ? 'bg-purple-50/50 border-purple-600 ring-2 ring-purple-600/20 shadow-sm'
+              : 'bg-white border-border-subtle hover:border-slate-300 hover:shadow-md'
+          }`}
+        >
           <div className="text-[11px] text-text-muted font-medium flex items-center justify-between">
             <span>Safety Flagged</span>
             <IonIcon icon={shieldCheckmarkOutline} className="text-brand-purple text-xs" />
           </div>
-          <div className="text-xl font-bold font-mono text-brand-purple">{flaggedRuns}</div>
-        </div>
+          <div className="text-xl font-bold font-mono text-brand-purple mt-1">{flaggedRuns}</div>
+          <div className="text-[10px] text-text-muted mt-0.5">
+            {statusFilter === 'safety_flagged' ? '● Filter Active' : 'Click to filter'}
+          </div>
+        </button>
 
+        {/* Card 5: Avg Duration */}
         <div className="bg-white p-4 rounded-xl border border-border-subtle shadow-sm space-y-1">
           <div className="text-[11px] text-text-muted font-medium flex items-center justify-between">
             <span>Avg Duration</span>
             <IonIcon icon={timeOutline} className="text-accent-orange text-xs" />
           </div>
-          <div className="text-xl font-bold font-mono text-text-primary">{avgDuration}s</div>
+          <div className="text-xl font-bold font-mono text-text-primary mt-1">{avgDuration}s</div>
+          <div className="text-[10px] text-text-muted mt-0.5">Overall runs</div>
         </div>
 
+        {/* Card 6: Est. Spend */}
         <div className="bg-white p-4 rounded-xl border border-border-subtle shadow-sm space-y-1">
           <div className="text-[11px] text-text-muted font-medium flex items-center justify-between">
             <span>Est. Spend</span>
             <IonIcon icon={cashOutline} className="text-emerald-600 text-xs" />
           </div>
-          <div className="text-xl font-bold font-mono text-emerald-700">${totalCost.toFixed(4)}</div>
+          <div className="text-xl font-bold font-mono text-emerald-700 mt-1">${totalCost.toFixed(4)}</div>
           <div className="text-[10px] text-text-secondary font-mono">{totalTokens.toLocaleString()} tok</div>
         </div>
       </div>
@@ -206,39 +263,29 @@ export const RunsTable: React.FC<RunsTableProps> = ({
       {/* 3. Filter Bar & Bulk Selection Action Banner */}
       <div className="bg-white p-4 rounded-2xl border border-border-subtle shadow-sm space-y-3">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-          {/* Status Filter Pills */}
-          <div className="flex items-center gap-1.5 bg-canvas p-1 rounded-xl border border-border-subtle text-xs overflow-x-auto">
-            {(
-              [
-                { id: 'all', label: `All (${totalRuns})` },
-                { id: 'passed', label: `Passed (${passedRuns})` },
-                { id: 'failed', label: `Failed (${failedRuns})` },
-                { id: 'safety_flagged', label: `Safety Flagged (${flaggedRuns})` },
-              ] as const
-            ).map((filter) => (
-              <button
-                key={filter.id}
-                type="button"
-                onClick={() => setStatusFilter(filter.id)}
-                className={`px-3 py-1.5 rounded-lg font-medium whitespace-nowrap transition-all cursor-pointer ${
-                  statusFilter === filter.id
-                    ? 'bg-white text-brand-primary font-bold shadow-sm'
-                    : 'text-text-secondary hover:text-text-primary'
-                }`}
-              >
-                {filter.label}
-              </button>
-            ))}
-          </div>
+          {/* Left Side: Active Filter Tag, Model & Benchmark Dropdowns, Search */}
+          <div className="flex items-center gap-2.5 flex-wrap flex-1 min-w-0">
+            {/* Active Status Badge if filtered */}
+            {statusFilter !== 'all' && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface-subtle border border-border-subtle text-xs font-bold text-brand-purple">
+                <span>Filter: {statusFilter === 'passed' ? 'Passed' : statusFilter === 'failed' ? 'Failed' : 'Safety Flagged'}</span>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('all')}
+                  className="hover:text-rose-600 ml-1 cursor-pointer font-bold"
+                  title="Reset to All"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
 
-          {/* Search and Secondary Dropdowns */}
-          <div className="flex items-center gap-2 flex-wrap">
             {/* Model Dropdown Filter */}
             {modelOptions.length > 0 && (
               <select
                 value={selectedModel}
                 onChange={(e) => setSelectedModel(e.target.value)}
-                className="bg-canvas border border-border-subtle rounded-xl px-3 py-1.5 text-xs text-text-primary font-medium focus:outline-none focus:border-brand-primary"
+                className="bg-canvas border border-border-subtle rounded-xl px-3 py-1.5 text-xs text-text-primary font-medium focus:outline-none focus:border-brand-primary cursor-pointer"
               >
                 <option value="all">All Models</option>
                 {modelOptions.map((m) => (
@@ -253,7 +300,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
             <select
               value={selectedTaskId}
               onChange={(e) => setSelectedTaskId(e.target.value)}
-              className="bg-canvas border border-border-subtle rounded-xl px-3 py-1.5 text-xs text-text-primary font-medium focus:outline-none focus:border-brand-primary"
+              className="bg-canvas border border-border-subtle rounded-xl px-3 py-1.5 text-xs text-text-primary font-medium focus:outline-none focus:border-brand-primary cursor-pointer"
             >
               <option value="all">All Benchmarks</option>
               {tasks.map((t) => (
@@ -264,7 +311,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
             </select>
 
             {/* Search Input */}
-            <div className="relative min-w-[200px]">
+            <div className="relative min-w-[220px] max-w-sm flex-1">
               <input
                 type="text"
                 value={searchText}
@@ -277,7 +324,10 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                 className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted text-xs pointer-events-none"
               />
             </div>
+          </div>
 
+          {/* Right Side: Action Buttons */}
+          <div className="flex items-center gap-2 flex-wrap">
             {/* Clear All Data Option */}
             {runs.length > 0 && onClearAllRuns && (
               <button
@@ -288,6 +338,17 @@ export const RunsTable: React.FC<RunsTableProps> = ({
               >
                 <IonIcon icon={trashOutline} className="text-xs" />
                 <span>Clear All</span>
+              </button>
+            )}
+
+            {onNavigateToStudio && (
+              <button
+                type="button"
+                onClick={onNavigateToStudio}
+                className="px-3.5 py-1.5 rounded-xl bg-dark-base text-white text-xs font-bold flex items-center gap-1.5 hover:bg-black transition-all shadow-xs cursor-pointer active:scale-95"
+              >
+                <IonIcon icon={playSharp} className="text-xs" />
+                <span>New Run</span>
               </button>
             )}
           </div>

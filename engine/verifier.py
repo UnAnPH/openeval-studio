@@ -69,11 +69,20 @@ class VerifierRunner:
 
         if stage_fresh_tests:
             # Anti-cheat: overwrite /workspace/tests/test_outputs.py with ground-truth copy
-            test_content = task.test_outputs_path.read_text(encoding="utf-8")
-            await sandbox.write_file("/workspace/tests/test_outputs.py", test_content)
+            if task.test_outputs_path.exists():
+                test_content = task.test_outputs_path.read_text(encoding="utf-8")
+                await sandbox.write_file("/workspace/tests/test_outputs.py", test_content)
+
+            test_sh_path = task.task_dir / "tests" / "test.sh"
+            if test_sh_path.exists():
+                await sandbox.write_file("/workspace/tests/test.sh", test_sh_path.read_text(encoding="utf-8"))
+                await sandbox.exec_command("chmod +x /workspace/tests/test.sh")
 
         timeout = task.verifier.timeout_sec
-        result = await sandbox.exec_command(self.test_runner_cmd, timeout_sec=timeout)
+        test_sh_path = task.task_dir / "tests" / "test.sh"
+        cmd = "bash /workspace/tests/test.sh" if test_sh_path.exists() else self.test_runner_cmd
+
+        result = await sandbox.exec_command(cmd, timeout_sec=timeout)
         duration_ms = round((time.perf_counter() - start_time) * 1000.0, 2)
 
         passed = result.exit_code == 0
@@ -83,6 +92,12 @@ class VerifierRunner:
         if not passed:
             if result.exit_code == 124:
                 failure_reason = f"Verifier timed out after {timeout} seconds."
+            elif result.exit_code == 127:
+                cmd_bin = cmd.split()[0] if cmd else "pytest"
+                failure_reason = (
+                    f"Verifier failed with exit code 127 (Command '{cmd_bin}' not found in container PATH. "
+                    f"Ensure test dependencies/Python environment are installed in the Docker image)."
+                )
             else:
                 lines = result.stdout.strip().splitlines()
                 tail_output = lines[-3:] if lines else []

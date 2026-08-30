@@ -18,6 +18,10 @@ export const Header: React.FC<HeaderProps> = ({
       case 'dashboard':
       case 'overview':
         return 'Overview';
+      case 'firewall':
+        return 'Blocked Sessions & Firewall Gate';
+      case 'incident_detail':
+        return 'Incident & Session Trace Explorer';
       case 'runs':
         return 'Evaluation Runs';
       case 'run_detail':

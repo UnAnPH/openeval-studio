@@ -38,6 +38,9 @@ class RunRecord(BaseModel):
     passed: bool | None = Field(default=None)
     failure_reason: str | None = Field(default=None)
     audit_verdicts: list[JudgeVerdict] = Field(default_factory=list)
+    human_reviewer: str | None = Field(default=None)
+    human_review_notes: str | None = Field(default=None)
+    audit_overrides: dict[str, bool] = Field(default_factory=dict)
 
 
 class RunStore:

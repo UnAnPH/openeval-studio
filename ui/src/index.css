@@ -53,6 +53,25 @@ ion-app, ion-page, ion-content, ion-card, ion-header, ion-toolbar {
   color: #14121F;
 }
 
+/* Global IonIcon sizing fix to prevent SVGs expanding to native 512px */
+ion-icon {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  font-size: inherit;
+  contain: strict;
+  fill: currentColor;
+  box-sizing: content-box;
+  vertical-align: -0.125em;
+}
+
+ion-icon svg,
+svg.icon-inner {
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}
+
 /* Custom subtle scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
@@ -116,5 +135,49 @@ ion-app, ion-page, ion-content, ion-card, ion-header, ion-toolbar {
 code, pre, .font-mono {
   font-family: 'Space Mono', 'SF Mono', Consolas, Monaco, monospace;
 }
+
+/* Custom clean slider styling */
+input[type="range"].ae-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 9999px;
+  outline: none;
+  cursor: pointer;
+}
+
+input[type="range"].ae-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid #FFFFFF;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: transform 0.1s ease;
+}
+
+input[type="range"].ae-slider-rose::-webkit-slider-thumb {
+  background: #E11D48;
+}
+
+input[type="range"].ae-slider-amber::-webkit-slider-thumb {
+  background: #F59E0B;
+}
+
+input[type="range"].ae-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.18);
+}
+
+input[type="range"].ae-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid #FFFFFF;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
 
 

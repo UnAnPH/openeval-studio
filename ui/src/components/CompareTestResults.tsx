@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   IonIcon,
 } from '@ionic/react';
@@ -8,8 +8,24 @@ import {
   documentTextOutline,
   terminalOutline,
   warningOutline,
+  searchOutline,
+  swapHorizontalOutline,
+  closeOutline,
+  sparklesOutline,
 } from 'ionicons/icons';
 import { AgentStep, RunRecord } from '../types';
+
+interface SemanticVerdict {
+  run_a_id: string;
+  run_b_id: string;
+  task_id: string;
+  nature_of_divergence: 'identical_strategy' | 'cosmetic_variation' | 'substantive_divergence' | 'opposite_strategies';
+  semantic_similarity_score: number;
+  verdict_summary: string;
+  key_strategic_differences: string[];
+  true_divergence_turn: number | null;
+  attribution_reasoning: string;
+}
 
 interface CompareTestResultsProps {
   runs: RunRecord[];
@@ -18,6 +34,347 @@ interface CompareTestResultsProps {
   onNavigateToRuns?: () => void;
 }
 
+// ---------------------------------------------------------------------------
+// Scalable Run Picker Modal (Searchable across 10,000+ runs with faceted filters)
+// ---------------------------------------------------------------------------
+interface RunPickerModalProps {
+  isOpen: boolean;
+  title: string;
+  accentColor: 'purple' | 'orange';
+  selectedRunId: string;
+  runs: RunRecord[];
+  onSelect: (runId: string) => void;
+  onClose: () => void;
+}
+
+const RunPickerModal: React.FC<RunPickerModalProps> = ({
+  isOpen,
+  title,
+  accentColor,
+  selectedRunId,
+  runs,
+  onSelect,
+  onClose,
+}) => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [taskFilter, setTaskFilter] = useState('all');
+  const [modelFilter, setModelFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'passed' | 'failed'>('all');
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'duration' | 'cost' | 'tokens'>('newest');
+
+  // Distinct tasks & models
+  const uniqueTasks = useMemo(() => {
+    const tasks = Array.from(new Set(runs.map((r) => r.task_id).filter(Boolean)));
+    return tasks.sort();
+  }, [runs]);
+
+  const uniqueModels = useMemo(() => {
+    const models = Array.from(new Set(runs.map((r) => r.model).filter(Boolean)));
+    return models.sort();
+  }, [runs]);
+
+  // Filtered & Sorted Runs
+  const filteredRuns = useMemo(() => {
+    return runs
+      .filter((r) => {
+        // Status filter
+        if (statusFilter === 'passed' && !r.passed) return false;
+        if (statusFilter === 'failed' && r.passed) return false;
+
+        // Task filter
+        if (taskFilter !== 'all' && r.task_id !== taskFilter) return false;
+
+        // Model filter
+        if (modelFilter !== 'all' && r.model !== modelFilter) return false;
+
+        // Search query
+        if (searchQuery.trim()) {
+          const q = searchQuery.toLowerCase();
+          const matchTask = r.task_id?.toLowerCase().includes(q);
+          const matchModel = r.model?.toLowerCase().includes(q);
+          const matchId = r.run_id?.toLowerCase().includes(q);
+          const matchSummary = r.final_summary?.toLowerCase().includes(q);
+          const matchReason = r.failure_reason?.toLowerCase().includes(q);
+          const matchDev = r.human_reviewer?.toLowerCase().includes(q);
+          if (!matchTask && !matchModel && !matchId && !matchSummary && !matchReason && !matchDev) {
+            return false;
+          }
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        if (sortBy === 'newest') {
+          return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+        }
+        if (sortBy === 'oldest') {
+          return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
+        }
+        if (sortBy === 'duration') {
+          return (a.total_duration_sec || 0) - (b.total_duration_sec || 0);
+        }
+        if (sortBy === 'cost') {
+          return (a.estimated_cost_usd || 0) - (b.estimated_cost_usd || 0);
+        }
+        if (sortBy === 'tokens') {
+          return (a.total_tokens || 0) - (b.total_tokens || 0);
+        }
+        return 0;
+      });
+  }, [runs, searchQuery, taskFilter, modelFilter, statusFilter, sortBy]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-dark-base/60 backdrop-blur-xs animate-fadeIn font-sans">
+      <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl border border-border-subtle flex flex-col max-h-[85vh] overflow-hidden">
+        {/* Modal Header */}
+        <div className="p-5 border-b border-border-subtle flex items-center justify-between bg-canvas/40">
+          <div className="flex items-center gap-3">
+            <div className={`w-3.5 h-3.5 rounded-full ${accentColor === 'purple' ? 'bg-brand-purple' : 'bg-accent-orange'}`} />
+            <div>
+              <h3 className="text-base font-bold text-text-primary">{title}</h3>
+              <p className="text-xs text-text-secondary">
+                Filter and select from {runs.length.toLocaleString()} evaluation runs
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 rounded-xl bg-white border border-border-subtle hover:bg-canvas text-text-secondary flex items-center justify-center transition-colors cursor-pointer"
+          >
+            <IonIcon icon={closeOutline} className="text-base" />
+          </button>
+        </div>
+
+        {/* Search & Filter Controls Bar */}
+        <div className="p-4 border-b border-border-subtle bg-white space-y-3">
+          {/* Main Search Input */}
+          <div className="relative">
+            <input
+              type="text"
+              autoFocus
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by Task ID, Model, Run ID prefix, or failure reason..."
+              className="w-full bg-canvas border border-border-subtle rounded-xl pl-9 pr-8 py-2 text-xs text-text-primary focus:outline-none focus:border-brand-primary placeholder:text-text-muted"
+            />
+            <IonIcon
+              icon={searchOutline}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted text-sm pointer-events-none"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary text-xs cursor-pointer"
+              >
+                <IonIcon icon={closeOutline} />
+              </button>
+            )}
+          </div>
+
+          {/* Faceted Filter Dropdowns & Pills */}
+          <div className="flex items-center justify-between gap-3 flex-wrap text-xs">
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Task Filter */}
+              <select
+                value={taskFilter}
+                onChange={(e) => setTaskFilter(e.target.value)}
+                className="bg-canvas border border-border-subtle rounded-lg px-2.5 py-1 text-xs text-text-primary font-medium focus:outline-none focus:border-brand-primary"
+              >
+                <option value="all">All Tasks ({uniqueTasks.length})</option>
+                {uniqueTasks.map((taskId) => (
+                  <option key={taskId} value={taskId}>
+                    Task: {taskId}
+                  </option>
+                ))}
+              </select>
+
+              {/* Model Filter */}
+              <select
+                value={modelFilter}
+                onChange={(e) => setModelFilter(e.target.value)}
+                className="bg-canvas border border-border-subtle rounded-lg px-2.5 py-1 text-xs text-text-primary font-medium focus:outline-none focus:border-brand-primary"
+              >
+                <option value="all">All Models ({uniqueModels.length})</option>
+                {uniqueModels.map((m) => (
+                  <option key={m} value={m}>
+                    Model: {m}
+                  </option>
+                ))}
+              </select>
+
+              {/* Status Segmented Buttons */}
+              <div className="flex items-center bg-canvas p-0.5 rounded-lg border border-border-subtle text-[11px] font-bold">
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('all')}
+                  className={`px-2.5 py-0.5 rounded-md transition-colors ${
+                    statusFilter === 'all' ? 'bg-white text-text-primary shadow-2xs' : 'text-text-muted hover:text-text-primary'
+                  }`}
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('passed')}
+                  className={`px-2.5 py-0.5 rounded-md transition-colors ${
+                    statusFilter === 'passed' ? 'bg-emerald-600 text-white shadow-2xs' : 'text-text-muted hover:text-text-primary'
+                  }`}
+                >
+                  Passed
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('failed')}
+                  className={`px-2.5 py-0.5 rounded-md transition-colors ${
+                    statusFilter === 'failed' ? 'bg-rose-600 text-white shadow-2xs' : 'text-text-muted hover:text-text-primary'
+                  }`}
+                >
+                  Failed
+                </button>
+              </div>
+            </div>
+
+            {/* Sort Dropdown */}
+            <div className="flex items-center gap-1.5 text-[11px] text-text-muted font-mono">
+              <span>Sort:</span>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+                className="bg-canvas border border-border-subtle rounded-lg px-2 py-1 text-[11px] text-text-primary font-medium focus:outline-none"
+              >
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+                <option value="duration">Fastest Duration</option>
+                <option value="cost">Lowest Cost</option>
+                <option value="tokens">Least Tokens</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Runs List (Scrollable) */}
+        <div className="flex-1 overflow-y-auto divide-y divide-border-subtle p-2">
+          {filteredRuns.length === 0 ? (
+            <div className="p-12 text-center text-xs text-text-muted space-y-2">
+              <IonIcon icon={warningOutline} className="text-3xl text-accent-orange mb-1" />
+              <div className="font-bold text-text-primary">No Runs Match Your Filter</div>
+              <p>Try clearing your search query or adjusting your filters.</p>
+            </div>
+          ) : (
+            filteredRuns.map((r) => {
+              const isSelected = r.run_id === selectedRunId;
+              const dateStr = r.created_at ? new Date(r.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Recent';
+              return (
+                <div
+                  key={r.run_id}
+                  onClick={() => {
+                    onSelect(r.run_id);
+                    onClose();
+                  }}
+                  className={`p-3.5 rounded-xl transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                    isSelected
+                      ? accentColor === 'purple'
+                        ? 'bg-brand-purple/10 border-2 border-brand-purple'
+                        : 'bg-accent-orange/10 border-2 border-accent-orange'
+                      : 'hover:bg-canvas/60 border border-transparent'
+                  }`}
+                >
+                  <div className="space-y-1.5 flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {/* Pass / Fail Status Badge */}
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold font-mono uppercase tracking-wider ${
+                          r.passed
+                            ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/20'
+                            : 'bg-rose-500/10 text-rose-700 border border-rose-500/20'
+                        }`}
+                      >
+                        {r.passed ? '✓ PASSED (1.0)' : '🛑 FAILED (0.0)'}
+                      </span>
+
+                      {/* Task ID Badge */}
+                      <span className="px-2 py-0.5 rounded-md bg-dark-base text-white text-[11px] font-mono font-semibold">
+                        {r.task_id}
+                      </span>
+
+                      {/* Model Name */}
+                      <span className="px-2 py-0.5 rounded-md bg-surface-subtle text-text-primary text-[11px] font-mono">
+                        {r.model}
+                      </span>
+
+                      {/* Run ID */}
+                      <span className="text-[10px] font-mono text-text-muted">
+                        id: <strong>{r.run_id.slice(0, 8)}</strong>
+                      </span>
+                    </div>
+
+                    {/* Summary / Failure reason */}
+                    <p className="text-xs text-text-secondary line-clamp-1">
+                      {r.final_summary || r.failure_reason || (r.passed ? 'All verifier assertions passed.' : 'Task verification failure recorded.')}
+                    </p>
+
+                    {/* Meta details */}
+                    <div className="flex items-center gap-3 text-[11px] text-text-muted font-mono">
+                      <span>🕒 {dateStr}</span>
+                      <span>·</span>
+                      <span>⏱ {r.total_duration_sec.toFixed(1)}s</span>
+                      <span>·</span>
+                      <span>⚡ {r.total_tokens.toLocaleString()} tok</span>
+                      <span>·</span>
+                      <span>💰 ${r.estimated_cost_usd.toFixed(4)}</span>
+                      {r.human_reviewer && (
+                        <>
+                          <span>·</span>
+                          <span className="text-brand-purple font-semibold">Reviewer: {r.human_reviewer}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {isSelected ? (
+                      <span className="px-3 py-1 rounded-lg bg-dark-base text-white text-xs font-bold font-mono">
+                        Selected
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="px-3 py-1.5 rounded-lg border border-border-subtle bg-white hover:bg-canvas text-xs font-bold text-text-primary shadow-2xs"
+                      >
+                        Select
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Modal Footer */}
+        <div className="p-3 px-5 border-t border-border-subtle bg-canvas/40 flex items-center justify-between text-xs text-text-muted font-mono">
+          <span>
+            Showing <strong className="text-text-primary">{filteredRuns.length}</strong> of <strong className="text-text-primary">{runs.length}</strong> runs
+          </span>
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-3 py-1.5 rounded-xl bg-white border border-border-subtle text-text-primary font-bold hover:bg-canvas cursor-pointer shadow-2xs"
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Main Compare Test Results View
+// ---------------------------------------------------------------------------
 export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
   runs,
   initialRunAId,
@@ -27,6 +384,12 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
   const [runAId, setRunAId] = useState<string>(initialRunAId || runs[0]?.run_id || '');
   const [runBId, setRunBId] = useState<string>(initialRunBId || runs[1]?.run_id || runs[0]?.run_id || '');
   const [activeTab, setActiveTab] = useState<'timeline' | 'diff' | 'metrics'>('timeline');
+  const [pickerTarget, setPickerTarget] = useState<'candidate' | 'baseline' | null>(null);
+
+  // Semantic Comparison State
+  const [semanticVerdict, setSemanticVerdict] = useState<SemanticVerdict | null>(null);
+  const [isLoadingSemantic, setIsLoadingSemantic] = useState<boolean>(false);
+  const [semanticError, setSemanticError] = useState<string | null>(null);
 
   // React to prop changes if passed from outer view
   React.useEffect(() => {
@@ -34,8 +397,49 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
     if (initialRunBId) setRunBId(initialRunBId);
   }, [initialRunAId, initialRunBId]);
 
+  // Reset semantic verdict when run selection changes
+  React.useEffect(() => {
+    setSemanticVerdict(null);
+    setSemanticError(null);
+  }, [runAId, runBId]);
+
   const runA = runs.find((r) => r.run_id === runAId) || runs[0] || null;
   const runB = runs.find((r) => r.run_id === runBId) || runs[1] || runs[0] || null;
+
+  // Handler to swap runs
+  const handleSwapRuns = () => {
+    const temp = runAId;
+    setRunAId(runBId);
+    setRunBId(temp);
+  };
+
+  // Handler to auto-match the same task
+  const handleMatchSameTask = () => {
+    if (!runA) return;
+    const sameTaskRun = runs.find((r) => r.task_id === runA.task_id && r.run_id !== runA.run_id);
+    if (sameTaskRun) {
+      setRunBId(sameTaskRun.run_id);
+    }
+  };
+
+  // Handler to trigger on-demand LLM semantic comparison
+  const handleRunSemanticCompare = async () => {
+    if (!runA || !runB) return;
+    setIsLoadingSemantic(true);
+    setSemanticError(null);
+    try {
+      const res = await fetch(`/api/eval/compare/semantic?run_a=${encodeURIComponent(runA.run_id)}&run_b=${encodeURIComponent(runB.run_id)}`);
+      if (!res.ok) {
+        throw new Error(`Server returned status ${res.status}`);
+      }
+      const data = await res.json();
+      setSemanticVerdict(data);
+    } catch (err: any) {
+      setSemanticError(err?.message || 'Failed to generate AI semantic comparison');
+    } finally {
+      setIsLoadingSemantic(false);
+    }
+  };
 
   if (!runA || !runB || runs.length < 2) {
     return (
@@ -101,17 +505,69 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
     stepPairs.push({ stepA, stepB, turn });
   }
 
-  // 3. Find files written to compute code diffs
-  const filesA = runA.steps?.filter((s) => s.action.tool === 'write_file' && s.action.content) || [];
-  const filesB = runB.steps?.filter((s) => s.action.tool === 'write_file' && s.action.content) || [];
+  // 3. Multi-Tool Code File & Command Extractor
+  interface ExtractedCodeItem {
+    step_number: number;
+    tool: string;
+    path: string;
+    content: string;
+  }
+
+  const extractCodeFromRun = (r: RunRecord): ExtractedCodeItem[] => {
+    const items: ExtractedCodeItem[] = [];
+    if (!r.steps) return items;
+
+    r.steps.forEach((s) => {
+      const tool = s.action?.tool || '';
+      const path = s.action?.path || '';
+      const content = s.action?.content || '';
+      const cmd = s.action?.command || '';
+
+      // Direct file mutation tools
+      if (['write_file', 'write_to_file', 'replace_file_content', 'edit_file'].includes(tool)) {
+        items.push({
+          step_number: s.step_number,
+          tool,
+          path: path || `mutation_step_${s.step_number}.txt`,
+          content: content || cmd || '(empty file)',
+        });
+      } else if (['execute_bash', 'run_command', 'bash'].includes(tool) && cmd) {
+        // Check for shell scripts with heredocs or inline file writes
+        if (cmd.includes('cat <<') || cmd.includes('cat >') || cmd.includes('echo "') || cmd.includes('printf "') || cmd.includes('\n')) {
+          const redirectMatch = cmd.match(/>>\s*([^\s;&|]+)|>\s*([^\s;&|]+)/);
+          const targetPath = redirectMatch ? (redirectMatch[1] || redirectMatch[2]) : `script_step_${s.step_number}.sh`;
+          items.push({
+            step_number: s.step_number,
+            tool: 'execute_bash (file write)',
+            path: targetPath,
+            content: cmd,
+          });
+        }
+      }
+    });
+
+    return items;
+  };
+
+  const filesA = extractCodeFromRun(runA);
+  const filesB = extractCodeFromRun(runB);
+
+  // Group all unique file paths across both runs
+  const allFilePaths = Array.from(
+    new Set([...filesA.map((f) => f.path), ...filesB.map((f) => f.path)])
+  );
 
   const getToolIcon = (tool?: string) => {
     switch (tool) {
       case 'execute_bash':
+      case 'run_command':
         return terminalOutline;
       case 'view_file':
+      case 'read_file':
         return documentTextOutline;
       case 'write_file':
+      case 'replace_file_content':
+      case 'write_to_file':
         return codeSlashOutline;
       case 'finish':
         return checkmarkCircle;
@@ -120,10 +576,10 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
     }
   };
 
-  // Simple line diff generator
+  // High-contrast line diff generator
   const renderSimpleDiff = (textA: string, textB: string) => {
-    const linesA = textA.split('\n');
-    const linesB = textB.split('\n');
+    const linesA = textA ? textA.split('\n') : [];
+    const linesB = textB ? textB.split('\n') : [];
     const maxLines = Math.max(linesA.length, linesB.length);
     const diffRows = [];
 
@@ -133,130 +589,259 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
       const isDiff = lineA !== lineB;
 
       diffRows.push(
-        <div key={i} className={`grid grid-cols-2 text-[11px] font-mono ${isDiff ? 'bg-amber-500/10' : ''}`}>
-          <div className={`p-1 border-r border-border-subtle overflow-x-auto ${isDiff && lineA ? 'text-rose-700 bg-rose-50' : 'text-slate-700'}`}>
-            <span className="text-slate-400 select-none mr-2">{lineA !== undefined ? i + 1 : ''}</span>
-            {lineA !== undefined ? (isDiff ? `- ${lineA}` : `  ${lineA}`) : ''}
+        <div key={i} className={`grid grid-cols-2 text-[11px] font-mono border-b border-border-subtle/40 ${isDiff ? 'bg-amber-500/5' : ''}`}>
+          {/* Candidate Line */}
+          <div className={`p-1.5 px-3 border-r border-border-subtle overflow-x-auto flex items-start gap-2 ${
+            isDiff && lineA !== undefined ? 'text-rose-700 bg-rose-500/10' : 'text-slate-700'
+          }`}>
+            <span className="text-slate-400 select-none w-6 text-right flex-shrink-0 text-[10px]">{lineA !== undefined ? i + 1 : ''}</span>
+            <span className="font-mono whitespace-pre flex-1">
+              {lineA !== undefined ? (isDiff ? `- ${lineA}` : `  ${lineA}`) : ''}
+            </span>
           </div>
-          <div className={`p-1 overflow-x-auto ${isDiff && lineB ? 'text-emerald-700 bg-emerald-50' : 'text-slate-700'}`}>
-            <span className="text-slate-400 select-none mr-2">{lineB !== undefined ? i + 1 : ''}</span>
-            {lineB !== undefined ? (isDiff ? `+ ${lineB}` : `  ${lineB}`) : ''}
+
+          {/* Baseline Line */}
+          <div className={`p-1.5 px-3 overflow-x-auto flex items-start gap-2 ${
+            isDiff && lineB !== undefined ? 'text-emerald-700 bg-emerald-500/10' : 'text-slate-700'
+          }`}>
+            <span className="text-slate-400 select-none w-6 text-right flex-shrink-0 text-[10px]">{lineB !== undefined ? i + 1 : ''}</span>
+            <span className="font-mono whitespace-pre flex-1">
+              {lineB !== undefined ? (isDiff ? `+ ${lineB}` : `  ${lineB}`) : ''}
+            </span>
           </div>
         </div>
       );
     }
 
     return (
-      <div className="bg-[#14121F] rounded-xl overflow-hidden border border-border-subtle max-h-80 overflow-y-auto">
-        <div className="grid grid-cols-2 bg-[#1C182E] text-slate-300 text-[10px] font-mono uppercase font-bold p-2 border-b border-[#2A2445]">
-          <div>Run A File Payload</div>
-          <div>Run B File Payload</div>
+      <div className="bg-[#14121F] rounded-xl overflow-hidden border border-border-subtle shadow-inner">
+        <div className="grid grid-cols-2 bg-[#1C182E] text-slate-300 text-[10px] font-mono uppercase font-bold p-2.5 px-3 border-b border-[#2A2445]">
+          <div className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-brand-purple" />
+            <span>Candidate (Run A: {runA.model})</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-accent-orange" />
+            <span>Baseline (Run B: {runB.model})</span>
+          </div>
         </div>
-        <div className="bg-white">{diffRows}</div>
+        <div className="bg-white max-h-96 overflow-y-auto divide-y divide-border-subtle/30">{diffRows}</div>
       </div>
     );
   };
 
+  const hasMatchingTaskForRunB = runs.some((r) => r.task_id === runA.task_id && r.run_id !== runA.run_id);
+
   return (
-    <div className="w-full space-y-5 animate-fadeIn font-sans">
-      {/* Header */}
+    <div className="w-full space-y-5 animate-fadeIn font-sans pb-12">
+      {/* 1. Header Bar with Tabs & Quick Presets */}
       <div className="bg-white p-5 rounded-2xl border border-border-subtle shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-base font-bold text-text-primary">
             Dynamic Side-by-Side Run Comparison
           </h2>
           <p className="text-xs text-text-secondary mt-0.5 font-mono">
-            Synchronized trajectory alignment, divergence detection, and code diffing
+            Comparing candidate vs. baseline runs across {runs.length.toLocaleString()} total benchmark logs
           </p>
         </div>
 
-        {/* View mode toggle */}
-        <div className="flex items-center gap-1.5 bg-canvas p-1 rounded-xl border border-border-subtle text-xs">
+        {/* View Mode & Quick Action Controls */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Swap Runs Button */}
           <button
             type="button"
-            onClick={() => setActiveTab('timeline')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-              activeTab === 'timeline'
-                ? 'bg-white text-brand-primary shadow-sm'
-                : 'text-text-secondary hover:text-text-primary'
-            }`}
+            onClick={handleSwapRuns}
+            className="px-3 py-1.5 rounded-xl border border-border-subtle bg-white hover:bg-canvas text-xs font-bold text-text-primary flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+            title="Swap Run A (Candidate) and Run B (Baseline)"
           >
-            Trajectory Timeline
+            <IonIcon icon={swapHorizontalOutline} className="text-sm text-brand-purple" />
+            <span>Swap A ⇄ B</span>
           </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('diff')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-              activeTab === 'diff'
-                ? 'bg-white text-brand-primary shadow-sm'
-                : 'text-text-secondary hover:text-text-primary'
-            }`}
-          >
-            Code Diffs ({filesA.length + filesB.length})
-          </button>
+
+          {/* Same Task Matcher Button */}
+          {hasMatchingTaskForRunB && runA.task_id !== runB.task_id && (
+            <button
+              type="button"
+              onClick={handleMatchSameTask}
+              className="px-3 py-1.5 rounded-xl border border-border-subtle bg-brand-purple/10 text-brand-purple hover:bg-brand-purple/20 text-xs font-bold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+            >
+              <IonIcon icon={sparklesOutline} className="text-sm" />
+              <span>Match Task ({runA.task_id})</span>
+            </button>
+          )}
+
+          {/* View mode toggle */}
+          <div className="flex items-center gap-1.5 bg-canvas p-1 rounded-xl border border-border-subtle text-xs">
+            <button
+              type="button"
+              onClick={() => setActiveTab('timeline')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                activeTab === 'timeline'
+                  ? 'bg-white text-brand-primary shadow-sm'
+                  : 'text-text-secondary hover:text-text-primary'
+              }`}
+            >
+              Trajectory Timeline
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('diff')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                activeTab === 'diff'
+                  ? 'bg-white text-brand-primary shadow-sm'
+                  : 'text-text-secondary hover:text-text-primary'
+              }`}
+            >
+              Code Diffs ({filesA.length + filesB.length})
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Selectors */}
+      {/* 2. Upgraded Searchable Run Selector Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Run A Selector */}
-        <div className="bg-white p-4 rounded-2xl border border-border-subtle shadow-sm space-y-2">
+        {/* Run A Selector Card (Candidate) */}
+        <div className="bg-white p-5 rounded-2xl border border-border-subtle shadow-sm space-y-3.5 relative">
           <div className="flex items-center justify-between text-xs">
             <span className="font-bold text-text-primary flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-brand-purple" />
+              <span className="w-3 h-3 rounded-full bg-brand-purple" />
               Run A (Candidate)
             </span>
             <span
-              className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
-                runA.passed ? 'text-emerald-700 bg-emerald-50' : 'text-rose-700 bg-rose-50'
+              className={`text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
+                runA.passed ? 'text-emerald-700 bg-emerald-50 border border-emerald-200' : 'text-rose-700 bg-rose-50 border border-rose-200'
               }`}
             >
-              {runA.passed ? 'PASSED (1.0)' : 'FAILED (0.0)'}
+              {runA.passed ? '✓ PASSED (1.0)' : '🛑 FAILED (0.0)'}
             </span>
           </div>
-          <select
-            value={runAId}
-            onChange={(e) => setRunAId(e.target.value)}
-            className="w-full bg-canvas border border-border-subtle rounded-xl px-3 py-2 text-xs text-text-primary focus:outline-none focus:border-brand-primary cursor-pointer font-mono"
-          >
-            {runs.map((r) => (
-              <option key={r.run_id} value={r.run_id}>
-                {r.task_id} • {r.model} • {r.passed ? 'Pass' : 'Fail'} ({r.total_duration_sec.toFixed(1)}s, ${r.estimated_cost_usd.toFixed(4)})
-              </option>
-            ))}
-          </select>
+
+          {/* Selected Run Details Header */}
+          <div className="p-3.5 bg-canvas/60 rounded-xl border border-border-subtle space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="font-bold text-sm text-text-primary font-mono truncate">
+                {runA.task_id}
+              </div>
+              <span className="text-[11px] font-mono text-brand-purple bg-brand-purple/10 px-2 py-0.5 rounded">
+                {runA.model}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 text-[11px] font-mono text-text-muted pt-1">
+              <div>
+                <span className="block text-[9px] uppercase text-text-muted">Duration</span>
+                <strong className="text-text-primary">{runA.total_duration_sec.toFixed(1)}s</strong>
+              </div>
+              <div>
+                <span className="block text-[9px] uppercase text-text-muted">Tokens</span>
+                <strong className="text-text-primary">{runA.total_tokens.toLocaleString()}</strong>
+              </div>
+              <div>
+                <span className="block text-[9px] uppercase text-text-muted">Cost</span>
+                <strong className="text-text-primary">${runA.estimated_cost_usd.toFixed(4)}</strong>
+              </div>
+            </div>
+          </div>
+
+          {/* Action Row: Search & Pick Modal Button + Fast Selector */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPickerTarget('candidate')}
+              className="flex-1 px-3 py-2 rounded-xl bg-dark-base hover:bg-black text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer"
+            >
+              <IonIcon icon={searchOutline} className="text-sm" />
+              <span>Search & Pick Candidate Run...</span>
+            </button>
+
+            {/* Quick Select for Fast Dropdown Access */}
+            <select
+              value={runAId}
+              onChange={(e) => setRunAId(e.target.value)}
+              className="w-32 bg-canvas border border-border-subtle rounded-xl px-2.5 py-2 text-xs text-text-primary font-mono focus:outline-none focus:border-brand-primary cursor-pointer"
+              title="Quick Pick from recent runs"
+            >
+              {runs.slice(0, 20).map((r) => (
+                <option key={r.run_id} value={r.run_id}>
+                  {r.run_id.slice(0, 8)} ({r.model.slice(0, 10)})
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        {/* Run B Selector */}
-        <div className="bg-white p-4 rounded-2xl border border-border-subtle shadow-sm space-y-2">
+        {/* Run B Selector Card (Baseline) */}
+        <div className="bg-white p-5 rounded-2xl border border-border-subtle shadow-sm space-y-3.5 relative">
           <div className="flex items-center justify-between text-xs">
             <span className="font-bold text-text-primary flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-accent-orange" />
+              <span className="w-3 h-3 rounded-full bg-accent-orange" />
               Run B (Baseline)
             </span>
             <span
-              className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
-                runB.passed ? 'text-emerald-700 bg-emerald-50' : 'text-rose-700 bg-rose-50'
+              className={`text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
+                runB.passed ? 'text-emerald-700 bg-emerald-50 border border-emerald-200' : 'text-rose-700 bg-rose-50 border border-rose-200'
               }`}
             >
-              {runB.passed ? 'PASSED (1.0)' : 'FAILED (0.0)'}
+              {runB.passed ? '✓ PASSED (1.0)' : '🛑 FAILED (0.0)'}
             </span>
           </div>
-          <select
-            value={runBId}
-            onChange={(e) => setRunBId(e.target.value)}
-            className="w-full bg-canvas border border-border-subtle rounded-xl px-3 py-2 text-xs text-text-primary focus:outline-none focus:border-accent-orange cursor-pointer font-mono"
-          >
-            {runs.map((r) => (
-              <option key={r.run_id} value={r.run_id}>
-                {r.task_id} • {r.model} • {r.passed ? 'Pass' : 'Fail'} ({r.total_duration_sec.toFixed(1)}s, ${r.estimated_cost_usd.toFixed(4)})
-              </option>
-            ))}
-          </select>
+
+          {/* Selected Run Details Header */}
+          <div className="p-3.5 bg-canvas/60 rounded-xl border border-border-subtle space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="font-bold text-sm text-text-primary font-mono truncate">
+                {runB.task_id}
+              </div>
+              <span className="text-[11px] font-mono text-accent-orange bg-accent-orange/10 px-2 py-0.5 rounded">
+                {runB.model}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 text-[11px] font-mono text-text-muted pt-1">
+              <div>
+                <span className="block text-[9px] uppercase text-text-muted">Duration</span>
+                <strong className="text-text-primary">{runB.total_duration_sec.toFixed(1)}s</strong>
+              </div>
+              <div>
+                <span className="block text-[9px] uppercase text-text-muted">Tokens</span>
+                <strong className="text-text-primary">{runB.total_tokens.toLocaleString()}</strong>
+              </div>
+              <div>
+                <span className="block text-[9px] uppercase text-text-muted">Cost</span>
+                <strong className="text-text-primary">${runB.estimated_cost_usd.toFixed(4)}</strong>
+              </div>
+            </div>
+          </div>
+
+          {/* Action Row: Search & Pick Modal Button + Fast Selector */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPickerTarget('baseline')}
+              className="flex-1 px-3 py-2 rounded-xl bg-accent-orange hover:bg-orange-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer"
+            >
+              <IonIcon icon={searchOutline} className="text-sm" />
+              <span>Search & Pick Baseline Run...</span>
+            </button>
+
+            {/* Quick Select for Fast Dropdown Access */}
+            <select
+              value={runBId}
+              onChange={(e) => setRunBId(e.target.value)}
+              className="w-32 bg-canvas border border-border-subtle rounded-xl px-2.5 py-2 text-xs text-text-primary font-mono focus:outline-none focus:border-accent-orange cursor-pointer"
+              title="Quick Pick from recent runs"
+            >
+              {runs.slice(0, 20).map((r) => (
+                <option key={r.run_id} value={r.run_id}>
+                  {r.run_id.slice(0, 8)} ({r.model.slice(0, 10)})
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
-      {/* Dynamic Live Metric Differentials Bar */}
+      {/* 3. Dynamic Live Metric Differentials Bar */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {/* Pass/Fail Status Shift */}
         <div className="p-4 rounded-2xl bg-white border border-border-subtle shadow-sm space-y-1">
@@ -301,7 +886,132 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
         </div>
       </div>
 
-      {/* Divergence Notification Banner */}
+      {/* 4. AI Semantic Trajectory Analysis (LLM Judge) */}
+      <div className="bg-white p-5 rounded-2xl border border-border-subtle shadow-sm space-y-3.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-subtle pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-purple-50 text-brand-purple flex items-center justify-center flex-shrink-0">
+              <IonIcon icon={sparklesOutline} className="text-lg" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-text-primary">
+                  AI Semantic Trajectory Judge
+                </h3>
+                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-surface-subtle text-brand-purple">
+                  LLM Semantic Evaluator
+                </span>
+              </div>
+              <p className="text-xs text-text-secondary">
+                Evaluates functional equivalence, filters cosmetic syntax noise, and identifies true strategic divergence
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleRunSemanticCompare}
+            disabled={isLoadingSemantic}
+            className="px-4 py-2 rounded-xl bg-brand-purple hover:bg-purple-700 text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-50 flex-shrink-0"
+          >
+            <IonIcon icon={sparklesOutline} className={`text-sm ${isLoadingSemantic ? 'animate-spin' : ''}`} />
+            <span>{isLoadingSemantic ? 'Evaluating Trajectory Delta...' : '⚡ Run AI Semantic Comparison'}</span>
+          </button>
+        </div>
+
+        {semanticError && (
+          <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl flex items-center gap-2">
+            <IonIcon icon={warningOutline} className="text-base flex-shrink-0" />
+            <span>{semanticError}</span>
+          </div>
+        )}
+
+        {semanticVerdict ? (
+          <div className="space-y-3 animate-fadeIn">
+            {/* High level verdict badge + similarity bar */}
+            <div className="p-3.5 bg-canvas/60 rounded-xl border border-border-subtle flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span
+                  className={`text-[11px] font-mono font-bold uppercase px-3 py-1 rounded-full ${
+                    semanticVerdict.nature_of_divergence === 'identical_strategy' ||
+                    semanticVerdict.nature_of_divergence === 'cosmetic_variation'
+                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                      : 'bg-amber-100 text-amber-900 border border-amber-300'
+                  }`}
+                >
+                  {semanticVerdict.nature_of_divergence === 'identical_strategy'
+                    ? '🟢 Identical Strategy'
+                    : semanticVerdict.nature_of_divergence === 'cosmetic_variation'
+                    ? '🟢 Cosmetic Variation (Functionally Equivalent)'
+                    : '🟠 Substantive Strategic Divergence'}
+                </span>
+
+                <span className="text-xs font-mono text-text-secondary">
+                  Equivalence Score: <strong className="text-text-primary">{Math.round(semanticVerdict.semantic_similarity_score * 100)}%</strong>
+                </span>
+              </div>
+
+              <div className="text-xs font-mono text-text-muted">
+                {semanticVerdict.true_divergence_turn !== null ? (
+                  <span className="text-amber-800 font-bold">
+                    ⚡ Strategic Fork at Turn #{semanticVerdict.true_divergence_turn}
+                  </span>
+                ) : (
+                  <span className="text-emerald-700 font-bold">
+                    ✓ No Strategic Fork (Cosmetic Only)
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Verdict Summary */}
+            <div className="p-3.5 bg-white rounded-xl border border-border-subtle text-xs text-text-primary leading-relaxed space-y-1.5 shadow-2xs">
+              <div className="font-bold text-text-secondary font-mono text-[11px] uppercase">
+                Executive Synthesis
+              </div>
+              <p>{semanticVerdict.verdict_summary}</p>
+            </div>
+
+            {/* Key Differences List */}
+            {semanticVerdict.key_strategic_differences?.length > 0 && (
+              <div className="p-3.5 bg-white rounded-xl border border-border-subtle text-xs space-y-2 shadow-2xs">
+                <div className="font-bold text-text-secondary font-mono text-[11px] uppercase">
+                  Key Strategic Differentials & Workflow Shifts
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {semanticVerdict.key_strategic_differences.map((diff, idx) => (
+                    <div
+                      key={idx}
+                      className="p-2.5 rounded-lg bg-canvas text-text-secondary border border-border-subtle/80 flex items-start gap-2"
+                    >
+                      <span className="text-brand-purple font-bold font-mono text-[11px] flex-shrink-0">
+                        #{idx + 1}
+                      </span>
+                      <span className="leading-tight">{diff}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Attribution Reasoning */}
+            <div className="p-3 rounded-xl bg-purple-50/60 border border-brand-purple/20 text-xs text-purple-950 font-sans flex items-start gap-2">
+              <span className="font-bold font-mono text-[11px] uppercase text-brand-purple flex-shrink-0">
+                Attribution:
+              </span>
+              <span>{semanticVerdict.attribution_reasoning}</span>
+            </div>
+          </div>
+        ) : (
+          !isLoadingSemantic && (
+            <div className="p-3 bg-canvas rounded-xl text-center text-xs text-text-muted font-sans">
+              Click <strong>Run AI Semantic Comparison</strong> above to have an LLM synthesize the exact behavioral delta between <code>{runA.model}</code> and <code>{runB.model}</code>, filtering out whitespace and cosmetic syntax differences.
+            </div>
+          )
+        )}
+      </div>
+
+      {/* 5. Divergence Notification Banner */}
       {divergenceTurn !== null && (
         <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-900 flex items-center justify-between text-xs shadow-sm">
           <div className="flex items-center gap-2.5">
@@ -313,7 +1023,7 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
         </div>
       )}
 
-      {/* TAB 1: SYNCHRONIZED TIMELINE */}
+      {/* 5. TAB 1: SYNCHRONIZED TIMELINE */}
       {activeTab === 'timeline' && (
         <div className="space-y-4">
           {stepPairs.map(({ stepA, stepB, turn }) => {
@@ -349,7 +1059,7 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
                   <div className="p-4 space-y-2.5">
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-mono font-bold text-brand-purple flex items-center gap-1.5">
-                        <IonIcon icon={getToolIcon(stepA?.action.tool)} />
+                        <IonIcon icon={getToolIcon(stepA?.action?.tool)} />
                         {stepA ? stepA.action.tool : '(Turn not executed)'}
                       </span>
                       {stepA && (
@@ -365,7 +1075,7 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
                       </p>
                     )}
 
-                    {stepA?.action.command && (
+                    {stepA?.action?.command && (
                       <pre className="p-2.5 rounded-xl bg-[#14121F] text-emerald-400 font-mono text-xs overflow-x-auto">
                         $ {stepA.action.command}
                       </pre>
@@ -382,7 +1092,7 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
                   <div className="p-4 space-y-2.5 bg-canvas/30">
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-mono font-bold text-accent-orange flex items-center gap-1.5">
-                        <IonIcon icon={getToolIcon(stepB?.action.tool)} />
+                        <IonIcon icon={getToolIcon(stepB?.action?.tool)} />
                         {stepB ? stepB.action.tool : '(Turn not executed)'}
                       </span>
                       {stepB && (
@@ -398,7 +1108,7 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
                       </p>
                     )}
 
-                    {stepB?.action.command && (
+                    {stepB?.action?.command && (
                       <pre className="p-2.5 rounded-xl bg-[#14121F] text-amber-300 font-mono text-xs overflow-x-auto">
                         $ {stepB.action.command}
                       </pre>
@@ -417,33 +1127,54 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
         </div>
       )}
 
-      {/* TAB 2: CODE DIFFS */}
+      {/* 6. TAB 2: CODE DIFFS */}
       {activeTab === 'diff' && (
         <div className="space-y-4">
-          {filesA.length === 0 && filesB.length === 0 ? (
-            <div className="p-8 text-center bg-white rounded-2xl border border-border-subtle text-text-muted text-xs">
-              No written files recorded for comparison.
+          {allFilePaths.length === 0 ? (
+            <div className="p-8 text-center bg-white rounded-2xl border border-border-subtle text-text-muted text-xs space-y-3">
+              <IonIcon icon={codeSlashOutline} className="text-3xl text-brand-purple mx-auto" />
+              <div className="font-bold text-text-primary">No Direct File Write Mutations Recorded</div>
+              <p className="text-text-secondary max-w-md mx-auto">
+                Neither run executed direct file-writing tools (e.g. <code>write_file</code>, <code>replace_file_content</code>). You can inspect the step-by-step bash commands and reasoning divergence in the <strong>Trajectory Timeline</strong> tab.
+              </p>
             </div>
           ) : (
-            filesA.map((fileA, idx) => {
-              const fileB = filesB[idx] || filesB.find((f) => f.action.path === fileA.action.path);
+            allFilePaths.map((filePath, idx) => {
+              const fileA = filesA.find((f) => f.path === filePath);
+              const fileB = filesB.find((f) => f.path === filePath);
               return (
                 <div key={idx} className="bg-white p-5 rounded-2xl border border-border-subtle shadow-sm space-y-3">
                   <div className="flex items-center justify-between text-xs font-mono">
-                    <span className="font-bold text-text-primary">
-                      File: {fileA.action.path || fileB?.action.path || `mutation_${idx + 1}.py`}
-                    </span>
-                    <span className="text-text-muted text-[11px]">
-                      Turn #{fileA.step_number} (A) vs Turn #{fileB?.step_number || '?'} (B)
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-text-primary bg-surface-subtle px-2.5 py-1 rounded-lg">
+                        📄 {filePath}
+                      </span>
+                      <span className="text-text-muted text-[11px]">
+                        ({fileA ? `Candidate Turn #${fileA.step_number}` : 'Not written in Candidate'} vs {fileB ? `Baseline Turn #${fileB.step_number}` : 'Not written in Baseline'})
+                      </span>
+                    </div>
                   </div>
-                  {renderSimpleDiff(fileA.action.content || '', fileB?.action.content || '')}
+                  {renderSimpleDiff(fileA?.content || '', fileB?.content || '')}
                 </div>
               );
             })
           )}
         </div>
       )}
+
+      {/* 7. Scalable Run Picker Modal */}
+      <RunPickerModal
+        isOpen={pickerTarget !== null}
+        title={pickerTarget === 'candidate' ? 'Select Candidate Run (Run A)' : 'Select Baseline Run (Run B)'}
+        accentColor={pickerTarget === 'candidate' ? 'purple' : 'orange'}
+        selectedRunId={pickerTarget === 'candidate' ? runAId : runBId}
+        runs={runs}
+        onSelect={(id) => {
+          if (pickerTarget === 'candidate') setRunAId(id);
+          else if (pickerTarget === 'baseline') setRunBId(id);
+        }}
+        onClose={() => setPickerTarget(null)}
+      />
     </div>
   );
 };
