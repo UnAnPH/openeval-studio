@@ -107,6 +107,20 @@ A 4-stage runtime monitoring pipeline that inspects every tool call before execu
 
 ---
 
+## 📋 Project Status & Frontier Safety Roadmap
+
+| Area | Completed in OpenEval Studio ✅ | Frontier Research Roadmap 🚀 |
+| :--- | :--- | :--- |
+| **Execution & Sandboxing** | • Ephemeral Docker sandboxes with CPU/RAM quotas.<br>• Multi-turn ReAct reasoning loop with stateful feedback.<br>• Real-time cancellation & execution watchdog. | • Distributed cloud sandboxing via METR Inspect Hawk & AWS EKS.<br>• MicroVM hypervisor isolation (Firecracker / gVisor). |
+| **Runtime Safety & Firewalls** | • 4-stage **Aegis Sentinel** runtime firewall (Read-only $\rightarrow$ Regex Blacklist $\rightarrow$ Fast Triage $\rightarrow$ Deep LLM).<br>• Pre-tool interception hooks for Claude Code, Antigravity & Cursor.<br>• Automated remediation (`allow`, `warn`, `block`, `pause`, `kill`, `quarantine`). | • Multi-step risk accumulation & stateful token budget dampening.<br>• Hardware enclave attestation for runtime security monitors. |
+| **Scheming & Alignment Scanners** | • Situational awareness & eval-detection scanner (`is_in_eval`).<br>• Unfaithful Chain-of-Thought / hidden intent detector.<br>• Reward tampering & held-out test suite modification defenses.<br>• LLM Plan Adherence & Hallucination judges. | • Model Organism post-training (LoRA/DPO on Qwen/Llama to deliberately induce scheming).<br>• Internal linear representation & activation probing (Sparse Autoencoders). |
+| **Trajectory Diffing & Evals** | • Side-by-side synchronized step-by-step diffing.<br>• **AI Semantic Trajectory Judge** (filtering cosmetic syntax noise).<br>• Multi-tool code syntax diffs (`write_file`, `replace_file_content`, bash scripts).<br>• Scalable 10,000+ run picker modal with faceted filters. | • Multi-temperature statistical elicitation ($pass@k$ and Best-of-$N$ curves).<br>• Multi-agent tree divergence diffing (`deepagent`). |
+| **Adversarial Red-Teaming & RAG** | • RAG Chaos Engine (adversarial context distractors, poisoned facts).<br>• Automated verbatim citation grounding scorer.<br>• Benchmark Verifier Anti-Fragility Auditor (zero-intervention & oracle). | • Automated Multi-Turn Red-Teaming loops (**PAIR** & **TAP** algorithms).<br>• Gradient-based adversarial suffix optimization (GCG) for guardrails. |
+| **Trace Analytics & Datasets** | • DuckDB sub-millisecond transcript full-text/regex search.<br>• Pareto Cost-Accuracy frontier & dynamic leaderboard.<br>• DPO preference pair generator (`chosen` vs `rejected`).<br>• ShareGPT & OpenAI Chat format exporters.<br>• Structured Safety Audit Reports with revision history & human sign-off. | • Automated Claim-Argument-Evidence **Safety Case** generator (UK AISI / Anthropic RSP standards).<br>• CI/CD regression gatekeeper GitHub Action. |
+| **UK AISI Inspect AI Bridge** | • Native Inspect `@task`, `@solver`, and `@scorer` bridges.<br>• Direct `inspect_ai.eval_async` execution backend.<br>• Official `.eval` archive loader & interactive visualizer launch. | • Multi-node Inspect cluster deployment on AWS Batch / EKS. |
+
+---
+
 ## 📁 The 5-File Benchmark Standard
 
 ```text
