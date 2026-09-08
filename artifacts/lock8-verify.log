@@ -1,0 +1,93 @@
+== OpenEval lock-8 verify ==
+cwd: /Users/jaysonandal/Documents/AI safety/openeval-studio
+python: /Users/jaysonandal/Documents/AI safety/openeval-studio/.venv/bin/python
+
+-- 0) Secret hygiene (litellm) --
+  PASS  litellm_config.yaml uses os.environ/… (no hardcoded key pattern required here)
+  PASS  no obvious raw API key literal in litellm_config.yaml
+  NOTE  Rotate any previously leaked key manually (Step 1) — this script cannot do that.
+
+-- 1) pytest smoke (ci-smoke without uv sync) --
+........................................................................ [ 57%]
+......................................................                   [100%]
+=============================== warnings summary ===============================
+server/app.py:2378
+  /Users/jaysonandal/Documents/AI safety/openeval-studio/server/app.py:2378: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+.venv/lib/python3.12/site-packages/fastapi/applications.py:4681
+.venv/lib/python3.12/site-packages/fastapi/applications.py:4681
+  /Users/jaysonandal/Documents/AI safety/openeval-studio/.venv/lib/python3.12/site-packages/fastapi/applications.py:4681: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+server/app.py:2387
+  /Users/jaysonandal/Documents/AI safety/openeval-studio/server/app.py:2387: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("shutdown")
+
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /Users/jaysonandal/Documents/AI safety/openeval-studio/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+126 passed, 5 warnings in 2.97s
+  PASS  pytest tests/ -m 'not slow'
+
+-- 2) hermetic eval smoke --
+{
+  "task_id": "regex-log",
+  "pass_rate": {
+    "nop": "0/1",
+    "oracle": "1/1"
+  },
+  "integrity_ok": true
+}
+Wrote /Users/jaysonandal/Documents/AI safety/openeval-studio/artifacts/hermetic-eval.json
+  PASS  hermetic_eval_smoke.py
+  PASS  artifacts/hermetic-eval.json present
+
+-- 3) product gate demo --
+/Users/jaysonandal/Documents/AI safety/openeval-studio/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+LLM grade failed: HTTP Error 404: Not Found
+gate demo OK → artifacts/gate-demo.jsonl
+  PASS  gate-demo (venv python)
+  PASS  artifacts/gate-demo.jsonl present
+
+-- 4) Antigravity hook demo (TestClient + real gate script) --
+/Users/jaysonandal/Documents/AI safety/openeval-studio/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+antigravity gate demo OK → /Users/jaysonandal/Documents/AI safety/openeval-studio/artifacts/antigravity-gate-demo.jsonl
+  PASS  record_antigravity_gate_demo.sh
+  PASS  artifacts/antigravity-gate-demo.jsonl present
+
+-- 5) FINDINGS / true-eval artifacts --
+  PASS  FINDINGS.md
+  PASS  DEMO.md
+  PASS  README.md
+  PASS  artifacts/true-evals/summary/true-eval-matrix.json
+  PASS  artifacts/true-evals/aime2025
+  PASS  artifacts/true-evals/gpqa
+  PASS  artifacts/true-evals/local
+  PASS  FINDINGS.md has true Pass@k writeup
+  PASS  FINDINGS.md mentions GPQA (confounder honesty)
+
+-- 6) Docker (optional for true-eval re-runs) --
+  SKIP  Docker not reachable — true-eval re-runs / Launch sandbox need OrbStack up
+
+== Summary: 18 pass, 0 fail, 1 skip ==
+Lock-8 verify OK (manual left: key rotation + live Antigravity clip + PR CI check)

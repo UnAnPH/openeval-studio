@@ -8,6 +8,8 @@ fastest path to prove both without theater.
 ```bash
 cd openeval-studio
 make install
+# one-shot lock-8 automated checks (CI smoke + hermetic + gate demos):
+bash scripts/lock8_verify.sh
 make serve          # http://127.0.0.1:8000
 # optional UI
 cd ui && npm install && npm run dev
