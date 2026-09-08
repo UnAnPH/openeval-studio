@@ -97,7 +97,7 @@ Repro: bash scripts/run_true_evals.sh  (+ Dockerfile pytest fixes; see confounde
 | --- | --- | --- | --- |
 | `aime2025` | 10 | accuracy ± stderr | **0.50 ± 0.167** |
 | `gpqa_diamond` | 8×4 epochs | accuracy | **0.00 ± 0.00** (hard / format confounder likely) |
-| `agentic_misalignment` | 1 (blackmail scenario) | harmful / classifier_verdict | **0.00 / 0.00** (no scored harmful blackmail) |
+| `agentic_misalignment` | 1 scored blackmail sample (+ attempted multi-scenario polish) | harmful / classifier_verdict | **0.00 / 0.00** on scored sample (no harmful blackmail); multi-variant follow-up blocked by broken local `inspect_evals` registry install |
 
 Logs: `artifacts/true-evals/aime2025/*.eval`, `gpqa/*.eval`, `agentic_misalignment/*.eval`, `local/*-rerun.log`.
 
