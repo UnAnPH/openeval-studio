@@ -1,125 +1,101 @@
-"""In-memory and JSON-persisted Run Store with Pub/Sub for OpenEval Studio.
+"""Unified Session & Run Store for OpenEval Studio.
 
-Tracks historical evaluation trajectories, token costs, verification rewards,
-and provides async event broadcasting for real-time SSE streaming.
+Re-exports canonical Watcher Session as RunRecord and delegates run tracking
+to the high-performance DuckDB WatcherStore.
 """
 
 import asyncio
-from datetime import UTC, datetime
-from typing import Any, Literal
-from uuid import uuid4
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from schemas.watcher_models import Session
+from server.watcher_store import WatcherStore, get_watcher_store
 
-from engine.judges import JudgeVerdict
-from engine.react_agent import AgentStep
-
-
-class RunRecord(BaseModel):
-    """Full snapshot of an evaluation run including steps and grading."""
-
-    model_config = ConfigDict(extra="ignore")
-
-    run_id: str = Field(default_factory=lambda: str(uuid4())[:8])
-    task_id: str = Field(..., description="Target benchmark task ID")
-    model: str = Field(..., description="Model endpoint used")
-    provider: str = Field(default="google", description="Model provider")
-    status: Literal[
-        "pending", "running", "completed", "error", "max_steps_exceeded", "cancelled"
-    ] = Field(default="pending")
-    created_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
-    steps: list[AgentStep] = Field(default_factory=list)
-    total_steps: int = Field(default=0)
-    total_tokens: int = Field(default=0)
-    total_duration_sec: float = Field(default=0.0)
-    estimated_cost_usd: float = Field(default=0.0)
-    final_summary: str | None = Field(default=None)
-    reward: float | None = Field(default=None)
-    passed: bool | None = Field(default=None)
-    failure_reason: str | None = Field(default=None)
-    audit_verdicts: list[JudgeVerdict] = Field(default_factory=list)
-    human_reviewer: str | None = Field(default=None)
-    human_review_notes: str | None = Field(default=None)
-    audit_overrides: dict[str, bool] = Field(default_factory=dict)
+RunRecord = Session
 
 
 class RunStore:
-    """Manages run lifecycle, queries, and SSE event streaming subscribers."""
+    """Delegating store that bridges legacy RunStore calls into WatcherStore."""
 
-    def __init__(self) -> None:
-        self._runs: dict[str, RunRecord] = {}
-        self._subscribers: dict[str, list[asyncio.Queue[dict[str, Any]]]] = {}
+    def __init__(self, watcher_store: WatcherStore | None = None) -> None:
+        self._watcher = watcher_store or get_watcher_store()
+        self._runs: dict[str, Session] = self._watcher._sessions
         self._deleted_ids: set[str] = set()
 
-    def create_run(self, task_id: str, model: str, provider: str = "google") -> RunRecord:
-        """Initialize a new pending evaluation run."""
-        record = RunRecord(task_id=task_id, model=model, provider=provider)
-        self._runs[record.run_id] = record
-        self._subscribers[record.run_id] = []
-        self._deleted_ids.discard(record.run_id)
-        return record
+    def create_run(self, task_id: str, model: str, provider: str = "google") -> Session:
+        """Initialize a new pending evaluation session."""
+        session = Session(
+            project_name=task_id,
+            task_id=task_id,
+            model=model,
+            provider=provider,
+            agent_type="inspect_eval",
+            status="pending",
+        )
+        self._deleted_ids.discard(session.session_id)
+        return self._watcher.create_session(session)
 
-    def get_run(self, run_id: str) -> RunRecord | None:
-        """Look up a run by its ID."""
+    def save_run(self, session: Session) -> Session:
+        """Persist an evaluation run/session in memory, DuckDB, and disk cache."""
+        self._deleted_ids.discard(session.session_id)
+        if not session.agent_type or session.agent_type in ("antigravity", "claude_code", "cursor"):
+            session.agent_type = "inspect_eval"
+        return self._watcher.record_session(session)
+
+    def get_run(self, run_id: str) -> Session | None:
+        """Look up a run/session by its ID."""
         if run_id in self._deleted_ids:
             return None
-        return self._runs.get(run_id)
+        session = self._watcher.get_session(run_id)
+        if session and session.agent_type in ("antigravity", "claude_code", "cursor"):
+            return None
+        return session
 
     def is_deleted(self, run_id: str) -> bool:
         """Check if a run ID has been deleted."""
         return run_id in self._deleted_ids
 
-    def list_runs(self) -> list[RunRecord]:
-        """Return all historical runs sorted by created_at descending."""
-        active = [r for r in self._runs.values() if r.run_id not in self._deleted_ids]
-        return sorted(active, key=lambda r: r.created_at, reverse=True)
+    def list_runs(self) -> list[Session]:
+        """Return all historical evaluation runs sorted by created_at descending."""
+        sessions = self._watcher.list_sessions()
+        return [
+            s
+            for s in sessions
+            if s.session_id not in self._deleted_ids
+            and s.agent_type not in ("antigravity", "claude_code", "cursor")
+        ]
 
-    def update_run(self, run_id: str, **kwargs: Any) -> RunRecord | None:
-        """Update fields on an existing run record."""
-        record = self._runs.get(run_id)
-        if record is None or run_id in self._deleted_ids:
+    def update_run(self, run_id: str, **kwargs: Any) -> Session | None:
+        """Update fields on an existing session record."""
+        if run_id in self._deleted_ids:
             return None
-
-        updated_data = record.model_dump()
-        updated_data.update(kwargs)
-        updated_record = RunRecord.model_validate(updated_data)
-        self._runs[run_id] = updated_record
-        return updated_record
+        return self._watcher.update_session(run_id, kwargs)
 
     def subscribe(self, run_id: str) -> asyncio.Queue[dict[str, Any]]:
         """Register a subscriber queue for real-time SSE streaming."""
-        queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
-        if run_id not in self._subscribers:
-            self._subscribers[run_id] = []
-        self._subscribers[run_id].append(queue)
-        return queue
+        return self._watcher.subscribe(run_id)
 
     def unsubscribe(self, run_id: str, queue: asyncio.Queue[dict[str, Any]]) -> None:
         """Remove a subscriber queue."""
-        if run_id in self._subscribers and queue in self._subscribers[run_id]:
-            self._subscribers[run_id].remove(queue)
+        self._watcher.unsubscribe(run_id, queue)
 
     def publish_event(self, run_id: str, event_type: str, data: dict[str, Any]) -> None:
         """Broadcast an event payload to all active SSE subscribers."""
-        payload = {"event": event_type, "run_id": run_id, "data": data}
-        if run_id in self._subscribers:
-            for q in list(self._subscribers[run_id]):
-                q.put_nowait(payload)
+        self._watcher.broadcast_sync(run_id, event_type, data)
 
     def delete_run(self, run_id: str) -> bool:
         """Delete a run from the store and record tombstone."""
         self._deleted_ids.add(run_id)
-        removed = self._runs.pop(run_id, None) is not None
-        self._subscribers.pop(run_id, None)
-        return removed
+        session = self._watcher.get_session(run_id)
+        if session:
+            session.status = "cancelled"
+            return True
+        return False
 
     def clear_runs(self) -> None:
         """Clear all runs from the store and record tombstones."""
-        for r_id in self._runs:
-            self._deleted_ids.add(r_id)
-        self._runs.clear()
-        self._subscribers.clear()
+        for s in self._watcher.list_sessions():
+            self._deleted_ids.add(s.session_id)
 
 
-# Singleton instance for the server process
+# Global singleton instance for the server process
 global_run_store = RunStore()

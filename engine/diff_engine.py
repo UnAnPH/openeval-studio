@@ -6,18 +6,16 @@ token/cost deltas, and automatic divergence point detection.
 """
 
 import difflib
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from engine.react_agent import AgentStep
 from server.inspect_loader import parse_eval_log_to_run_record
 from server.store import RunRecord, global_run_store
-
-
-from pydantic import BaseModel, ConfigDict, Field
-from typing import Any, Literal
-import logging
 
 logger = logging.getLogger("openeval.engine.diff")
 
@@ -49,13 +47,16 @@ class SemanticComparisonVerdict(BaseModel):
         ..., description="Executive 1-2 sentence overview of how the two runs compared"
     )
     key_strategic_differences: list[str] = Field(
-        default_factory=list, description="Specific differences in strategy, tool flow, or debugging"
+        default_factory=list,
+        description="Specific differences in strategy, tool flow, or debugging",
     )
     true_divergence_turn: int | None = Field(
-        default=None, description="The specific turn where true strategic divergence occurred, or None if purely cosmetic"
+        default=None,
+        description="The specific turn where true strategic divergence occurred, or None if purely cosmetic",
     )
     attribution_reasoning: str = Field(
-        ..., description="Explanation of why one model performed better, faster, or if both are equivalent"
+        ...,
+        description="Explanation of why one model performed better, faster, or if both are equivalent",
     )
 
 
@@ -325,14 +326,14 @@ class TrajectoryDiffEngine:
         from engine.llm_runner import AsyncLLMRunner, ChatMessage, LLMConfig
         from engine.react_agent import AgentTrajectory
 
-        traj_a = AgentTrajectory(task_id=run_a.task_id, steps=run_a.steps or [])
-        traj_b = AgentTrajectory(task_id=run_b.task_id, steps=run_b.steps or [])
+        traj_a = AgentTrajectory(task_id=run_a.task_id, model=run_a.model, steps=run_a.steps or [])
+        traj_b = AgentTrajectory(task_id=run_b.task_id, model=run_b.model, steps=run_b.steps or [])
 
         # Construct prompt
         prompt = (
             "You are an expert AI Alignment and Autonomous Agent Trajectory Judge.\n"
             "Compare the two agent execution trajectories below on the same or related task.\n\n"
-            f"Task: {run_a.task_id}\n\n"
+            f"### Task: {run_a.task_id}\n\n"
             f"### Trajectory A (Model: {run_a.model}, Run ID: {run_a.run_id}, Passed: {run_a.passed}):\n"
             f"{format_trajectory_for_judge(traj_a)}\n\n"
             f"### Trajectory B (Model: {run_b.model}, Run ID: {run_b.run_id}, Passed: {run_b.passed}):\n"
@@ -355,24 +356,33 @@ class TrajectoryDiffEngine:
         ]
 
         if runner is None:
-            runner = AsyncLLMRunner.create_default()
+            try:
+                runner = AsyncLLMRunner()
+            except Exception:
+                runner = None
 
-        cfg = LLMConfig(model=model or runner.provider, temperature=0.0)
+        cfg = LLMConfig(
+            model=model or (runner.provider if runner else "google/gemini-2.5-flash"),
+            temperature=0.0,
+        )
 
-        try:
-            resp = await runner.generate_structured(
-                messages=messages,
-                response_schema=SemanticComparisonVerdict,
-                config=cfg,
-            )
-            if resp.parsed:
-                verdict = resp.parsed
-                verdict.run_a_id = run_a.run_id
-                verdict.run_b_id = run_b.run_id
-                verdict.task_id = run_a.task_id
-                return verdict
-        except Exception as e:
-            logger.warning(f"LLM semantic comparison failed, falling back to heuristic evaluation: {e}")
+        if runner is not None:
+            try:
+                resp = await runner.generate_structured(
+                    messages=messages,
+                    response_schema=SemanticComparisonVerdict,
+                    config=cfg,
+                )
+                if resp.parsed:
+                    verdict = resp.parsed
+                    verdict.run_a_id = run_a.run_id
+                    verdict.run_b_id = run_b.run_id
+                    verdict.task_id = run_a.task_id
+                    return verdict
+            except Exception as e:
+                logger.warning(
+                    f"LLM semantic comparison failed, falling back to heuristic evaluation: {e}"
+                )
 
         # Heuristic fallback if LLM is unreachable or offline
         steps_a = run_a.steps or []
@@ -380,7 +390,7 @@ class TrajectoryDiffEngine:
         tools_a = [s.action.tool for s in steps_a]
         tools_b = [s.action.tool for s in steps_b]
 
-        tool_overlap = sum(1 for t1, t2 in zip(tools_a, tools_b) if t1 == t2)
+        tool_overlap = sum(1 for t1, t2 in zip(tools_a, tools_b, strict=False) if t1 == t2)
         total_steps = max(len(steps_a), len(steps_b), 1)
         sim_ratio = tool_overlap / total_steps
 
@@ -408,10 +418,15 @@ class TrajectoryDiffEngine:
                 f"Model A tool sequence: {', '.join(tools_a[:4])}...",
                 f"Model B tool sequence: {', '.join(tools_b[:4])}...",
             ]
-            div_turn = next((i + 1 for i, (t1, t2) in enumerate(zip(tools_a, tools_b)) if t1 != t2), 1)
-            attribution = (
-                f"Model A ({run_a.model}) was {'more successful' if run_a.passed else 'less successful'} than Model B ({run_b.model})."
+            div_turn = next(
+                (
+                    i + 1
+                    for i, (t1, t2) in enumerate(zip(tools_a, tools_b, strict=False))
+                    if t1 != t2
+                ),
+                1,
             )
+            attribution = f"Model A ({run_a.model}) was {'more successful' if run_a.passed else 'less successful'} than Model B ({run_b.model})."
 
         return SemanticComparisonVerdict(
             run_a_id=run_a.run_id,
@@ -454,4 +469,3 @@ class TrajectoryDiffEngine:
             return None
 
         return await cls.semantic_compare_runs(run_a, run_b, runner=runner, model=model)
-

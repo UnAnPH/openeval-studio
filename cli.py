@@ -358,13 +358,44 @@ def main() -> None:
     p_sweep.add_argument("--output", default="REPORT.md", help="Output markdown report path")
     p_sweep.add_argument("--api-key", default=None, help="Explicit API key")
 
+    # serve command
+    p_serve = subparsers.add_parser("serve", help="Start OpenEval Studio & Watcher API server")
+    p_serve.add_argument("--host", default="0.0.0.0", help="Bind host (default: 0.0.0.0)")
+    p_serve.add_argument("--port", type=int, default=8000, help="Bind port (default: 8000)")
+    p_serve.add_argument("--reload", action="store_true", help="Enable auto-reload")
+
     # audit command
     p_audit = subparsers.add_parser("audit", help="Run Oracle vs Nop integrity audit")
     p_audit.add_argument("task_dir", help="Path to task folder")
 
+    # onboard command
+    p_onboard = subparsers.add_parser(
+        "onboard", help="Run 3-stage model onboarding pipeline and export dossier"
+    )
+    p_onboard.add_argument(
+        "--model", default="gemini-2.5-flash", help="Model endpoint ID to onboard"
+    )
+    p_onboard.add_argument(
+        "--output-dir", default="dossiers", help="Directory to save the executive briefing dossier"
+    )
+
+    # mcp command
+    subparsers.add_parser(
+        "mcp", help="Start Sandboxed Research Model Context Protocol (MCP) server"
+    )
+
+    # doctor command
+    subparsers.add_parser("doctor", help="Run Watcher doctor diagnostic checks")
+
     args = parser.parse_args()
 
-    if args.command == "list-models":
+    if args.command == "serve":
+        import uvicorn
+
+        print_banner()
+        print(f"🚀 Starting Watcher & OpenEval Studio server on http://{args.host}:{args.port}...")
+        uvicorn.run("server.app:app", host=args.host, port=args.port, reload=args.reload)
+    elif args.command == "list-models":
         cmd_list_models(args)
     elif args.command == "test-llm":
         asyncio.run(cmd_test_llm(args))
@@ -374,6 +405,25 @@ def main() -> None:
         asyncio.run(cmd_sweep(args))
     elif args.command == "audit":
         asyncio.run(cmd_audit_task(args))
+    elif args.command == "onboard":
+        from engine.onboarding_pipeline import ModelOnboardingPipeline
+
+        print_banner()
+        print(f"🚀 Running 3-stage onboarding pipeline for {args.model}...")
+        pipeline = ModelOnboardingPipeline()
+        dossier = asyncio.run(pipeline.run_pipeline(args.model, output_dir=args.output_dir))
+        print(
+            f"✅ Onboarding complete! Posture: {dossier.posture}, Safety Score: {dossier.overall_score}/100"
+        )
+        print(f"📄 Executive Briefing Dossier saved to: {dossier.dossier_file_path}")
+    elif args.command == "mcp":
+        from server.mcp_server import main as run_mcp_server
+
+        run_mcp_server()
+    elif args.command == "doctor":
+        from server.doctor import main as run_doctor
+
+        run_doctor()
 
 
 if __name__ == "__main__":

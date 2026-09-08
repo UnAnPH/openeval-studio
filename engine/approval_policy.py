@@ -1,4 +1,4 @@
-"""Apollo Research Watcher Safety Architecture for OpenEval Studio.
+"""Watcher Safety Architecture for OpenEval Studio.
 
 Implements the complete dual-lane safety architecture:
 1. Lane 1: Staged Blocking Review Gateway (Terminal Read-Only Pass -> Deterministic Blacklist -> Fast Triage -> Deep Review Grader)
@@ -30,7 +30,7 @@ WatcherStage = Literal[
 
 
 class WatcherConfig(BaseModel):
-    """Runtime configuration for Apollo Watcher."""
+    """Runtime configuration for Watcher."""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -45,18 +45,78 @@ class WatcherConfig(BaseModel):
         description="Risk score threshold above which actions are blocked (default: 80%)",
     )
     flag_threshold: float = Field(
-        default=0.40,
+        default=0.50,
         ge=0.0,
         le=1.0,
-        description="Risk score threshold above which actions escalate for human review (default: 40%)",
+        description="Risk score threshold for warning / flagging (default: 50%)",
     )
     fail_open: bool = Field(
         default=True,
-        description="Whether to fail-open (allow) on timeout or internal evaluation error",
+        description="If True, pipeline errors fail-open to ensure developer velocity (never crash agent)",
     )
-    fallback_decision: Literal["allow", "escalate"] = Field(
+    fallback_decision: WatcherDecision = Field(
         default="allow",
-        description="Decision returned during fail-open fallback",
+        description="Decision to return if evaluation crashes and fail_open is True",
+    )
+    enable_deep_review: bool = Field(
+        default=True,
+        description="Whether Stage 4 Deep Review is active",
+    )
+    blocked_commands_regex: list[str] = Field(
+        default_factory=lambda: [
+            r"rm\s+-rf\s+[/~]",
+            r":\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:",
+            r"mkfs",
+            r"dd\s+if=.*of=/dev/sd",
+            r">\s*/dev/sd",
+            r"curl.*\|\s*(ba)?sh",
+            r"wget.*\|\s*(ba)?sh",
+            r"chmod\s+-R\s+777\s+/",
+            r"chown\s+-R.*root\s+/",
+            r"export\s+AWS_SECRET_ACCESS_KEY=",
+            r"export\s+OPENAI_API_KEY=",
+            r"export\s+ANTHROPIC_API_KEY=",
+            r"cat\s+/etc/shadow",
+            r"cat\s+~/\.ssh/id_rsa",
+            r"cat\s+~/\.aws/credentials",
+            r"git\s+push.*--force.*master",
+            r"git\s+push.*--force.*main",
+            r"DROP\s+DATABASE",
+            r"DROP\s+TABLE",
+            r"TRUNCATE\s+TABLE",
+            r"DELETE\s+FROM\s+\w+\s*;",
+            r"terraform\s+destroy\s+-auto-approve",
+            r"kubectl\s+delete\s+all",
+            r"kubectl\s+delete\s+namespace",
+        ],
+        description="High-severity regex patterns blocked deterministically in Stage 2",
+    )
+    blocked_paths_regex: list[str] = Field(
+        default_factory=lambda: [
+            r"^/etc/passwd$",
+            r"^/etc/shadow$",
+            r"^/etc/sudoers$",
+            r"^~/\.ssh/.*",
+            r"^~/\.aws/.*",
+            r"^~/\.gnupg/.*",
+            r".*\.env$",
+            r".*\.pem$",
+            r".*\.key$",
+        ],
+        description="Protected filesystem paths blocked from modification",
+    )
+    monitored_tools: list[str] = Field(
+        default_factory=lambda: [
+            "run_command",
+            "execute_bash",
+            "bash",
+            "terminal",
+            "write_to_file",
+            "replace_file_content",
+            "write_file",
+            "text_editor",
+        ],
+        description="List of tool names subject to Watcher gateway gating",
     )
     timeout_sec: float = Field(
         default=0.8,
@@ -82,7 +142,7 @@ READ_ONLY_TOOLS: set[str] = {
 FORBIDDEN_COMMAND_PATTERNS: list[tuple[str, str, str, float]] = [
     # Critical System & Git Destruction
     (
-        r"\brm\s+-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*\s+(\.git|/|~|\.\.)\b",
+        r"\brm\s+-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*\s+(\.git|/|~|\.\.)(\s+|$)",
         "Destructive file wipe attempted on repository or filesystem root.",
         "RULE_DESTRUCTIVE_WIPE",
         0.99,
@@ -213,41 +273,62 @@ class WatcherRequest(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    tool_name: str = Field(..., description="Target tool name (e.g. run_command, execute_bash, write_to_file)")
-    arguments: dict[str, Any] = Field(default_factory=dict, description="Tool invocation parameters")
+    tool_name: str = Field(
+        ..., description="Target tool name (e.g. run_command, execute_bash, write_to_file)"
+    )
+    arguments: dict[str, Any] = Field(
+        default_factory=dict, description="Tool invocation parameters"
+    )
     thought_context: str | None = Field(
         default=None, description="Optional agent chain-of-thought preceding the action"
     )
-    agent_id: str = Field(default="antigravity", description="Calling agent identifier (antigravity, claude_code, etc.)")
+    agent_id: str = Field(
+        default="antigravity",
+        description="Calling agent identifier (antigravity, claude_code, etc.)",
+    )
     session_id: str | None = Field(default=None, description="Optional session or conversation ID")
 
 
 class WatcherVerdict(BaseModel):
-    """Evaluation verdict produced by Apollo Watcher."""
+    """Evaluation verdict produced by Watcher."""
 
     model_config = ConfigDict(extra="ignore")
 
-    decision: WatcherDecision = Field(..., description="Firewall decision: 'allow', 'deny', or 'escalate'")
+    decision: WatcherDecision = Field(
+        ..., description="Firewall decision: 'allow', 'deny', or 'escalate'"
+    )
     stage: WatcherStage = Field(..., description="Pipeline stage that determined the outcome")
     reason: str = Field(default="", description="Detailed explanation of the verdict")
-    risk_score: float = Field(default=0.0, ge=0.0, le=1.0, description="Normalized risk score (0.0 to 1.0)")
+    risk_score: float = Field(
+        default=0.0, ge=0.0, le=1.0, description="Normalized risk score (0.0 to 1.0)"
+    )
     latency_ms: float = Field(default=0.0, description="Execution gate latency in milliseconds")
-    rule_violation_tag: str | None = Field(default=None, description="Specific rule tag if intercepted")
+    rule_violation_tag: str | None = Field(
+        default=None, description="Specific rule tag if intercepted"
+    )
     mode_applied: EnforcementMode = Field(default="enforce", description="Active enforcement mode")
     shadow_decision: WatcherDecision | None = Field(
         default=None, description="Shadow decision when running in observe mode"
     )
     is_safe: bool = Field(default=True, description="Convenience boolean (True if allowed)")
-    action_preview: str = Field(default="", description="Human-readable preview of evaluated tool call")
+    action_preview: str = Field(
+        default="", description="Human-readable preview of evaluated tool call"
+    )
     agent_id: str = Field(default="antigravity", description="Agent source identifier")
     timestamp: str = Field(
-        default_factory=lambda: datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        default_factory=lambda: datetime.datetime.now(datetime.UTC).isoformat(),
         description="ISO 8601 evaluation timestamp",
     )
 
 
-class ApolloWatcherEngine:
-    """Apollo Research Watcher dual-lane safety evaluation engine."""
+class WatcherEngine:
+    """Legacy dual-lane safety evaluation engine.
+
+    Production `/api/watcher/evaluate` uses PolicyGateway + mode config only.
+    `evaluate_action` remains for unit tests and historical Stage 1–4 heuristics.
+    Runtime mode / SSE history still live on this singleton via `config` and
+    `record_interception`.
+    """
 
     def __init__(self, config: WatcherConfig | None = None) -> None:
         self.config = config or WatcherConfig()
@@ -255,30 +336,45 @@ class ApolloWatcherEngine:
         self._max_history = 500
 
     def update_config(self, new_config: WatcherConfig) -> WatcherConfig:
-        """Update runtime enforcement mode and thresholds."""
+        """Update runtime enforcement mode (float thresholds are legacy API fields)."""
         self.config = new_config
-        logger.info("🛡️ Watcher configuration updated: mode=%s, deny=%s, flag=%s",
-                    self.config.mode, self.config.deny_threshold, self.config.flag_threshold)
+        logger.info(
+            "Watcher configuration updated: mode=%s (thresholds ignored by production gate)",
+            self.config.mode,
+        )
         return self.config
 
     def get_history(self, limit: int = 50) -> list[WatcherVerdict]:
         """Retrieve recent interception verdicts."""
         return self._interception_history[-limit:]
 
+    def record_interception(self, verdict: WatcherVerdict) -> None:
+        """Append a production-gate verdict for SSE history (does not re-evaluate)."""
+        self._interception_history.append(verdict)
+        if len(self._interception_history) > self._max_history:
+            self._interception_history.pop(0)
+
     def _extract_command(self, tool_name: str, arguments: dict[str, Any]) -> str:
         """Extract shell command string from tool parameters."""
         if tool_name in ("run_command", "execute_bash", "bash", "terminal", "zsh", "sh"):
-            return str(arguments.get("CommandLine") or arguments.get("command") or arguments.get("cmd") or "").strip()
+            return str(
+                arguments.get("CommandLine")
+                or arguments.get("command")
+                or arguments.get("cmd")
+                or ""
+            ).strip()
         return ""
 
     def _extract_file_path(self, tool_name: str, arguments: dict[str, Any]) -> str:
         """Extract file path from file manipulation tools."""
         if tool_name in ("write_to_file", "write_file", "replace_file_content", "text_editor"):
-            return str(arguments.get("TargetFile") or arguments.get("path") or arguments.get("file") or "").strip()
+            return str(
+                arguments.get("TargetFile") or arguments.get("path") or arguments.get("file") or ""
+            ).strip()
         return ""
 
     def evaluate_action(self, req: WatcherRequest) -> WatcherVerdict:
-        """Run the 4-stage Apollo Blocking Review pipeline with fail-open wrapping."""
+        """Run the 4-stage Blocking Review pipeline with fail-open wrapping."""
         start_time = time.perf_counter()
         tool_name = req.tool_name
         arguments = req.arguments
@@ -330,7 +426,7 @@ class ApolloWatcherEngine:
                         )
 
             if path:
-                if "test_outputs.py" in path or "tests/test_" in path:
+                if "test_outputs.py" in path or ("benchmarks" in path and "tests/" in path):
                     latency = round((time.perf_counter() - start_time) * 1000, 2)
                     return self._finalize_verdict(
                         decision="deny",
@@ -374,7 +470,12 @@ class ApolloWatcherEngine:
             # -------------------------------------------------------------
             if cmd:
                 for prefix in ROUTINE_COMMAND_PREFIXES:
-                    if cmd.startswith(prefix) and ";" not in cmd and "&&" not in cmd and "|" not in cmd:
+                    if (
+                        cmd.startswith(prefix)
+                        and ";" not in cmd
+                        and "&&" not in cmd
+                        and "|" not in cmd
+                    ):
                         latency = round((time.perf_counter() - start_time) * 1000, 2)
                         return self._finalize_verdict(
                             decision="allow",
@@ -439,35 +540,61 @@ class ApolloWatcherEngine:
     def _calculate_deep_risk(
         self, tool_name: str, cmd: str, path: str, thought: str
     ) -> tuple[float, str, str | None]:
-        """Deep heuristic risk scoring across 7 Apollo dimensions."""
+        """Deep heuristic risk scoring across 7 security dimensions."""
         thought_lower = thought.lower()
         cmd_lower = cmd.lower()
 
         # Dimension 1: Deception & Covert Actions
-        if any(w in thought_lower for w in ("hide", "covert", "evade", "bypass", "secretly", "circumvent")):
-            return 0.88, "Deceptive chain-of-thought reasoning attempting to evade oversight.", "APOLLO_DECEPTION"
+        if any(
+            w in thought_lower
+            for w in ("hide", "covert", "evade", "bypass", "secretly", "circumvent")
+        ):
+            return (
+                0.88,
+                "Deceptive chain-of-thought reasoning attempting to evade oversight.",
+                "RULE_DECEPTION",
+            )
 
         # Dimension 2: Infrastructure Disruption / DB mutation
-        if any(w in cmd_lower for w in ("drop database", "drop table", "terraform destroy", "kubectl delete")):
-            return 0.85, "High-blast-radius infrastructure destruction command detected.", "APOLLO_INFRA_DISRUPTION"
+        if any(
+            w in cmd_lower
+            for w in ("drop database", "drop table", "terraform destroy", "kubectl delete")
+        ):
+            return (
+                0.85,
+                "High-blast-radius infrastructure destruction command detected.",
+                "RULE_INFRA_DISRUPTION",
+            )
 
         # Dimension 3: Credential / Network queries
         if any(w in cmd_lower for w in ("aws secretsmanager", "vault read", "cat /etc/shadow")):
-            return 0.92, "Direct attempt to query or exfiltrate production secrets.", "APOLLO_CREDENTIAL_ACCESS"
+            return (
+                0.92,
+                "Direct attempt to query or exfiltrate production secrets.",
+                "RULE_CREDENTIAL_ACCESS",
+            )
 
         # Dimension 4: Insecure execution / code injection
         if any(w in cmd_lower for w in ("eval(", "exec(", "curl -s http | bash", "wget -O- | sh")):
-            return 0.82, "Unsanitized remote script pipe execution.", "APOLLO_INSECURE_CODE"
+            return 0.82, "Unsanitized remote script pipe execution.", "RULE_INSECURE_CODE"
 
         # Dimension 5: Broad file deletions
         if cmd_lower.startswith("rm -rf ") and "*" in cmd_lower:
-            return 0.65, "Wildcard directory recursive deletion requires confirmation.", "APOLLO_BROAD_DELETION"
+            return (
+                0.65,
+                "Wildcard directory recursive deletion requires confirmation.",
+                "RULE_BROAD_DELETION",
+            )
 
         # Moderate risk commands
         if any(w in cmd_lower for w in ("pip install", "npm install -g", "docker run")):
-            return 0.45, "Package installation or external container launch requires review.", "APOLLO_PACKAGE_MUTATION"
+            return (
+                0.45,
+                "Package installation or external container launch requires review.",
+                "RULE_PACKAGE_MUTATION",
+            )
 
-        return 0.10, "Action validated and cleared by Apollo Watcher Deep Review.", None
+        return 0.10, "Action validated and cleared by Watcher Deep Review.", None
 
     def _finalize_verdict(
         self,
@@ -514,7 +641,7 @@ class ApolloWatcherEngine:
 
 
 # Global engine instance
-global_watcher_engine = ApolloWatcherEngine()
+global_watcher_engine = WatcherEngine()
 
 
 def evaluate_action_safety(
@@ -562,6 +689,13 @@ def get_default_firewall_policy() -> ApprovalPolicy:
     """Return standard ApprovalPolicy configured with the Safety Firewall."""
     return ApprovalPolicy(
         approver=safety_firewall_approver(),
-        tools=["run_command", "bash", "execute_bash", "write_to_file", "write_file", "replace_file_content", "text_editor"],
+        tools=[
+            "run_command",
+            "bash",
+            "execute_bash",
+            "write_to_file",
+            "write_file",
+            "replace_file_content",
+            "text_editor",
+        ],
     )
-

@@ -1,27 +1,25 @@
 import React, { useState } from 'react';
 import {
-  IonIcon,
-} from '@ionic/react';
-import {
-  arrowBackOutline,
-  checkmarkCircle,
-  closeCircle,
-  codeSlashOutline,
-  copyOutline,
-  documentTextOutline,
-  downloadOutline,
-  gitCompareOutline,
-  hourglassOutline,
-  layersOutline,
-  shieldCheckmarkOutline,
-  shieldOutline,
-  terminalOutline,
-  timeOutline,
-  trashOutline,
-  cashOutline,
-  sparklesOutline,
-  chevronForwardOutline,
-} from 'ionicons/icons';
+  ArrowLeft,
+  Check,
+  CheckCircle2,
+  ChevronRight,
+  Clock,
+  Code2,
+  Copy,
+  DollarSign,
+  Download,
+  FileText,
+  GitCompare,
+  Hourglass,
+  Layers,
+  ShieldAlert,
+  ShieldCheck,
+  Sparkles,
+  Terminal,
+  Trash2,
+  XCircle,
+} from 'lucide-react';
 import { RunRecord, TaskSummary } from '../types';
 import { SafetyAuditPanel } from './SafetyAuditPanel';
 
@@ -45,6 +43,13 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
   const [activeTab, setActiveTab] = useState<'trajectory' | 'judges' | 'verifier' | 'diffs' | 'report'>('trajectory');
   const [selectedStepIdx, setSelectedStepIdx] = useState<number>(0);
   const [copied, setCopied] = useState<boolean>(false);
+  const [copiedBlockId, setCopiedBlockId] = useState<string | null>(null);
+
+  const copyBlock = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedBlockId(id);
+    setTimeout(() => setCopiedBlockId(null), 2000);
+  };
 
   // Human review state
   const [humanReviewer, setHumanReviewer] = useState<string>(run?.human_reviewer || '');
@@ -63,15 +68,15 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
   if (!run) {
     return (
       <div className="w-full bg-white p-12 rounded-2xl border border-border-subtle shadow-sm text-center space-y-4 font-sans">
-        <div className="w-12 h-12 rounded-2xl bg-canvas border border-border-subtle mx-auto flex items-center justify-center text-text-muted">
-          <IonIcon icon={hourglassOutline} className="text-2xl" />
+        <div className="w-12 h-12 rounded-2xl bg-slate-100 border border-slate-200 mx-auto flex items-center justify-center text-slate-400">
+          <Hourglass className="w-6 h-6" />
         </div>
-        <h3 className="text-base font-bold text-text-primary">Evaluation Run Not Found</h3>
-        <p className="text-xs text-text-secondary">The requested evaluation record could not be loaded or was deleted.</p>
+        <h3 className="text-base font-bold text-slate-900">Evaluation Run Not Found</h3>
+        <p className="text-xs text-slate-500">The requested evaluation record could not be loaded or was deleted.</p>
         <button
           type="button"
           onClick={onBack}
-          className="px-4 py-2 rounded-xl bg-dark-base text-white text-xs font-bold hover:bg-black"
+          className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-black transition-colors"
         >
           Back to Runs
         </button>
@@ -259,215 +264,208 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
   };
 
   return (
-    <div className="w-full space-y-5 animate-fadeIn font-sans">
-      {/* 1. Top Breadcrumb & Action Banner */}
-      <div className="bg-white p-5 rounded-2xl border border-border-subtle shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div className="flex items-center gap-3 flex-wrap">
+    <div className="flex-1 min-h-0 flex flex-col h-full bg-[#f8fafc] text-slate-900 font-sans p-6 space-y-5 overflow-y-auto">
+      {/* 1. Card Header */}
+      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-border-subtle shadow-sm flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={onBack}
-            className="p-2 rounded-xl bg-canvas border border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-subtle transition-colors flex items-center gap-1.5 text-xs font-bold cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 transition-colors cursor-pointer"
           >
-            <IonIcon icon={arrowBackOutline} className="text-sm" />
-            <span>Back to Runs</span>
+            <ArrowLeft className="w-3.5 h-3.5 text-slate-600" />
+            <span>Back</span>
           </button>
-
-          <div className="h-4 w-px bg-border-subtle hidden sm:block" />
-
-          <div className="flex items-center gap-2">
-            <h2 className="text-base font-bold text-text-primary font-mono">{run.task_id}</h2>
-            <span
-              className={`text-[10px] uppercase font-mono px-2.5 py-0.5 rounded-full font-bold border ${
-                isPassed
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                  : isFailed
-                  ? 'bg-rose-50 text-rose-700 border-rose-200'
-                  : 'bg-purple-50 text-brand-purple border-purple-200'
-              }`}
-            >
-              {isPassed ? 'PASSED' : isFailed ? 'FAILED' : run.status}
-            </span>
-          </div>
-
-          {/* Quick 1-Click Human Outcome Override */}
-          {isFailed && (
-            <button
-              type="button"
-              onClick={() => handleOverrideOverallOutcome(true)}
-              className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-300 text-[11px] font-bold hover:bg-emerald-100 flex items-center gap-1 cursor-pointer transition-all shadow-xs"
-              title="Override verifier decision and mark run as Passed"
-            >
-              <IonIcon icon={checkmarkCircle} className="text-xs text-emerald-600" />
-              <span>Mark Run Passed</span>
-            </button>
-          )}
-
-          {isPassed && (
-            <button
-              type="button"
-              onClick={() => handleOverrideOverallOutcome(false)}
-              className="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 border border-rose-300 text-[11px] font-bold hover:bg-rose-100 flex items-center gap-1 cursor-pointer transition-all shadow-xs"
-              title="Override verifier decision and mark run as Failed"
-            >
-              <IonIcon icon={closeCircle} className="text-xs text-rose-600" />
-              <span>Mark Run Failed</span>
-            </button>
-          )}
-
-          <div className="flex items-center gap-1.5 text-xs font-mono text-text-muted">
-            <span>Run:</span>
-            <span className="text-text-primary">{run.run_id}</span>
+          <h1 className="text-base font-bold text-slate-900 tracking-tight font-mono">
+            {run.task_id}
+          </h1>
+          <span
+            className={`text-[10px] uppercase font-mono px-2.5 py-0.5 rounded-full font-bold border inline-flex items-center gap-1 ${
+              isPassed
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                : isFailed
+                ? 'bg-rose-50 text-rose-700 border-rose-200'
+                : 'bg-indigo-50 text-indigo-700 border-indigo-200'
+            }`}
+          >
+            {isPassed ? 'PASSED' : isFailed ? 'FAILED' : run.status}
+          </span>
+          <div className="flex items-center gap-1 text-xs font-mono text-slate-400">
             <button
               type="button"
               onClick={handleCopyId}
-              className="p-0.5 hover:text-text-primary text-text-muted"
-              title="Copy ID"
+              className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-700 cursor-pointer transition-colors"
+              title="Copy Run ID"
             >
-              <IonIcon icon={copyOutline} className="text-xs" />
+              <Copy className="w-3 h-3" />
+              <span>{copied ? 'Copied!' : run.run_id.slice(0, 10)}</span>
             </button>
-            {copied && <span className="text-[10px] text-emerald-600 font-bold">Copied!</span>}
           </div>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
           {onCompareWith && (
             <button
               type="button"
               onClick={() => onCompareWith(run.run_id)}
-              className="px-3 py-1.5 rounded-xl bg-canvas border border-border-subtle text-xs font-bold text-text-primary hover:bg-surface-subtle transition-all flex items-center gap-1.5 cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 transition-colors cursor-pointer"
             >
-              <IonIcon icon={gitCompareOutline} className="text-xs text-brand-purple" />
-              <span>Compare Run</span>
+              <GitCompare className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Compare</span>
             </button>
           )}
 
           <button
             type="button"
             onClick={handleExportSFT}
-            className="px-3 py-1.5 rounded-xl bg-canvas border border-border-subtle text-xs font-bold text-text-primary hover:bg-surface-subtle transition-all flex items-center gap-1.5 cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 transition-colors cursor-pointer"
           >
-            <IonIcon icon={downloadOutline} className="text-xs text-brand-purple" />
-            <span>Export SFT JSON</span>
+            <Download className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Export SFT</span>
           </button>
 
           <button
             type="button"
             onClick={handleDownloadReport}
-            className="px-3 py-1.5 rounded-xl bg-surface-subtle border border-border-subtle text-xs font-bold text-brand-purple hover:bg-purple-100 transition-all flex items-center gap-1.5 cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-black transition-colors shadow-xs cursor-pointer"
           >
-            <IonIcon icon={documentTextOutline} className="text-xs" />
-            <span>Download Audit Report</span>
+            <FileText className="w-3.5 h-3.5" />
+            <span>Download Report</span>
           </button>
 
           {onDeleteRun && (
             <button
               type="button"
               onClick={() => setShowDeleteModal(true)}
-              className="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 text-xs font-semibold transition-colors cursor-pointer"
             >
-              <IonIcon icon={trashOutline} className="text-xs pointer-events-none" />
-              <span>Delete Run</span>
+              <Trash2 className="w-3.5 h-3.5 pointer-events-none" />
+              <span>Delete</span>
             </button>
           )}
         </div>
       </div>
 
       {/* 2. Executive KPI Ribbon */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 shrink-0">
         <div className="bg-white p-4 rounded-xl border border-border-subtle shadow-sm space-y-1">
-          <div className="text-[11px] text-text-muted font-medium flex items-center justify-between">
+          <div className="text-[11px] text-slate-500 font-medium flex items-center justify-between">
             <span>Score / Verdict</span>
-            <IonIcon
-              icon={isPassed ? checkmarkCircle : closeCircle}
-              className={`text-xs ${isPassed ? 'text-status-cleared' : 'text-risk-high'}`}
-            />
+            {isPassed ? (
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+            ) : (
+              <XCircle className="w-3.5 h-3.5 text-rose-600" />
+            )}
           </div>
-          <div className={`text-xl font-bold font-mono ${isPassed ? 'text-emerald-700' : 'text-rose-700'}`}>
-            {run.reward !== null ? `${run.reward.toFixed(1)}/1.0` : '—'}
+          <div className="flex items-center justify-between">
+            <div className={`text-xl font-bold font-mono ${isPassed ? 'text-emerald-700' : 'text-rose-700'}`}>
+              {run.reward !== null ? `${run.reward.toFixed(1)}/1.0` : '—'}
+            </div>
+            {isFailed ? (
+              <button
+                type="button"
+                onClick={() => handleOverrideOverallOutcome(true)}
+                className="text-[10px] text-emerald-700 hover:underline font-bold cursor-pointer"
+              >
+                Mark Pass
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => handleOverrideOverallOutcome(false)}
+                className="text-[10px] text-rose-700 hover:underline font-bold cursor-pointer"
+              >
+                Mark Fail
+              </button>
+            )}
           </div>
-          <div className="text-[10px] text-text-secondary truncate">
+          <div className="text-[10px] text-slate-500 truncate">
             {isPassed ? 'Held-out tests passed' : 'Verifier assertions failed'}
           </div>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-border-subtle shadow-sm space-y-1">
-          <div className="text-[11px] text-text-muted font-medium flex items-center justify-between">
+          <div className="text-[11px] text-slate-500 font-medium flex items-center justify-between">
             <span>Model Evaluated</span>
-            <IonIcon icon={sparklesOutline} className="text-brand-purple text-xs" />
+            <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
           </div>
-          <div className="text-sm font-bold font-mono text-text-primary truncate">{run.model}</div>
-          <div className="text-[10px] text-text-secondary uppercase">{run.provider} provider</div>
+          <div className="text-sm font-bold font-mono text-slate-900 truncate">{run.model}</div>
+          <div className="text-[10px] text-slate-500 uppercase">{run.provider} provider</div>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-border-subtle shadow-sm space-y-1">
-          <div className="text-[11px] text-text-muted font-medium flex items-center justify-between">
+          <div className="text-[11px] text-slate-500 font-medium flex items-center justify-between">
             <span>Duration</span>
-            <IonIcon icon={timeOutline} className="text-accent-orange text-xs" />
+            <Clock className="w-3.5 h-3.5 text-amber-600" />
           </div>
-          <div className="text-xl font-bold font-mono text-text-primary">{run.total_duration_sec.toFixed(1)}s</div>
-          <div className="text-[10px] text-text-secondary">Across {run.total_steps || steps.length} turns</div>
+          <div className="text-xl font-bold font-mono text-slate-900">{run.total_duration_sec.toFixed(1)}s</div>
+          <div className="text-[10px] text-slate-500">Across {run.total_steps || steps.length} turns</div>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-border-subtle shadow-sm space-y-1">
-          <div className="text-[11px] text-text-muted font-medium flex items-center justify-between">
+          <div className="text-[11px] text-slate-500 font-medium flex items-center justify-between">
             <span>Total Tokens</span>
-            <IonIcon icon={layersOutline} className="text-text-muted text-xs" />
+            <Layers className="w-3.5 h-3.5 text-slate-400" />
           </div>
-          <div className="text-xl font-bold font-mono text-text-primary">
+          <div className="text-xl font-bold font-mono text-slate-900">
             {run.total_tokens?.toLocaleString() || 0}
           </div>
-          <div className="text-[10px] text-text-secondary font-mono">
+          <div className="text-[10px] text-slate-500 font-mono">
             ~{Math.round((run.total_tokens || 0) / Math.max(1, steps.length))} tok/turn
           </div>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-border-subtle shadow-sm space-y-1">
-          <div className="text-[11px] text-text-muted font-medium flex items-center justify-between">
+          <div className="text-[11px] text-slate-500 font-medium flex items-center justify-between">
             <span>Est. Cost</span>
-            <IonIcon icon={cashOutline} className="text-emerald-600 text-xs" />
+            <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
           </div>
           <div className="text-xl font-bold font-mono text-emerald-700">
             ${run.estimated_cost_usd?.toFixed(4) || '0.0000'}
           </div>
-          <div className="text-[10px] text-text-secondary">API token billing</div>
+          <div className="text-[10px] text-slate-500">API token billing</div>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-border-subtle shadow-sm space-y-1">
-          <div className="text-[11px] text-text-muted font-medium flex items-center justify-between">
+          <div className="text-[11px] text-slate-500 font-medium flex items-center justify-between">
             <span>Safety Judges</span>
-            <IonIcon icon={shieldCheckmarkOutline} className="text-brand-purple text-xs" />
+            <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
           </div>
-          <div className="text-xl font-bold font-mono text-brand-purple">
+          <div className="text-xl font-bold font-mono text-indigo-600">
             {(run.audit_verdicts || []).filter((v) => v.passed).length}/{(run.audit_verdicts || []).length || 3}
           </div>
-          <div className="text-[10px] text-text-secondary">Audits cleared</div>
+          <div className="text-[10px] text-slate-500">Audits cleared</div>
         </div>
       </div>
 
-      {/* 3. Navigation Tabs */}
-      <div className="bg-white p-1.5 rounded-2xl border border-border-subtle shadow-sm flex items-center gap-1 text-xs font-bold overflow-x-auto">
+      {/* 3. Navigation Tabs (Un-squishable, shrink-0, sticky for easy tab switching while scrolling) */}
+      <div className="bg-white/95 backdrop-blur-xs p-1.5 rounded-2xl border border-border-subtle shadow-sm flex items-center gap-1.5 text-xs font-semibold overflow-x-auto shrink-0 sticky top-0 z-20">
         {[
-          { id: 'trajectory', label: `Trajectory Trace (${steps.length} Turns)`, icon: terminalOutline },
-          { id: 'judges', label: `Safety & Alignment Audits (${run.audit_verdicts?.length || 0})`, icon: shieldCheckmarkOutline },
-          { id: 'verifier', label: 'Held-Out Verifier Output', icon: checkmarkCircle },
-          { id: 'diffs', label: `Code Mutations (${mutatedFiles.length})`, icon: codeSlashOutline },
-          { id: 'report', label: 'Safety Audit Report', icon: documentTextOutline },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setActiveTab(tab.id as any)}
-            className={`px-4 py-2 rounded-xl flex items-center gap-2 whitespace-nowrap transition-all cursor-pointer ${
-              activeTab === tab.id
-                ? 'bg-dark-base text-white shadow-sm'
-                : 'text-text-secondary hover:text-text-primary hover:bg-canvas'
-            }`}
-          >
-            <IonIcon icon={tab.icon} className="text-xs" />
-            <span>{tab.label}</span>
-          </button>
-        ))}
+          { id: 'trajectory', label: `Trajectory Trace (${steps.length} Turns)`, icon: Terminal },
+          { id: 'judges', label: `Safety & Alignment Audits (${run.audit_verdicts?.length || 0})`, icon: ShieldCheck },
+          { id: 'verifier', label: 'Held-Out Verifier Output', icon: CheckCircle2 },
+          { id: 'diffs', label: `Code Mutations (${mutatedFiles.length})`, icon: Code2 },
+          { id: 'report', label: 'Safety Audit Report', icon: FileText },
+        ].map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`px-3.5 py-2 rounded-xl flex items-center gap-2 whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
+                isActive
+                  ? 'bg-slate-900 text-white shadow-xs font-semibold'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50 font-medium'
+              }`}
+            >
+              <Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-white' : 'text-slate-500'}`} />
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* 4. Tab Content Panels */}
@@ -477,14 +475,14 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
           {/* Left Column: Turn Master List (4 Cols) */}
           <div className="lg:col-span-4 bg-white p-4 rounded-2xl border border-border-subtle shadow-sm space-y-3">
             <div className="flex items-center justify-between pb-2 border-b border-border-subtle">
-              <h3 className="text-xs font-bold text-text-primary uppercase tracking-wider font-mono">
+              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider font-mono">
                 Execution Steps
               </h3>
-              <span className="text-[11px] font-mono text-text-muted">{steps.length} turns</span>
+              <span className="text-[11px] font-mono text-slate-500">{steps.length} turns</span>
             </div>
 
             {steps.length === 0 ? (
-              <div className="p-8 text-center text-text-muted text-xs font-mono">No steps recorded in this run.</div>
+              <div className="p-8 text-center text-slate-400 text-xs font-mono">No steps recorded in this run.</div>
             ) : (
               <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1">
                 {steps.map((step, idx) => {
@@ -496,34 +494,37 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
                     <div
                       key={step.step_number}
                       onClick={() => setSelectedStepIdx(idx)}
-                      className={`p-3 rounded-xl border transition-all cursor-pointer space-y-1.5 ${
+                      className={`p-3.5 rounded-xl border transition-all cursor-pointer space-y-1.5 ${
                         isSelected
-                          ? 'bg-purple-50/70 border-brand-purple shadow-sm ring-1 ring-brand-purple/20'
-                          : 'bg-canvas/50 border-border-subtle hover:bg-canvas hover:border-border-subtle/80'
+                          ? 'bg-indigo-50/70 border-l-4 border-l-indigo-600 border-indigo-200 shadow-xs'
+                          : 'bg-white border-slate-200 hover:bg-slate-50/80 border-l-4 border-l-transparent'
                       }`}
                     >
                       <div className="flex items-center justify-between text-xs">
                         <div className="flex items-center gap-1.5">
-                          <span className="font-mono font-bold text-brand-purple px-1.5 py-0.2 rounded bg-surface-subtle text-[10px]">
+                          <span className={`font-mono font-bold px-1.5 py-0.5 rounded text-[10px] ${
+                            isBlocked ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-700'
+                          }`}>
                             #{step.step_number}
                           </span>
-                          <span className="font-mono font-bold text-text-primary text-[11px]">
+                          <span className="font-mono font-bold text-slate-900 text-[11px]">
                             {isFinish ? 'Finish' : step.action.tool}
                           </span>
                         </div>
 
                         {isBlocked ? (
-                          <span className="text-[9px] uppercase px-1.5 py-0.2 rounded font-bold bg-rose-100 text-rose-800">
+                          <span className="text-[9px] uppercase px-1.5 py-0.5 rounded font-bold bg-rose-50 text-rose-700 border border-rose-200">
                             Blocked
                           </span>
                         ) : (
-                          <span className="text-[10px] font-mono text-text-muted">
-                            {step.latency_ms?.toFixed(0) || 0}ms
+                          <span className="inline-flex items-center gap-1 text-[10px] font-mono text-slate-500 bg-slate-50 px-2 py-0.5 rounded-full border border-slate-200">
+                            <span>{step.latency_ms?.toFixed(0) || 0}ms</span>
+                            {step.tokens_used ? <span>• {step.tokens_used} tok</span> : null}
                           </span>
                         )}
                       </div>
 
-                      <p className="text-[11px] text-text-secondary line-clamp-2 leading-relaxed font-sans">
+                      <p className="text-[11px] text-slate-600 line-clamp-2 leading-relaxed font-sans">
                         {step.thought || (step.action.command ? `$ ${step.action.command}` : 'No reasoning text.')}
                       </p>
                     </div>
@@ -539,27 +540,32 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
               <>
                 <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-text-primary font-mono">
+                    <span className="text-sm font-bold text-slate-900 font-mono">
                       Turn #{selectedStep.step_number}: {selectedStep.action.tool}
                     </span>
                     {selectedStep.firewall_blocked && (
-                      <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-rose-100 text-rose-800">
-                        Safety Firewall Intercepted
+                      <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                        Safety Intercepted
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-3 font-mono text-xs text-text-muted">
-                    <span>{selectedStep.latency_ms?.toFixed(0) || 0}ms latency</span>
-                    <span>{selectedStep.tokens_used || 0} tokens</span>
+                  <div className="flex items-center gap-2 font-mono text-xs text-slate-500">
+                    <span className="inline-flex items-center gap-1 text-[11px] font-mono text-slate-600 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">
+                      <Clock className="w-3 h-3 text-slate-400" />
+                      <span>{selectedStep.latency_ms?.toFixed(0) || 0}ms</span>
+                      <span>•</span>
+                      <Sparkles className="w-3 h-3 text-indigo-500" />
+                      <span>{selectedStep.tokens_used || 0} tok</span>
+                    </span>
                   </div>
                 </div>
 
                 {/* Safety Firewall Interception Banner */}
                 {(selectedStep.firewall_blocked || selectedStep.action?.firewall_blocked) && (
-                  <div className="p-4 rounded-xl bg-rose-50 border border-rose-300 text-xs text-rose-900 space-y-1">
+                  <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-900 space-y-1">
                     <div className="flex items-center gap-1.5 font-bold font-mono text-rose-700">
-                      <IonIcon icon={shieldOutline} className="text-rose-600 text-sm" />
-                      <span>⚠️ BLOCKED BY APPROVAL POLICY FIREWALL</span>
+                      <ShieldAlert className="w-4 h-4 text-rose-600" />
+                      <span>BLOCKED BY DETERMINISTIC POLICY GATEWAY</span>
                     </div>
                     <p className="text-xs text-rose-800 leading-tight">
                       {selectedStep.firewall_reason ||
@@ -571,11 +577,11 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
 
                 {/* Agent Reasoning */}
                 <div className="space-y-2">
-                  <div className="text-[10px] font-mono uppercase font-bold tracking-wider text-text-muted flex items-center gap-1">
-                    <IonIcon icon={chevronForwardOutline} className="text-brand-purple text-xs" />
+                  <div className="text-[10px] font-mono uppercase font-bold tracking-wider text-slate-500 flex items-center gap-1">
+                    <ChevronRight className="w-3.5 h-3.5 text-indigo-600" />
                     Agent Inner Reasoning & Planning
                   </div>
-                  <div className="p-4 rounded-xl bg-canvas border border-border-subtle text-xs text-text-primary leading-relaxed whitespace-pre-wrap font-sans">
+                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 leading-relaxed whitespace-pre-wrap font-sans">
                     {selectedStep.thought || 'No explicit thought string provided.'}
                   </div>
                 </div>
@@ -583,12 +589,23 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
                 {/* Action Execution */}
                 {selectedStep.action.command && (
                   <div className="space-y-2">
-                    <div className="text-[10px] font-mono uppercase font-bold tracking-wider text-accent-orange flex items-center gap-1">
-                      <IonIcon icon={terminalOutline} className="text-xs" />
-                      Executed Shell Command (Sandbox)
+                    <div className="flex items-center justify-between">
+                      <div className="text-[10px] font-mono uppercase font-bold tracking-wider text-amber-700 flex items-center gap-1">
+                        <Terminal className="w-3.5 h-3.5 text-amber-600" />
+                        Executed Shell Command (Sandbox)
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => copyBlock(selectedStep.action.command || '', 'cmd')}
+                        className="flex items-center gap-1 text-[11px] font-mono text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded transition-colors cursor-pointer"
+                        title="Copy command"
+                      >
+                        {copiedBlockId === 'cmd' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                        <span>{copiedBlockId === 'cmd' ? 'Copied' : 'Copy'}</span>
+                      </button>
                     </div>
-                    <pre className="p-4 rounded-xl bg-[#14121F] text-emerald-400 font-mono text-xs overflow-x-auto">
-                      <span className="text-slate-500 select-none">$ </span>
+                    <pre className="p-3.5 rounded-xl bg-slate-950 text-slate-100 font-mono text-xs border border-slate-800 select-text overflow-x-auto">
+                      <span className="text-emerald-400 select-none font-bold">$ </span>
                       {selectedStep.action.command}
                     </pre>
                   </div>
@@ -597,12 +614,25 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
                 {/* Action: Write File */}
                 {selectedStep.action.tool === 'write_file' && selectedStep.action.path && (
                   <div className="space-y-2">
-                    <div className="text-[10px] font-mono uppercase font-bold tracking-wider text-brand-purple flex items-center gap-1">
-                      <IonIcon icon={codeSlashOutline} className="text-xs" />
-                      File Written: {selectedStep.action.path}
+                    <div className="flex items-center justify-between">
+                      <div className="text-[10px] font-mono uppercase font-bold tracking-wider text-indigo-700 flex items-center gap-1">
+                        <Code2 className="w-3.5 h-3.5 text-indigo-600" />
+                        File Written: {selectedStep.action.path}
+                      </div>
+                      {selectedStep.action.content && (
+                        <button
+                          type="button"
+                          onClick={() => copyBlock(selectedStep.action.content || '', 'file-content')}
+                          className="flex items-center gap-1 text-[11px] font-mono text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded transition-colors cursor-pointer"
+                          title="Copy file content"
+                        >
+                          {copiedBlockId === 'file-content' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                          <span>{copiedBlockId === 'file-content' ? 'Copied' : 'Copy'}</span>
+                        </button>
+                      )}
                     </div>
                     {selectedStep.action.content && (
-                      <pre className="p-4 rounded-xl bg-[#14121F] text-slate-200 font-mono text-xs overflow-x-auto max-h-64 whitespace-pre-wrap">
+                      <pre className="p-3.5 rounded-xl bg-slate-950 text-slate-200 font-mono text-xs border border-slate-800 select-text overflow-x-auto max-h-64 whitespace-pre-wrap">
                         {selectedStep.action.content}
                       </pre>
                     )}
@@ -612,8 +642,8 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
                 {/* Action: Finish Summary */}
                 {selectedStep.action.tool === 'finish' && (
                   <div className="space-y-2">
-                    <div className="text-[10px] font-mono uppercase font-bold tracking-wider text-status-cleared flex items-center gap-1">
-                      <IonIcon icon={checkmarkCircle} className="text-xs" />
+                    <div className="text-[10px] font-mono uppercase font-bold tracking-wider text-emerald-700 flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                       Final Agent Resolution Declaration
                     </div>
                     <div className="p-4 rounded-xl bg-emerald-50/60 border border-emerald-200 text-xs text-emerald-900 leading-relaxed whitespace-pre-wrap font-sans">
@@ -625,18 +655,29 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
                 {/* Sandbox Observation */}
                 {selectedStep.observation && (
                   <div className="space-y-2">
-                    <div className="text-[10px] font-mono uppercase font-bold tracking-wider text-text-muted flex items-center gap-1">
-                      <IonIcon icon={terminalOutline} className="text-xs" />
-                      Container Sandbox Stdout / Stderr
+                    <div className="flex items-center justify-between">
+                      <div className="text-[10px] font-mono uppercase font-bold tracking-wider text-slate-500 flex items-center gap-1">
+                        <Terminal className="w-3.5 h-3.5 text-slate-500" />
+                        Container Sandbox Stdout / Stderr
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => copyBlock(selectedStep.observation || '', 'obs')}
+                        className="flex items-center gap-1 text-[11px] font-mono text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded transition-colors cursor-pointer"
+                        title="Copy stdout / stderr"
+                      >
+                        {copiedBlockId === 'obs' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                        <span>{copiedBlockId === 'obs' ? 'Copied' : 'Copy'}</span>
+                      </button>
                     </div>
-                    <pre className="p-4 rounded-xl bg-[#14121F] text-slate-300 font-mono text-xs overflow-x-auto max-h-56 whitespace-pre-wrap leading-relaxed">
+                    <pre className="p-3.5 rounded-xl bg-slate-950 text-slate-200 font-mono text-xs border border-slate-800 select-text overflow-x-auto max-h-56 whitespace-pre-wrap leading-relaxed">
                       {selectedStep.observation}
                     </pre>
                   </div>
                 )}
               </>
             ) : (
-              <div className="p-12 text-center text-text-muted text-xs">Select a step on the left to inspect.</div>
+              <div className="p-12 text-center text-slate-400 text-xs font-mono">Select a step on the left to inspect.</div>
             )}
           </div>
         </div>
@@ -698,19 +739,21 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
           <div className="bg-white p-6 rounded-2xl border border-border-subtle shadow-sm space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
               <div>
-                <h3 className="text-sm font-bold text-text-primary">Held-Out Verifier Diagnostics</h3>
-                <p className="text-xs text-text-secondary mt-0.5">Automated test harness assertions executed inside container</p>
+                <h3 className="text-sm font-bold text-slate-900 font-mono">Held-Out Verifier Diagnostics</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Automated test harness assertions executed inside container</p>
               </div>
               <span
-                className={`px-3 py-1 rounded-full text-xs font-mono font-bold ${
-                  isPassed ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                className={`px-3 py-1 rounded-full text-xs font-mono font-bold border inline-flex items-center gap-1 ${
+                  isPassed
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : 'bg-rose-50 text-rose-700 border-rose-200'
                 }`}
               >
                 {isPassed ? 'ALL ASSERTIONS PASSED (1.0)' : 'VERIFIER ASSERTION FAILED (0.0)'}
               </span>
             </div>
 
-            <pre className="p-4 rounded-xl bg-[#14121F] text-slate-200 font-mono text-xs overflow-x-auto whitespace-pre-wrap leading-relaxed max-h-[400px]">
+            <pre className="p-4 rounded-xl bg-slate-950 text-slate-100 font-mono text-xs border border-slate-800 overflow-x-auto whitespace-pre-wrap leading-relaxed max-h-[400px]">
               {run.failure_reason || (isPassed ? '=== 1 passed ===\n\nAll test harness assertions verified.' : 'No diagnostic trace provided.')}
             </pre>
           </div>
@@ -720,12 +763,12 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
             <div className="bg-white p-6 rounded-2xl border border-border-subtle shadow-sm space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-purple-50 text-brand-purple flex items-center justify-center">
-                    <IonIcon icon={documentTextOutline} className="text-lg" />
+                  <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                    <FileText className="w-4 h-4" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-text-primary">RAG Grounding & Knowledge Retrieval Inspector</h3>
-                    <p className="text-xs text-text-secondary">Evaluates document citations and root-cause alignment against incident playbooks</p>
+                    <h3 className="text-sm font-bold text-slate-900 font-mono">RAG Grounding & Knowledge Retrieval Inspector</h3>
+                    <p className="text-xs text-slate-500">Evaluates document citations and root-cause alignment against incident playbooks</p>
                   </div>
                 </div>
                 <span className="text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
@@ -734,14 +777,14 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-sans">
-                <div className="p-4 rounded-xl bg-canvas border border-border-subtle space-y-2">
-                  <span className="text-[10px] font-mono uppercase font-bold text-text-muted">
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+                  <span className="text-[10px] font-mono uppercase font-bold text-slate-500">
                     📖 Ground-Truth Playbook Target
                   </span>
-                  <div className="font-mono text-xs text-text-primary font-bold">
+                  <div className="font-mono text-xs text-slate-900 font-bold">
                     /app/manuals/incident_playbook.md
                   </div>
-                  <div className="text-xs text-text-secondary leading-relaxed bg-white p-2.5 rounded-lg border border-border-subtle font-mono text-[11px]">
+                  <div className="text-xs text-slate-700 leading-relaxed bg-white p-2.5 rounded-lg border border-slate-200 font-mono text-[11px]">
                     <strong>Section:</strong> PLAYBOOK-SEC-402-CONCURRENCY<br />
                     <strong>Fault:</strong> Connection timeout inheritance in PoolManager<br />
                     <strong>Remediation:</strong> Explicit connect/read timeout & try/finally release
@@ -770,24 +813,24 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
       {/* TAB 4: CODE MUTATIONS & FILE DIFFS */}
       {activeTab === 'diffs' && (
         <div className="bg-white p-6 rounded-2xl border border-border-subtle shadow-sm space-y-4">
-          <h3 className="text-sm font-bold text-text-primary">File Mutations Generated by Agent</h3>
+          <h3 className="text-sm font-bold text-slate-900 font-mono">File Mutations Generated by Agent</h3>
 
           {mutatedFiles.length === 0 ? (
-            <div className="p-8 text-center text-text-muted text-xs font-mono">
+            <div className="p-8 text-center text-slate-400 text-xs font-mono">
               No files were written or mutated during this run.
             </div>
           ) : (
             <div className="space-y-4">
               {mutatedFiles.map((step) => (
-                <div key={step.step_number} className="p-4 rounded-xl bg-canvas border border-border-subtle space-y-2">
+                <div key={step.step_number} className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
                   <div className="flex items-center justify-between text-xs font-mono">
-                    <span className="font-bold text-brand-purple">
+                    <span className="font-bold text-indigo-700">
                       Turn #{step.step_number}: {step.action.path}
                     </span>
-                    <span className="text-text-muted">{step.action.content?.length || 0} bytes</span>
+                    <span className="text-slate-500">{step.action.content?.length || 0} bytes</span>
                   </div>
 
-                  <pre className="p-4 rounded-xl bg-[#14121F] text-slate-200 font-mono text-xs overflow-x-auto whitespace-pre-wrap max-h-72">
+                  <pre className="p-3.5 rounded-xl bg-slate-950 text-slate-100 font-mono text-xs border border-slate-800 overflow-x-auto whitespace-pre-wrap max-h-72 select-text">
                     {step.action.content}
                   </pre>
                 </div>
@@ -802,21 +845,21 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
         <div className="bg-white p-6 rounded-2xl border border-border-subtle shadow-sm space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
             <div>
-              <h3 className="text-sm font-bold text-text-primary">Safety Audit Report (Markdown)</h3>
-              <p className="text-xs text-text-secondary mt-0.5">Exportable compliance artifact for red-teaming and safety review</p>
+              <h3 className="text-sm font-bold text-slate-900 font-mono">Safety Audit Report (Markdown)</h3>
+              <p className="text-xs text-slate-500 mt-0.5">Exportable compliance artifact for red-teaming and safety review</p>
             </div>
             <button
               type="button"
               onClick={handleDownloadReport}
-              className="px-3.5 py-1.5 rounded-xl bg-dark-base text-white text-xs font-bold flex items-center gap-1.5 hover:bg-black"
+              className="px-3.5 py-1.5 rounded-xl bg-slate-900 text-white text-xs font-semibold flex items-center gap-1.5 hover:bg-black transition-colors cursor-pointer"
             >
-              <IonIcon icon={downloadOutline} className="text-xs" />
+              <Download className="w-3.5 h-3.5" />
               <span>Download Report (.md)</span>
             </button>
           </div>
 
-          <div className="p-5 rounded-xl bg-canvas border border-border-subtle font-mono text-xs text-text-primary space-y-3 leading-relaxed">
-            <div className="font-bold text-sm text-text-primary">
+          <div className="p-5 rounded-xl bg-slate-50 border border-slate-200 font-mono text-xs text-slate-900 space-y-3 leading-relaxed select-text">
+            <div className="font-bold text-sm text-slate-900">
               # 🛡️ OpenEval Safety Audit & Verification Report
             </div>
             <div><strong>Task:</strong> {run.task_id}</div>
@@ -826,15 +869,15 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
             <div><strong>Duration:</strong> {run.total_duration_sec.toFixed(2)}s ({steps.length} turns)</div>
             <div><strong>Tokens & Cost:</strong> {run.total_tokens?.toLocaleString()} tok (${run.estimated_cost_usd?.toFixed(4)})</div>
 
-            <div className="pt-3 border-t border-border-subtle">
-              <div className="font-bold text-xs text-text-primary mb-1">## Verifier Outcome:</div>
-              <div className="p-3 bg-white rounded-lg border border-border-subtle">
+            <div className="pt-3 border-t border-slate-200">
+              <div className="font-bold text-xs text-slate-900 mb-1">## Verifier Outcome:</div>
+              <div className="p-3 bg-white rounded-lg border border-slate-200">
                 {run.failure_reason || '=== 1 passed === (Held-out verifier satisfied)'}
               </div>
             </div>
 
-            <div className="pt-3 border-t border-border-subtle">
-              <div className="font-bold text-xs text-text-primary mb-1">## Safety Judgments:</div>
+            <div className="pt-3 border-t border-slate-200">
+              <div className="font-bold text-xs text-slate-900 mb-1">## Safety Judgments:</div>
               <ul className="list-disc pl-5 space-y-1">
                 {(run.audit_verdicts || []).map((v) => (
                   <li key={v.metric_name}>
@@ -850,7 +893,7 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
       {/* Delete Confirmation Modal Popup */}
       {showDeleteModal && (
         <div
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn"
+          className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fadeIn"
           onClick={() => setShowDeleteModal(false)}
         >
           <div
@@ -858,30 +901,30 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 flex items-center justify-center flex-shrink-0">
-                <IonIcon icon={trashOutline} className="text-xl text-rose-600" />
+              <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5 text-rose-600" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-text-primary">Delete Evaluation Run?</h3>
-                <p className="text-xs text-text-secondary">This action is permanent and cannot be undone.</p>
+                <h3 className="text-base font-bold text-slate-900">Delete Evaluation Run?</h3>
+                <p className="text-xs text-slate-500">This action is permanent and cannot be undone.</p>
               </div>
             </div>
 
-            <div className="p-3 rounded-xl bg-canvas border border-border-subtle text-xs space-y-1 font-mono">
-              <div><span className="text-text-muted">Run ID:</span> <strong className="text-text-primary">{run.run_id}</strong></div>
-              <div><span className="text-text-muted">Task:</span> <strong className="text-text-primary">{run.task_id}</strong></div>
-              <div><span className="text-text-muted">Model:</span> <strong className="text-text-primary">{run.model}</strong></div>
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1 font-mono">
+              <div><span className="text-slate-500">Run ID:</span> <strong className="text-slate-900">{run.run_id}</strong></div>
+              <div><span className="text-slate-500">Task:</span> <strong className="text-slate-900">{run.task_id}</strong></div>
+              <div><span className="text-slate-500">Model:</span> <strong className="text-slate-900">{run.model}</strong></div>
             </div>
 
-            <p className="text-xs text-text-secondary leading-relaxed">
+            <p className="text-xs text-slate-600 leading-relaxed">
               Deleting this run will permanently purge all execution trajectory turns, tool outputs, and LLM judge audit verdicts from memory and disk logs.
             </p>
 
-            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-border-subtle">
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
               <button
                 type="button"
                 onClick={() => setShowDeleteModal(false)}
-                className="px-4 py-2 rounded-xl bg-canvas border border-border-subtle text-text-secondary text-xs font-bold hover:bg-surface-subtle transition-colors cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 text-xs font-semibold hover:bg-slate-200 transition-colors cursor-pointer"
               >
                 Cancel
               </button>
@@ -892,7 +935,7 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
                   setShowDeleteModal(false);
                   onBack();
                 }}
-                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold transition-colors shadow-xs cursor-pointer"
               >
                 Delete Run
               </button>

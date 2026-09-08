@@ -1,0 +1,23 @@
+repos:
+  - repo: local
+    hooks:
+      - id: pyright
+        name: Pyright
+        entry: uv run pyright
+        language: system
+        types: [python]
+        stages: [pre-commit]
+
+      - id: ruff-lint
+        name: Ruff lint
+        entry: uv run ruff check --fix-only
+        language: system
+        types: [python]
+        stages: [pre-commit]
+
+      - id: ruff-format
+        name: Ruff format
+        entry: uv run ruff format
+        language: system
+        types: [python]
+        stages: [pre-commit]

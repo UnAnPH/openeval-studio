@@ -125,8 +125,11 @@ class DuckDBTraceEngine:
     def query(self, sql: str) -> list[dict[str, Any]]:
         """Execute arbitrary analytical SQL query."""
         try:
-            df = self.con.execute(sql).df()
-            return df.to_dict(orient="records")  # type: ignore[no-any-return]
+            cur = self.con.execute(sql)
+            if not cur.description:
+                return []
+            cols = [desc[0] for desc in cur.description]
+            return [dict(zip(cols, row, strict=False)) for row in cur.fetchall()]
         except Exception as exc:
             logger.error("SQL query error: %s", exc)
             return []

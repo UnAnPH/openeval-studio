@@ -174,7 +174,6 @@ MODEL_CATALOG: list[ModelSpec] = [
         output_cost_per_m=0.25,
         capabilities=["balanced", "reasoning", "open_weights"],
     ),
-
     # =========================================================================
     # OPENAI FRONTIER MODELS
     # =========================================================================
@@ -227,7 +226,6 @@ MODEL_CATALOG: list[ModelSpec] = [
         output_cost_per_m=4.40,
         capabilities=["deep_reasoning", "math", "coding"],
     ),
-
     # =========================================================================
     # ANTHROPIC CLAUDE MODELS
     # =========================================================================
@@ -267,7 +265,6 @@ MODEL_CATALOG: list[ModelSpec] = [
         output_cost_per_m=4.00,
         capabilities=["fast", "agentic", "tool_use"],
     ),
-
     # =========================================================================
     # LOCAL OPEN-SOURCE MODELS
     # =========================================================================

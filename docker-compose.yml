@@ -1,0 +1,33 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - OPENEVAL_WATCHER_USE_LLM=${OPENEVAL_WATCHER_USE_LLM:-0}
+      - WATCHER_STORAGE_DIR=/data/watcher
+      - WATCHER_WEBHOOK_URL=${WATCHER_WEBHOOK_URL:-}
+      - OPENEVAL_API_KEY=${OPENEVAL_API_KEY:-}
+    volumes:
+      - watcher-data:/data/watcher
+      - ./tasks:/app/tasks:ro
+    command: ["uv", "run", "uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "8000"]
+
+  ui:
+    image: node:20-alpine
+    working_dir: /ui
+    volumes:
+      - ./ui:/ui
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_PROXY=http://api:8000
+    command: ["sh", "-c", "npm install && npm run dev -- --host 0.0.0.0 --port 5173"]
+    depends_on:
+      - api
+
+volumes:
+  watcher-data:

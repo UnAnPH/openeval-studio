@@ -5,14 +5,29 @@ import {
 import {
   gitCompareOutline,
   gridOutline,
-  shieldCheckmarkOutline,
-  terminalOutline,
   folderOpenOutline,
-  bookOutline,
   chevronBackOutline,
   chevronForwardOutline,
+  layersOutline,
+  playSharp,
+  flaskOutline,
+  fileTrayFullOutline,
+  shieldCheckmarkOutline,
+  optionsOutline,
 } from 'ionicons/icons';
 import { MainNavTab } from '../types';
+
+interface NavItem {
+  id: MainNavTab;
+  label: string;
+  icon: string;
+  isActive: boolean;
+}
+
+interface NavSection {
+  label: string;
+  items: NavItem[];
+}
 
 interface SidebarProps {
   activeTab: MainNavTab;
@@ -29,9 +44,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   onTabChange,
   serverConnected,
-  totalTasks,
-  totalRuns,
-  totalBlocked = 0,
+  totalTasks: _totalTasks,
+  totalRuns: _totalRuns,
+  totalBlocked: _totalBlocked,
 }) => {
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     try {
@@ -53,48 +68,76 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const isRunsActive = activeTab === 'runs' || activeTab === 'run_detail';
   const isDashboardActive = activeTab === 'dashboard' || activeTab === 'overview';
+  const isSessionsActive =
+    activeTab === 'sessions' || activeTab === 'incident_detail' || activeTab === 'transcripts';
   const isBenchmarksActive = activeTab === 'benchmarks' || activeTab === 'test_cases';
-  const isFirewallActive = activeTab === 'firewall' || activeTab === 'incident_detail';
+  const isControlActive = activeTab === 'control' || activeTab === 'firewall';
+  const isPolicyActive = activeTab === 'policy' || activeTab === 'watcher_live';
 
-  const navItems = [
+  const sections: NavSection[] = [
     {
-      id: 'overview' as MainNavTab,
-      label: 'Dashboard',
-      icon: gridOutline,
-      isActive: isDashboardActive,
+      label: 'Evaluate',
+      items: [
+        {
+          id: 'overview',
+          label: 'Overview',
+          icon: gridOutline,
+          isActive: isDashboardActive,
+        },
+        {
+          id: 'benchmarks',
+          label: 'Catalog',
+          icon: layersOutline,
+          isActive: isBenchmarksActive,
+        },
+        {
+          id: 'studio',
+          label: 'Launch',
+          icon: playSharp,
+          isActive: activeTab === 'studio',
+        },
+        {
+          id: 'runs',
+          label: 'Runs',
+          icon: folderOpenOutline,
+          isActive: isRunsActive,
+        },
+        {
+          id: 'compare',
+          label: 'Compare',
+          icon: gitCompareOutline,
+          isActive: activeTab === 'compare',
+        },
+        {
+          id: 'graders',
+          label: 'Judges',
+          icon: flaskOutline,
+          isActive: activeTab === 'graders',
+        },
+      ],
     },
     {
-      id: 'firewall' as MainNavTab,
-      label: 'Sessions',
-      icon: shieldCheckmarkOutline,
-      badge: totalBlocked ? `${totalBlocked}` : undefined,
-      isActive: isFirewallActive,
-    },
-    {
-      id: 'runs' as MainNavTab,
-      label: 'Evaluation Runs',
-      icon: folderOpenOutline,
-      badge: totalRuns ? `${totalRuns}` : undefined,
-      isActive: isRunsActive,
-    },
-    {
-      id: 'benchmarks' as MainNavTab,
-      label: 'Benchmarks',
-      icon: bookOutline,
-      badge: totalTasks ? `${totalTasks}` : undefined,
-      isActive: isBenchmarksActive,
-    },
-    {
-      id: 'studio' as MainNavTab,
-      label: 'Live Studio',
-      icon: terminalOutline,
-      isActive: activeTab === 'studio',
-    },
-    {
-      id: 'compare' as MainNavTab,
-      label: 'Compare Runs',
-      icon: gitCompareOutline,
-      isActive: activeTab === 'compare',
+      label: 'Safety',
+      items: [
+        {
+          id: 'control',
+          label: 'Control',
+          icon: shieldCheckmarkOutline,
+          isActive: isControlActive,
+        },
+        {
+          id: 'sessions',
+          label: 'Sessions',
+          icon: fileTrayFullOutline,
+          isActive: isSessionsActive,
+        },
+        {
+          id: 'policy',
+          label: 'Policy',
+          icon: optionsOutline,
+          isActive: isPolicyActive,
+        },
+      ],
     },
   ];
 
@@ -104,27 +147,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
         collapsed ? 'w-18' : 'w-60'
       } flex-shrink-0 bg-[#14121F] border-r border-[#221F33] flex flex-col justify-between h-screen sticky top-0 select-none z-40 text-slate-100 font-sans transition-all duration-200 ease-in-out`}
     >
-      {/* Top Section */}
-      <div className={`p-3 space-y-5 ${collapsed ? 'px-2' : 'p-4'}`}>
-        {/* Brand Header & Toggle */}
+      <div className={`p-3 space-y-4 ${collapsed ? 'px-2' : 'p-4'}`}>
         <div className={`flex items-center ${collapsed ? 'flex-col gap-3 justify-center' : 'justify-between px-1'} pt-1`}>
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#6B46C1] to-[#9F7AEA] flex items-center justify-center text-white shadow-md flex-shrink-0">
               <span className="font-mono font-bold text-base leading-none">⑂</span>
             </div>
             {!collapsed && (
-              <div>
-                <div className="font-bold text-sm text-white tracking-tight leading-tight whitespace-nowrap">
-                  OpenEval Studio
-                </div>
-                <div className="text-[10px] font-mono text-purple-300 font-medium whitespace-nowrap">
-                  AI Safety Observability
-                </div>
+              <div className="font-bold text-sm text-white tracking-tight leading-tight whitespace-nowrap">
+                OpenEval Studio
               </div>
             )}
           </div>
 
-          {/* Collapse / Expand Button */}
           <button
             type="button"
             onClick={toggleCollapsed}
@@ -135,58 +170,50 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
         </div>
 
-        {/* Navigation Items */}
-        <nav className="space-y-1.5 pt-1">
-          {navItems.map((item) => {
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => onTabChange(item.id)}
-                title={item.label}
-                className={`w-full flex items-center ${
-                  collapsed ? 'justify-center p-2.5' : 'justify-between px-3.5 py-2.5'
-                } rounded-xl text-xs font-medium transition-all cursor-pointer relative group ${
-                  item.isActive
-                    ? 'bg-[#2E2682] text-white font-bold shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-[#1C182E]'
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <IonIcon
-                    icon={item.icon}
-                    className={`text-base flex-shrink-0 ${item.isActive ? 'text-white' : 'text-slate-400 group-hover:text-white'}`}
-                  />
-                  {!collapsed && <span className="truncate">{item.label}</span>}
+        <nav className="space-y-4 pt-1">
+          {sections.map((section) => (
+            <div key={section.label} className="space-y-1">
+              {!collapsed ? (
+                <div className="px-3.5 py-1.5 rounded-md bg-[#1A1728] text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                  {section.label}
                 </div>
-
-                {/* Badge when expanded */}
-                {!collapsed && item.badge && (
-                  <span
-                    className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
+              ) : (
+                <div
+                  className="mx-auto w-6 border-t border-[#2B2644]"
+                  title={section.label}
+                  aria-label={section.label}
+                />
+              )}
+              <div className="space-y-1">
+                {section.items.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => onTabChange(item.id)}
+                    title={collapsed ? `${section.label}: ${item.label}` : item.label}
+                    className={`w-full flex items-center ${
+                      collapsed ? 'justify-center p-2.5' : 'justify-between px-3.5 py-2.5'
+                    } rounded-xl text-xs font-medium transition-all cursor-pointer relative group ${
                       item.isActive
-                        ? 'bg-white/20 text-white font-bold'
-                        : 'bg-[#221F33] text-slate-400'
+                        ? 'bg-[#2E2682] text-white font-bold shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-[#1C182E]'
                     }`}
                   >
-                    {item.badge}
-                  </span>
-                )}
-
-                {/* Mini Badge dot when collapsed */}
-                {collapsed && item.badge && (
-                  <span
-                    className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-brand-purple border border-[#14121F]"
-                    title={`${item.label}: ${item.badge}`}
-                  />
-                )}
-              </button>
-            );
-          })}
+                    <div className="flex items-center gap-2.5">
+                      <IonIcon
+                        icon={item.icon}
+                        className={`text-base flex-shrink-0 ${item.isActive ? 'text-white' : 'text-slate-400 group-hover:text-white'}`}
+                      />
+                      {!collapsed && <span className="truncate">{item.label}</span>}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
         </nav>
       </div>
 
-      {/* Bottom Status */}
       <div className={`p-3 border-t border-[#221F33] ${collapsed ? 'p-2 flex justify-center' : 'p-4'}`}>
         {!collapsed ? (
           <div className="flex items-center justify-between px-1 text-[11px] font-mono text-slate-400">

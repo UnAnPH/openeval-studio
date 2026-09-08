@@ -91,7 +91,15 @@ export interface RunRecord {
 export type MainNavTab =
   | 'dashboard'
   | 'overview'
+  | 'sessions'
+  | 'control'
+  | 'policy'
+  /** @deprecated use control */
   | 'firewall'
+  /** @deprecated use policy */
+  | 'watcher_live'
+  | 'transcripts'
+  | 'graders'
   | 'incident_detail'
   | 'runs'
   | 'run_detail'
@@ -156,7 +164,7 @@ export interface IncidentTurn {
   content?: string;
   thought?: string;
   tool?: string;
-  arguments?: Record<string, any>;
+  arguments?: Record<string, unknown>;
   observation?: string;
   is_blocked?: boolean;
   rule_violation_tag?: string;
@@ -175,6 +183,84 @@ export interface IncidentSessionDetail {
   working_directory: string;
   duration_sec: number;
   total_tokens: number;
+}
+
+export interface WatcherReviewRecord {
+  id: string;
+  session_id: string;
+  timestamp: string;
+  tool_name: string;
+  tool_input: string;
+  decision: 'allow' | 'warn' | 'block' | 'modify' | 'escalate';
+  score: number;
+  stage: 'rule' | 'threshold' | 'triage' | 'deep_review';
+  rule_name?: string | null;
+  explanation: string;
+  diff?: string | null;
+  latency_ms: number;
+}
+
+export interface WatcherSession {
+  session_id: string;
+  title?: string | null;
+  run_id?: string;
+  org_id: string;
+  project_name: string;
+  task_id?: string;
+  agent_type: 'antigravity' | 'claude_code' | 'cursor' | 'inspect_eval' | 're_act_agent' | 'custom';
+  model: string;
+  provider: string;
+  status: 'pending' | 'active' | 'working' | 'completed' | 'error' | 'cancelled' | 'parked';
+  working_dir?: string | null;
+  current_activity?: string | null;
+  trajectory: {
+    session_id: string;
+    messages: Array<{ role: string; content: string; thinking?: string; timestamp?: number }>;
+    tool_calls: Array<{ tool_id: string; tool_name: string; arguments: Record<string, unknown>; raw_input?: string; timestamp?: number }>;
+    tool_results: Array<{ tool_id: string; tool_name: string; stdout: string; stderr: string; exit_code: number; duration_ms: number; is_error: boolean }>;
+    reviews: WatcherReviewRecord[];
+  };
+  passed?: boolean | null;
+  reward?: number | null;
+  total_tokens: number;
+  total_duration_sec: number;
+  estimated_cost_usd: number;
+  failure_reason?: string | null;
+  final_summary?: string | null;
+  human_verdict_override?: 'PASS' | 'FAIL' | null;
+  human_notes?: string | null;
+  human_reviewer?: string | null;
+  audit_overrides?: Record<string, boolean>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WatcherCommandRule {
+  id: string;
+  category: 'git' | 'security' | 'fs' | string;
+  name: string;
+  pattern: string;
+  action: 'allow' | 'triage' | 'human' | 'deny' | 'off';
+  description: string;
+  is_custom: boolean;
+}
+
+export interface WatcherToolThreshold {
+  tool_name: string;
+  auto_approve: boolean;
+  escalate_ge?: number | null;
+  auto_deny_ge?: number | null;
+  always_escalate: boolean;
+  auto_approve_le?: number;
+}
+
+export interface WatcherPolicy {
+  policy_id: string;
+  name: string;
+  org_id: string;
+  posture: 'blocking' | 'trailing' | 'disabled';
+  command_rules: WatcherCommandRule[];
+  tool_thresholds: WatcherToolThreshold[];
 }
 
 

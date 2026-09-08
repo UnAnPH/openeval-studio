@@ -15,15 +15,20 @@ import {
   terminalOutline,
 } from 'ionicons/icons';
 import { FindingRecord, RunRecord, WatcherConfig, WatcherVerdict } from '../types';
-import { DEFAULT_CLEARED_SESSIONS } from '../data/defaults';
+
+/** Display-only labels for risk banding (policy thresholds live under Safety → Policy). */
+const DISPLAY_DENY_THRESHOLD = 0.8;
+const DISPLAY_FLAG_THRESHOLD = 0.4;
 
 interface FirewallGateViewProps {
   runs: RunRecord[];
   findings: FindingRecord[];
+  discoveredSessions?: any[];
   watcherConfig?: WatcherConfig;
   liveInterceptions?: WatcherVerdict[];
   onSelectIncident?: (finding: FindingRecord) => void;
   onUpdateWatcherConfig?: (config: Partial<WatcherConfig>) => void;
+  onNavigateToSessions?: () => void;
 }
 
 export interface MonitoredSessionItem {
@@ -49,12 +54,15 @@ const PAGE_SIZE = 25;
 export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
   runs,
   findings,
+  discoveredSessions = [],
   watcherConfig: propConfig,
   liveInterceptions = [],
   onSelectIncident,
   onUpdateWatcherConfig,
+  onNavigateToSessions,
 }) => {
-  const [activeTab, setActiveTab] = useState<'all_sessions' | 'blocked_sessions' | 'escalated_sessions' | 'cleared_sessions' | 'live_stream'>('all_sessions');
+  // Control owns mode + live stream; deep session browse lives under Safety → Sessions.
+  const [activeTab, setActiveTab] = useState<'all_sessions' | 'blocked_sessions' | 'escalated_sessions' | 'cleared_sessions' | 'live_stream'>('live_stream');
   const [agentFilter, setAgentFilter] = useState<string>('all');
   const [dimensionFilter, setDimensionFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -111,14 +119,6 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
     }
   };
 
-  const handleThresholdChange = (key: 'deny_threshold' | 'flag_threshold', value: number) => {
-    const updated = { ...config, [key]: value };
-    setConfig(updated);
-    if (onUpdateWatcherConfig) {
-      onUpdateWatcherConfig(updated);
-    }
-  };
-
   // Helper to format event timestamps and relative time
   const formatEventTime = (timestamp?: string) => {
     if (!timestamp) return { time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }), relative: 'Just now' };
@@ -154,24 +154,26 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
     }
   };
 
-  // Dynamic evaluation of a session given the live threshold settings
+  // Display banding only (fixed constants — real sensitivity is Safety → Policy)
   const evaluateSessionDecision = (risk: number) => {
     if (config.mode === 'paused') {
       return { is_blocked: false, is_escalated: false };
     }
-    if (risk >= config.deny_threshold) {
+    if (risk >= DISPLAY_DENY_THRESHOLD) {
       return { is_blocked: true, is_escalated: false };
     }
-    if (risk >= config.flag_threshold) {
+    if (risk >= DISPLAY_FLAG_THRESHOLD) {
       return { is_blocked: false, is_escalated: true };
     }
     return { is_blocked: false, is_escalated: false };
   };
 
-  // Construct full list of monitored sessions (dynamically evaluated against current threshold)
+  // Construct full list of monitored sessions
   const findingSessionItems: MonitoredSessionItem[] = findings.map((f) => {
     const risk = getSeverityRiskScore(f.severity);
-    const { is_blocked, is_escalated } = evaluateSessionDecision(risk);
+    const labeled = evaluateSessionDecision(risk);
+    const is_blocked = f.severity === 'critical' || labeled.is_blocked;
+    const is_escalated = !is_blocked && (f.severity === 'high' || labeled.is_escalated);
     return {
       id: f.id,
       session_id: f.session_id || f.id,
@@ -185,22 +187,25 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
       risk_score: risk,
       is_blocked,
       is_escalated,
-      blocked_turn: is_blocked ? (f.blocked_turn || (f.flagged_turns?.[0] ?? 14)) : null,
+      blocked_turn: is_blocked ? (f.blocked_turn || (f.flagged_turns?.[0] ?? null)) : null,
       total_turns: f.flagged_turns ? Math.max(...f.flagged_turns, 15) : 15,
       finding_ref: f,
     };
   });
 
   const runSessionItems: MonitoredSessionItem[] = runs.map((r) => {
-    const risk = r.passed === false ? 0.70 : 0.05;
-    const { is_blocked, is_escalated } = evaluateSessionDecision(risk);
+    const stepBlocked = r.steps?.some((s) => s.firewall_blocked) ?? false;
+    const risk = stepBlocked || r.passed === false ? 0.70 : 0.05;
+    const labeled = evaluateSessionDecision(risk);
+    const is_blocked = stepBlocked || labeled.is_blocked;
+    const is_escalated = !is_blocked && labeled.is_escalated;
     return {
       id: r.run_id,
       session_id: r.run_id,
       headline: `[${r.model}] Evaluation Run on task ${r.task_id}`,
       developer: r.human_reviewer || 'Auto Benchmark Runner',
       timestamp: r.created_at,
-      severity: r.passed === false ? 'high' : 'cleared',
+      severity: is_blocked || r.passed === false ? 'high' : 'cleared',
       dimension: 'Benchmark Suite',
       agent_source: 'openeval_runner',
       summary: r.final_summary || (r.passed ? 'Benchmark assertions verified with full reward.' : r.failure_reason || 'Assertion failure recorded.'),
@@ -212,20 +217,56 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
     };
   });
 
-  const evaluatedClearedSessions: MonitoredSessionItem[] = DEFAULT_CLEARED_SESSIONS.map((s) => {
-    const { is_blocked, is_escalated } = evaluateSessionDecision(s.risk_score);
+  const brainSessionItems: MonitoredSessionItem[] = (discoveredSessions || []).map((ds) => {
+    const risk = ds.is_blocked ? 0.95 : (ds.risk_score || 0.05);
+    const labeled = evaluateSessionDecision(risk);
+    const is_blocked = Boolean(ds.is_blocked) || labeled.is_blocked;
+    const is_escalated = !is_blocked && (Boolean(ds.is_escalated) || labeled.is_escalated);
     return {
-      ...s,
+      id: ds.id || ds.session_id,
+      session_id: ds.session_id,
+      headline: ds.headline,
+      developer: ds.developer || 'Jayson Andal',
+      timestamp: ds.timestamp,
+      severity: is_blocked ? 'critical' : 'cleared',
+      dimension: ds.dimension || 'Agent Trajectory',
+      agent_source: ds.agent_source || 'antigravity',
+      summary: ds.summary || '',
+      risk_score: risk,
       is_blocked,
       is_escalated,
+      blocked_turn: ds.blocked_turn || null,
+      total_turns: ds.total_turns || (ds.turns ? ds.turns.length : 10),
+      finding_ref: ds.finding_ref || {
+        id: ds.id || ds.session_id,
+        session_id: ds.session_id,
+        headline: ds.headline,
+        developer: ds.developer || 'Jayson Andal',
+        timestamp: ds.timestamp,
+        severity: is_blocked ? 'critical' : 'low',
+        dimension: ds.dimension || 'Agent Trajectory',
+        agent_source: ds.agent_source || 'antigravity',
+        summary: ds.summary || '',
+        recommended_actions: [],
+        flagged_turns: ds.blocked_turn ? [ds.blocked_turn] : [],
+        blocked_turn: ds.blocked_turn || null,
+        tags: ['antigravity', 'live_agent'],
+      },
     };
   });
 
-  const allMonitoredSessions: MonitoredSessionItem[] = [
+  // Deduplicate across discovered brain sessions, findings, and runs
+  const sessionMap = new Map<string, MonitoredSessionItem>();
+  for (const s of [
+    ...brainSessionItems,
     ...findingSessionItems,
-    ...evaluatedClearedSessions,
     ...runSessionItems,
-  ];
+  ]) {
+    if (!sessionMap.has(s.session_id)) {
+      sessionMap.set(s.session_id, s);
+    }
+  }
+  const allMonitoredSessions: MonitoredSessionItem[] = Array.from(sessionMap.values());
 
   // Counts derived dynamically from allMonitoredSessions so sums are always consistent
   const totalBlockedCount = allMonitoredSessions.filter((item) => item.is_blocked).length;
@@ -298,41 +339,37 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
   };
 
   return (
-    <div className="w-full space-y-6 animate-fadeIn font-sans pb-12">
-      {/* 1. Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-border-subtle shadow-sm">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-xl font-bold text-text-primary tracking-tight">
-              Aegis Sessions & Safety Firewall
-            </h1>
-            <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold border uppercase tracking-wider ${
-              config.mode === 'enforce'
-                ? 'bg-rose-500/10 text-rose-600 border-rose-500/20 animate-pulse'
-                : config.mode === 'observe'
-                ? 'bg-brand-purple/10 text-brand-purple border-brand-purple/20'
-                : 'bg-text-muted/10 text-text-muted border-text-muted/20'
-            }`}>
-              ● Mode: {config.mode}
-            </span>
-          </div>
-          <p className="text-xs text-text-secondary mt-0.5">
-            Pre-execution gatekeeper registry, runtime policy controls, and monitored agent sessions
-          </p>
-        </div>
+    <div className="flex flex-col h-full bg-[#fcfcfd] text-[#1e2029] font-sans p-6 space-y-5 overflow-y-auto">
+      {/* 1. Card Header */}
+      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-border-subtle shadow-sm flex items-center justify-between shrink-0">
+        <h1 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
+          Control
+        </h1>
 
-        <div className="flex items-center gap-2 bg-canvas p-1.5 rounded-xl border border-border-subtle text-xs font-mono">
-          <div className="px-3 py-1 bg-white rounded-lg border border-border-subtle shadow-xs flex items-center gap-1.5">
-            <span className="text-text-muted">Total Monitored:</span>
-            <span className="font-bold text-text-primary">{totalAllCount}</span>
+        <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200/60 text-xs font-mono">
+            <span className="text-slate-500 font-medium">Mode:</span>
+            <button
+              type="button"
+              onClick={() => {
+                const nextMode = config.mode === 'enforce' ? 'observe' : config.mode === 'observe' ? 'paused' : 'enforce';
+                const updated = { ...config, mode: nextMode as any };
+                setConfig(updated);
+                if (onUpdateWatcherConfig) onUpdateWatcherConfig(updated);
+              }}
+              className={`px-2 py-0.5 rounded-md font-bold uppercase cursor-pointer ${
+                config.mode === 'enforce'
+                  ? 'bg-rose-600 text-white'
+                  : config.mode === 'observe'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-slate-300 text-slate-700'
+              }`}
+            >
+              {config.mode}
+            </button>
           </div>
-          <div className="px-3 py-1 bg-white rounded-lg border border-border-subtle shadow-xs flex items-center gap-1.5">
-            <span className="text-text-muted">Blocked:</span>
-            <span className="font-bold text-rose-600">{totalBlockedCount}</span>
-          </div>
-          <div className="px-3 py-1 bg-white rounded-lg border border-border-subtle shadow-xs flex items-center gap-1.5">
-            <span className="text-text-muted">Deny Gate:</span>
-            <span className="font-bold text-text-primary">{Math.round(config.deny_threshold * 100)}%</span>
+          <div className="hidden sm:flex items-center gap-2 text-xs font-mono text-slate-500">
+            <span>Blocked: <strong className="text-rose-600">{totalBlockedCount}</strong></span>
           </div>
         </div>
       </div>
@@ -345,171 +382,81 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
               <IonIcon icon={optionsOutline} className="text-base" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-text-primary">Firewall Enforcement Controls</h3>
-              <p className="text-xs text-text-secondary">Tune runtime gatekeeper sensitivity and escalation thresholds</p>
+              <h3 className="text-sm font-bold text-text-primary">Enforcement Controls</h3>
+              <p className="text-xs text-text-secondary">Runtime gate mode for live tool interception</p>
             </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Mode Switcher */}
-          <div className="p-4 bg-canvas/60 rounded-2xl border border-border-subtle space-y-3 flex flex-col justify-between">
-            <div className="flex items-center justify-between text-xs">
-              <label className="font-bold text-text-primary">Enforcement Mode</label>
-              <span className="font-mono text-text-muted text-[11px] uppercase">{config.mode}</span>
-            </div>
-            <div className="grid grid-cols-3 gap-1 bg-white p-1 rounded-xl border border-border-subtle text-xs font-bold">
-              <button
-                type="button"
-                onClick={() => handleModeChange('enforce')}
-                className={`py-2 rounded-lg transition-colors ${
-                  config.mode === 'enforce' ? 'bg-rose-600 text-white shadow-xs' : 'text-text-secondary hover:text-text-primary'
-                }`}
-              >
-                Enforce
-              </button>
-              <button
-                type="button"
-                onClick={() => handleModeChange('observe')}
-                className={`py-2 rounded-lg transition-colors ${
-                  config.mode === 'observe' ? 'bg-brand-purple text-white shadow-xs' : 'text-text-secondary hover:text-text-primary'
-                }`}
-              >
-                Observe
-              </button>
-              <button
-                type="button"
-                onClick={() => handleModeChange('paused')}
-                className={`py-2 rounded-lg transition-colors ${
-                  config.mode === 'paused' ? 'bg-dark-base text-white shadow-xs' : 'text-text-secondary hover:text-text-primary'
-                }`}
-              >
-                Paused
-              </button>
-            </div>
+        <div className="p-4 bg-canvas/60 rounded-2xl border border-border-subtle space-y-3">
+          <div className="flex items-center justify-between text-xs">
+            <label className="font-bold text-text-primary">Enforcement Mode</label>
+            <span className="font-mono text-text-muted text-[11px] uppercase">{config.mode}</span>
           </div>
-
-          {/* Deny Threshold Card */}
-          <div className="p-4 bg-canvas/60 rounded-2xl border border-border-subtle space-y-3 flex flex-col justify-between">
-            <div className="flex items-center justify-between text-xs">
-              <label className="font-bold text-text-primary">Deny Threshold</label>
-              <span className="font-mono font-bold text-rose-600 text-sm">{Math.round(config.deny_threshold * 100)}%</span>
-            </div>
-            <input
-              type="range"
-              min="0.4"
-              max="1.0"
-              step="0.05"
-              value={config.deny_threshold}
-              onChange={(e) => handleThresholdChange('deny_threshold', parseFloat(e.target.value))}
-              className="w-full ae-slider ae-slider-rose"
-              style={{
-                background: `linear-gradient(to right, #E11D48 0%, #E11D48 ${((config.deny_threshold - 0.4) / 0.6) * 100}%, #E2E8F0 ${((config.deny_threshold - 0.4) / 0.6) * 100}%, #E2E8F0 100%)`,
-              }}
-            />
-            <span className="text-[10px] text-text-muted leading-tight">Risks ≥ this value trigger immediate pre-execution denial.</span>
+          <div className="grid grid-cols-3 gap-1 bg-white p-1 rounded-xl border border-border-subtle text-xs font-bold">
+            <button
+              type="button"
+              onClick={() => handleModeChange('enforce')}
+              className={`py-2.5 rounded-lg transition-colors ${
+                config.mode === 'enforce' ? 'bg-rose-600 text-white shadow-xs' : 'text-text-secondary hover:text-text-primary'
+              }`}
+            >
+              Enforce
+            </button>
+            <button
+              type="button"
+              onClick={() => handleModeChange('observe')}
+              className={`py-2.5 rounded-lg transition-colors ${
+                config.mode === 'observe' ? 'bg-brand-purple text-white shadow-xs' : 'text-text-secondary hover:text-text-primary'
+              }`}
+            >
+              Observe
+            </button>
+            <button
+              type="button"
+              onClick={() => handleModeChange('paused')}
+              className={`py-2.5 rounded-lg transition-colors ${
+                config.mode === 'paused' ? 'bg-dark-base text-white shadow-xs' : 'text-text-secondary hover:text-text-primary'
+              }`}
+            >
+              Paused
+            </button>
           </div>
-
-          {/* Human Escalation Threshold Card */}
-          <div className="p-4 bg-canvas/60 rounded-2xl border border-border-subtle space-y-3 flex flex-col justify-between">
-            <div className="flex items-center justify-between text-xs">
-              <label className="font-bold text-text-primary">Flag & Escalate Threshold</label>
-              <span className="font-mono font-bold text-amber-500 text-sm">{Math.round(config.flag_threshold * 100)}%</span>
-            </div>
-            <input
-              type="range"
-              min="0.1"
-              max="0.8"
-              step="0.05"
-              value={config.flag_threshold}
-              onChange={(e) => handleThresholdChange('flag_threshold', parseFloat(e.target.value))}
-              className="w-full ae-slider ae-slider-amber"
-              style={{
-                background: `linear-gradient(to right, #F59E0B 0%, #F59E0B ${((config.flag_threshold - 0.1) / 0.7) * 100}%, #E2E8F0 ${((config.flag_threshold - 0.1) / 0.7) * 100}%, #E2E8F0 100%)`,
-              }}
-            />
-            <span className="text-[10px] text-text-muted leading-tight">Risks between Flag and Deny prompt user confirmation.</span>
-          </div>
+          <p className="text-[11px] text-text-muted leading-relaxed">
+            Deny / escalate sensitivity is configured under{' '}
+            <span className="font-medium text-text-secondary">Safety → Policy</span>
+            {' '}(command rules + tool thresholds 1–10).
+          </p>
         </div>
       </div>
 
-      {/* 3. Incidents Feed & Live Telemetry Stream */}
+      {/* 3. Live telemetry — session browse lives under Safety → Sessions */}
       <div className="bg-white rounded-2xl border border-border-subtle shadow-sm overflow-hidden space-y-0">
-        {/* Main Tab Controls */}
         <div className="p-4 border-b border-border-subtle flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-canvas/30">
           <div className="flex items-center gap-2 flex-wrap">
             <button
               type="button"
-              onClick={() => { setActiveTab('all_sessions'); setCurrentPage(1); }}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
-                activeTab === 'all_sessions'
-                  ? 'bg-dark-base text-white shadow-sm'
-                  : 'bg-white text-text-secondary hover:text-text-primary border border-border-subtle'
-              }`}
-            >
-              <span>All Sessions ({totalAllCount})</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => { setActiveTab('blocked_sessions'); setCurrentPage(1); }}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
-                activeTab === 'blocked_sessions'
-                  ? 'bg-rose-600 text-white shadow-sm'
-                  : 'bg-white text-text-secondary hover:text-text-primary border border-border-subtle'
-              }`}
-            >
-              <span>🛑 Blocked ({totalBlockedCount})</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => { setActiveTab('escalated_sessions'); setCurrentPage(1); }}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
-                activeTab === 'escalated_sessions'
-                  ? 'bg-amber-500 text-white shadow-sm'
-                  : 'bg-white text-text-secondary hover:text-text-primary border border-border-subtle'
-              }`}
-            >
-              <span>⚠️ Flagged ({totalEscalatedCount})</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => { setActiveTab('cleared_sessions'); setCurrentPage(1); }}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
-                activeTab === 'cleared_sessions'
-                  ? 'bg-emerald-600 text-white shadow-sm'
-                  : 'bg-white text-text-secondary hover:text-text-primary border border-border-subtle'
-              }`}
-            >
-              <span>✅ Cleared ({totalClearedCount})</span>
-            </button>
-            <button
-              type="button"
               onClick={() => { setActiveTab('live_stream'); setCurrentPage(1); }}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer ${
-                activeTab === 'live_stream'
-                  ? 'bg-brand-purple text-white shadow-sm'
-                  : 'bg-white text-text-secondary hover:text-text-primary border border-border-subtle'
-              }`}
+              className="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer bg-brand-purple text-white shadow-sm"
             >
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
               <span>Live Stream ({liveInterceptions.length})</span>
             </button>
+            <span className="text-[11px] text-text-muted font-mono px-1">
+              Blocked {totalBlockedCount} · Flagged {totalEscalatedCount} · Cleared {totalClearedCount}
+              <span className="opacity-60"> · {totalAllCount} total</span>
+            </span>
           </div>
 
-          {/* Quick Search */}
-          <div className="relative min-w-[220px]">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-              placeholder="Filter by headline, dev, ID..."
-              className="w-full bg-white border border-border-subtle rounded-xl pl-7 pr-3 py-1.5 text-xs text-text-primary focus:outline-none focus:border-brand-primary"
-            />
-            <IonIcon
-              icon={searchOutline}
-              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted text-xs pointer-events-none"
-            />
-          </div>
+          {onNavigateToSessions && (
+            <button
+              type="button"
+              onClick={onNavigateToSessions}
+              className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-white text-text-primary border border-border-subtle hover:bg-canvas cursor-pointer"
+            >
+              Open Sessions →
+            </button>
+          )}
         </div>
 
         {/* Secondary Filter Bar */}

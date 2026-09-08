@@ -8,6 +8,5 @@ RUN pip install --no-cache-dir pytest
 RUN echo 'import time\nimport sys\nprint("Watchdog running", flush=True)\n' > /app/watchdog.py && \
     echo '{"status": "initialized"}\n' > /app/audit.log
 
-COPY tests /app/tests
-
+# Tests are staged at verify-time from the host (held-out verifier).
 CMD ["/bin/bash"]

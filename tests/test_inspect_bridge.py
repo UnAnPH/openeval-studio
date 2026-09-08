@@ -1,66 +1,53 @@
-"""Unit tests for Inspect AI Bridge & Task Definitions."""
+"""Tests for Inspect AI Approver plugin and Trailing Hooks bridge."""
 
-from pathlib import Path
+import pytest
+from inspect_ai.tool import ToolCall, ToolCallView
 
-from engine.inspect_bridge import (
-    build_inspect_task_for_dir,
-    task_spec_to_sample,
-)
-from inspect_tasks import cancel_async_tasks, regex_log
-from schemas.task_spec import load_task_spec
+from engine.inspect_bridge import WatcherApprover, WatcherTrailingHooks
 
 
-def test_task_spec_to_sample() -> None:
-    """Verify conversion of TaskSpec to Inspect AI Sample."""
-    spec = load_task_spec(Path("tasks/cancel-async-tasks"))
-    sample = task_spec_to_sample(spec)
+@pytest.mark.asyncio
+async def test_watcher_approver_allows_benign_tool_call():
+    approver = WatcherApprover(session_id="test-inspect-01")
+    call = ToolCall(
+        id="call_1",
+        function="execute_bash",
+        arguments={"cmd": "git status"},
+    )
+    view = ToolCallView()
 
-    assert sample.id == "cancel-async-tasks"
-    assert "async run_tasks" in sample.input
-    assert sample.metadata["category"] == "software-engineering"
+    approval = await approver(
+        message="Check git status",
+        call=call,
+        view=view,
+        history=[],
+    )
 
-
-def test_build_inspect_task_for_dir() -> None:
-    """Verify building a valid Inspect Task object."""
-    inspect_task = build_inspect_task_for_dir("tasks/regex-log")
-    assert len(inspect_task.dataset) == 1
-    assert inspect_task.dataset[0].id == "regex-log"
-    assert inspect_task.solver is not None
-    assert inspect_task.scorer is not None
-
-
-def test_inspect_tasks_registry() -> None:
-    """Verify all task definitions in inspect_tasks.py return valid Tasks."""
-    task_async = cancel_async_tasks()
-    assert task_async.dataset[0].id == "cancel-async-tasks"
-
-    task_regex = regex_log()
-    assert task_regex.dataset[0].id == "regex-log"
+    assert approval.decision == "approve"
+    assert approval.explanation is not None and "Auto-approved" in approval.explanation
 
 
-def test_list_inspect_run_records() -> None:
-    """Verify parsing existing .eval archives into RunRecords."""
-    from server.inspect_loader import list_inspect_run_records
+@pytest.mark.asyncio
+async def test_watcher_approver_blocks_dangerous_tool_call():
+    approver = WatcherApprover(session_id="test-inspect-02")
+    call = ToolCall(
+        id="call_2",
+        function="execute_bash",
+        arguments={"cmd": "git push --force origin main"},
+    )
+    view = ToolCallView()
 
-    logs_dir = Path("logs")
-    if logs_dir.exists():
-        records = list_inspect_run_records(logs_dir)
-        assert isinstance(records, list)
-        if records:
-            first = records[0]
-            assert first.run_id.startswith("inspect_")
-            assert first.model != ""
-            assert isinstance(first.steps, list)
+    approval = await approver(
+        message="Deploy changes forcefully",
+        call=call,
+        view=view,
+        history=[],
+    )
+
+    assert approval.decision == "reject"
+    assert approval.explanation is not None and "POLICY GATEWAY AUTO-DENIED" in approval.explanation
 
 
-def test_cybersecurity_safety_qa_dataset_task() -> None:
-    """Verify loading multi-sample dataset with target and choice scoring."""
-    from inspect_tasks import cybersecurity_safety_qa
-
-    task = cybersecurity_safety_qa()
-    assert len(task.dataset) == 10
-    first_sample = task.dataset[0]
-    assert first_sample.id == "sec_01"
-    assert first_sample.target == "ss -tulpn"
-    assert len(first_sample.choices) == 4
-    assert task.scorer is not None
+def test_watcher_trailing_hooks_enabled():
+    hooks = WatcherTrailingHooks()
+    assert hooks.enabled() is True

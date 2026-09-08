@@ -3,14 +3,14 @@ import { IonIcon } from '@ionic/react';
 import {
   arrowBackOutline,
   alertCircle,
-  shieldCheckmark,
-  terminalOutline,
+  documentTextOutline,
   copyOutline,
   checkmarkOutline,
   timeOutline,
   personOutline,
-  folderOutline,
-  filterOutline,
+  codeSlashOutline,
+  chevronDownOutline,
+  chevronUpOutline,
 } from 'ionicons/icons';
 import { FindingRecord, IncidentSessionDetail } from '../types';
 
@@ -27,21 +27,19 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
   onBack,
 }) => {
   const finding = sessionDetail?.finding || propFinding;
-  const turns = sessionDetail?.turns || [];
-  const blockedTurns = turns.filter((t) => t.is_blocked);
-  const isCleared = !finding || finding.severity === 'low' || blockedTurns.length === 0;
+  const turns = sessionDetail?.turns && sessionDetail.turns.length > 0 ? sessionDetail.turns : [];
 
-  const [activeTranscriptTab, setActiveTranscriptTab] = useState<'blocked' | 'all'>(
-    isCleared ? 'all' : 'blocked'
-  );
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
-
-  const displayedTurns = activeTranscriptTab === 'blocked' && !isCleared ? blockedTurns : turns;
+  const [expandedReasoning, setExpandedReasoning] = useState<Record<number, boolean>>({});
 
   const handleCopy = (text: string, index: number) => {
     navigator.clipboard.writeText(text);
     setCopiedIndex(index);
     setTimeout(() => setCopiedIndex(null), 2000);
+  };
+
+  const toggleReasoning = (stepNum: number) => {
+    setExpandedReasoning((prev) => ({ ...prev, [stepNum]: !prev[stepNum] }));
   };
 
   if (!finding) {
@@ -54,346 +52,250 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
           onClick={onBack}
           className="mt-4 px-4 py-2 bg-dark-base text-white text-xs rounded-xl font-bold cursor-pointer"
         >
-          Return to Sessions
+          Return to Dashboard
         </button>
       </div>
     );
   }
 
-  const severityColor =
-    finding.severity === 'critical'
-      ? 'bg-rose-500/10 text-rose-600 border-rose-500/20'
-      : finding.severity === 'high'
-      ? 'bg-amber-500/10 text-amber-600 border-amber-500/20'
-      : finding.severity === 'medium'
-      ? 'bg-yellow-500/10 text-yellow-700 border-yellow-500/20'
-      : 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20';
+  const headline = finding.headline?.trim() || 'No headline';
+  const summaryText = finding.summary?.trim() || 'No summary available';
+  const agentLabel =
+    finding.agent_source === 'antigravity'
+      ? 'Antigravity'
+      : finding.agent_source === 'claude_code'
+      ? 'Claude Code'
+      : finding.agent_source === 'openeval_runner'
+      ? 'OpenEval Runner'
+      : finding.agent_source || 'agent';
+  const reviewedAt = finding.timestamp?.trim() || 'Unknown time';
+  const primaryAction = finding.recommended_actions?.[0];
+  const trajectoryLabel = finding.session_id || finding.id || 'Trajectory';
 
   return (
-    <div className="w-full space-y-4 animate-fadeIn font-sans pb-12">
-      {/* 1. Header Navigation Bar */}
-      <div className="flex items-center justify-between bg-white px-5 py-3.5 rounded-2xl border border-border-subtle shadow-sm">
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={onBack}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-canvas border border-border-subtle text-xs font-semibold text-text-secondary hover:text-text-primary hover:bg-surface-subtle transition-colors cursor-pointer"
-          >
-            <IonIcon icon={arrowBackOutline} className="text-xs" />
-            <span>Sessions</span>
-          </button>
-          <div className="h-4 w-px bg-border-subtle" />
+    <div className="flex flex-col h-full bg-[#fcfcfd] text-[#1e2029] font-sans p-6 space-y-5 overflow-y-auto">
+      {/* 1. Top Card Header & Breadcrumbs */}
+      <div className="bg-white p-5 rounded-2xl border border-border-subtle shadow-sm space-y-3 shrink-0">
+        <div className="flex items-center justify-between text-xs text-gray-400 font-mono">
           <div className="flex items-center gap-2">
-            <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border uppercase tracking-wider ${severityColor}`}>
-              ● {isCleared ? 'CLEARED' : finding.severity}
-            </span>
-            <span className="text-xs font-mono font-bold text-text-primary">{finding.id}</span>
+            <button
+              type="button"
+              onClick={onBack}
+              className="flex items-center gap-1 text-gray-600 hover:text-gray-900 font-medium cursor-pointer"
+            >
+              <IonIcon icon={arrowBackOutline} className="text-xs" />
+              <span>Dashboard</span>
+            </button>
+            <span>&gt;</span>
+            <span className="text-gray-600">Sessions</span>
+            <span>&gt;</span>
+            <span className="text-gray-600">{finding.session_id || finding.id}</span>
+            <span>&gt;</span>
+            <span className="text-indigo-600 font-bold">Trajectory</span>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1">
+              <IonIcon icon={personOutline} className="text-xs" />
+              <span>{finding.developer || 'Operator'}</span>
+            </div>
+            <span>·</span>
+            <div className="flex items-center gap-1">
+              <IonIcon icon={timeOutline} className="text-xs" />
+              <span>{reviewedAt}</span>
+            </div>
+            <span>·</span>
+            <span>{turns.length} messages</span>
           </div>
         </div>
 
-        <div className="flex items-center gap-3 text-xs text-text-secondary">
-          <div className="flex items-center gap-1.5">
-            <IonIcon icon={personOutline} className="text-xs" />
-            <span className="font-medium text-text-primary">{finding.developer}</span>
-          </div>
-          <span>·</span>
-          <div className="flex items-center gap-1.5 font-mono">
-            <IonIcon icon={timeOutline} className="text-xs" />
-            <span>{new Date(finding.timestamp).toLocaleDateString()}</span>
+        <div className="flex items-start justify-between gap-4 pt-1">
+          <div>
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-600 border border-rose-200">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-600" />
+                <span>{finding.severity || 'Critical'}</span>
+              </span>
+              <span className="text-xs font-mono text-gray-500">{agentLabel}</span>
+            </div>
+            <h1 className="text-lg font-bold text-gray-900 leading-snug">
+              {headline}
+            </h1>
           </div>
         </div>
       </div>
 
-      {/* 2. Dual-Pane Apollo Master-Detail Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        {/* Left Pane (60% width): Incident Executive Brief & Actionable Hardening */}
-        <div className="lg:col-span-7 space-y-5">
-          {/* Main Incident Card */}
-          <div className="bg-white p-6 rounded-2xl border border-border-subtle shadow-sm space-y-4">
-            <div>
-              <div className="flex items-center gap-2 text-xs text-brand-purple font-semibold mb-1">
-                <span>{finding.dimension}</span>
-                <span>·</span>
-                <span>{finding.agent_source === 'antigravity' ? '🤖 Antigravity' : finding.agent_source === 'claude_code' ? '⚡ Claude Code' : '⚡ OpenEval Runner'}</span>
-              </div>
-              <h1 className="text-base font-bold text-text-primary leading-snug">
-                {finding.headline}
-              </h1>
+      {/* 2. Main Two-Column Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        {/* Left Column (5 Cols): Just Automated Analysis and Recommended Action */}
+        <div className="lg:col-span-5 space-y-4">
+          {/* Card 1: Automated Analysis */}
+          <div className="bg-white p-5 rounded-2xl border border-border-subtle shadow-sm space-y-3">
+            <div className="flex items-center gap-2 text-xs font-bold text-gray-900">
+              <IonIcon icon={documentTextOutline} className="text-indigo-600 text-sm" />
+              <h3>Automated analysis</h3>
             </div>
-
-            {/* Executive Summary */}
-            <div className="p-4 rounded-xl bg-canvas border border-border-subtle space-y-1.5">
-              <h4 className="text-[11px] font-bold uppercase tracking-wider text-text-muted">
-                {isCleared ? 'Policy Compliance Verification' : 'Executive Incident Summary'}
-              </h4>
-              <p className="text-xs text-text-secondary leading-relaxed">
-                {finding.summary}
-              </p>
-            </div>
-
-            {/* Session Metadata Grid */}
-            <div className="grid grid-cols-3 gap-3 pt-2">
-              <div className="p-3 rounded-xl bg-canvas border border-border-subtle/60 space-y-0.5">
-                <div className="text-[10px] text-text-muted font-medium flex items-center gap-1">
-                  <IonIcon icon={folderOutline} className="text-[11px]" />
-                  <span>Working Dir</span>
-                </div>
-                <div className="text-xs font-mono font-bold text-text-primary truncate">
-                  {sessionDetail?.working_directory || '/workspace'}
-                </div>
-              </div>
-              <div className="p-3 rounded-xl bg-canvas border border-border-subtle/60 space-y-0.5">
-                <div className="text-[10px] text-text-muted font-medium flex items-center gap-1">
-                  <IonIcon icon={terminalOutline} className="text-[11px]" />
-                  <span>Total Turns</span>
-                </div>
-                <div className="text-xs font-mono font-bold text-text-primary">
-                  {sessionDetail?.total_turns || turns.length || 5} turns
-                </div>
-              </div>
-              <div className="p-3 rounded-xl bg-canvas border border-border-subtle/60 space-y-0.5">
-                <div className="text-[10px] text-text-muted font-medium flex items-center gap-1">
-                  <IonIcon icon={shieldCheckmark} className={`text-[11px] ${isCleared ? 'text-emerald-600' : 'text-rose-600'}`} />
-                  <span>Status</span>
-                </div>
-                <div className={`text-xs font-mono font-bold ${isCleared ? 'text-emerald-600' : 'text-rose-600'}`}>
-                  {isCleared ? '100% Cleared' : `${blockedTurns.length || 1} blocked`}
-                </div>
-              </div>
+            <p className="text-xs text-gray-600 leading-relaxed">
+              {summaryText}
+            </p>
+            <div className="flex items-center gap-2 pt-2 border-t border-gray-100 text-[11px] font-mono text-gray-500">
+              <span>Working Dir: <strong className="text-gray-700">{sessionDetail?.working_directory || '/workspace'}</strong></span>
+              <span>·</span>
+              <span>Turns: <strong className="text-gray-700">{turns.length}</strong></span>
             </div>
           </div>
 
-          {/* Actionable Section / Compliance Section */}
-          <div className="bg-white p-6 rounded-2xl border border-border-subtle shadow-sm space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-bold text-text-primary">
-                  {isCleared ? 'Policy Compliance Attestation & Safeguards' : 'Actionable Remediation Recommendations'}
-                </h3>
-                <p className="text-xs text-text-secondary mt-0.5">
-                  {isCleared
-                    ? 'Automated security gates and static analysis checks evaluated for this session'
-                    : 'Direct mitigation steps to harden agents and prevent recurring safety violations'}
-                </p>
+          {/* Card 2: Recommended Action — only when finding provides one */}
+          {primaryAction ? (
+            <div className="bg-white p-5 rounded-2xl border border-border-subtle shadow-sm space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-rose-50 text-rose-600 border border-rose-200">
+                    {primaryAction.priority} {primaryAction.category}
+                  </span>
+                  <h3 className="text-xs font-bold text-gray-900">Recommended Action</h3>
+                </div>
+                {primaryAction.citations?.length > 0 && (
+                  <span className="text-[10px] font-mono text-gray-400">
+                    cites {primaryAction.citations.length} message{primaryAction.citations.length === 1 ? '' : 's'}
+                  </span>
+                )}
               </div>
-              <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold ${
-                isCleared ? 'bg-emerald-500/10 text-emerald-700' : 'bg-surface-subtle text-brand-purple'
-              }`}>
-                {isCleared ? '✓ 7/7 PASSED' : `${finding.recommended_actions.length} Action Items`}
-              </span>
+
+              <div className="text-xs font-bold text-gray-900">
+                {primaryAction.title}
+              </div>
+
+              <div className="text-xs text-gray-600 leading-relaxed bg-gray-50 p-3 rounded-xl border border-gray-100 font-sans">
+                {primaryAction.description}
+              </div>
             </div>
-
-            <div className="space-y-3.5 pt-1">
-              {isCleared ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {[
-                    { title: 'Deterministic Command Gate', desc: 'No blacklisted exfiltration, sudo, or rm -rf commands.', status: 'PASSED' },
-                    { title: 'Sub-10ms Read-Only Filter', desc: 'Benign file and inspection operations cleared automatically.', status: 'PASSED' },
-                    { title: 'AST & Code Synthesis Gate', desc: 'Clean abstract syntax tree without dynamic eval or shellcode injection.', status: 'PASSED' },
-                    { title: 'Data Exfiltration Boundary', desc: 'Zero outbound telemetry or unapproved network requests.', status: 'PASSED' },
-                  ].map((check, cIdx) => (
-                    <div key={cIdx} className="p-3.5 rounded-xl border border-emerald-200 bg-emerald-50/40 space-y-1">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-bold text-text-primary">{check.title}</span>
-                        <span className="text-[10px] font-mono font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">
-                          {check.status}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-text-secondary">{check.desc}</p>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                finding.recommended_actions.map((action, idx) => (
-                <div
-                  key={idx}
-                  className="p-4 rounded-xl border border-border-subtle bg-white hover:border-brand-primary/30 transition-all space-y-2.5 shadow-sm"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`px-2 py-0.5 rounded-md text-[10px] font-mono font-bold ${
-                          action.priority === 'P1'
-                            ? 'bg-rose-500/10 text-rose-600 border border-rose-500/20'
-                            : 'bg-amber-500/10 text-amber-600 border border-amber-500/20'
-                        }`}
-                      >
-                        {action.priority}
-                      </span>
-                      <h4 className="text-xs font-bold text-text-primary">{action.title}</h4>
-                    </div>
-
-                    {action.citations.length > 0 && (
-                      <div className="flex items-center gap-1">
-                        {action.citations.map((c, cIdx) => (
-                          <span
-                            key={cIdx}
-                            className="px-1.5 py-0.5 rounded bg-surface-subtle border border-border-subtle text-[10px] font-mono text-brand-purple font-semibold cursor-pointer hover:bg-brand-purple/10"
-                            onClick={() => setActiveTranscriptTab('all')}
-                            title="Jump to message turn in transcript"
-                          >
-                            {c}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  <p className="text-xs text-text-secondary leading-relaxed">
-                    {action.description}
-                  </p>
-
-                  {action.code_snippet && (
-                    <div className="relative group">
-                      <pre className="p-3 rounded-lg bg-dark-base text-white text-[11px] font-mono overflow-x-auto whitespace-pre-wrap border border-black/20">
-                        {action.code_snippet}
-                      </pre>
-                      <button
-                        type="button"
-                        onClick={() => handleCopy(action.code_snippet!, idx)}
-                        className="absolute top-2 right-2 px-2 py-1 rounded bg-white/10 text-white hover:bg-white/20 text-[10px] font-sans font-semibold flex items-center gap-1 transition-colors"
-                      >
-                        <IonIcon icon={copiedIndex === idx ? checkmarkOutline : copyOutline} className="text-xs" />
-                        <span>{copiedIndex === idx ? 'Copied' : 'Copy'}</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )))}
-            </div>
-          </div>
+          ) : null}
         </div>
 
-        {/* Right Pane (40% width): Interactive Transcript with Quick-Filter */}
-        <div className="lg:col-span-5 bg-white p-5 rounded-2xl border border-border-subtle shadow-sm flex flex-col space-y-4">
-          {/* Transcript Tabs */}
-          <div className="flex items-center justify-between border-b border-border-subtle pb-3">
-            <div className="flex items-center gap-1 bg-canvas p-1 rounded-xl border border-border-subtle">
-              {!isCleared && (
-                <button
-                  type="button"
-                  onClick={() => setActiveTranscriptTab('blocked')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                    activeTranscriptTab === 'blocked'
-                      ? 'bg-rose-600 text-white shadow-sm'
-                      : 'text-text-secondary hover:text-text-primary'
-                  }`}
-                >
-                  <span>🚫 Blocked</span>
-                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
-                    activeTranscriptTab === 'blocked' ? 'bg-white/20 text-white' : 'bg-canvas text-rose-600'
-                  }`}>
-                    {blockedTurns.length || 1}
-                  </span>
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => setActiveTranscriptTab('all')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                  activeTranscriptTab === 'all'
-                    ? isCleared ? 'bg-emerald-700 text-white shadow-sm' : 'bg-dark-base text-white shadow-sm'
-                    : 'text-text-secondary hover:text-text-primary'
-                }`}
-              >
-                <span>{isCleared ? '✅ Compliant Trace' : '📜 Transcript'}</span>
-                <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
-                  activeTranscriptTab === 'all' ? 'bg-white/20 text-white' : 'bg-canvas text-text-muted'
-                }`}>
-                  {turns.length}
-                </span>
-              </button>
+        {/* Right Column (7 Cols): Full Transcript */}
+        <div className="lg:col-span-7 bg-white p-5 rounded-2xl border border-border-subtle shadow-sm space-y-4">
+          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+            <div className="flex items-center gap-2">
+              <IonIcon icon={codeSlashOutline} className="text-indigo-600 text-sm" />
+              <h3 className="text-xs font-bold text-gray-900">Full Transcript</h3>
             </div>
-
-            <span className="text-[11px] font-mono text-text-muted flex items-center gap-1">
-              <IonIcon icon={filterOutline} className="text-xs" />
-              <span>{isCleared ? 'Full verified trace' : activeTranscriptTab === 'blocked' ? 'Firewall filter' : 'Full trace'}</span>
+            <span className="text-[11px] font-mono text-gray-400">
+              {turns.length} total turns · {trajectoryLabel}
             </span>
           </div>
 
-          {/* Turn Sequence Feed */}
-          <div className="space-y-3.5 max-h-[640px] overflow-y-auto pr-1">
-            {activeTranscriptTab === 'blocked' && turns.length > blockedTurns.length && (
-              <div
-                onClick={() => setActiveTranscriptTab('all')}
-                className="p-2.5 rounded-xl bg-canvas border border-dashed border-border-subtle text-center text-xs text-text-muted hover:text-text-primary hover:border-brand-primary/40 cursor-pointer transition-colors"
-              >
-                <span>+ Show {turns.length - blockedTurns.length} hidden benign messages</span>
+          {/* Transcript Message Stream */}
+          <div className="space-y-4">
+            {turns.length === 0 ? (
+              <div className="p-8 text-center text-xs text-slate-500 font-mono border border-dashed border-slate-200 rounded-xl">
+                No trajectory turns recorded for this session.
+                <div className="mt-1 text-[11px] text-slate-400">
+                  Live blocks appear here when Watcher gates a tool call.
+                </div>
               </div>
-            )}
-
-            {displayedTurns.map((turn, tIdx) => {
+            ) : (
+            turns.map((turn, tIdx) => {
               const isBlocked = turn.is_blocked;
+              const hasReasoning = Boolean(turn.thought);
+              const isReasoningOpen = expandedReasoning[turn.step_number] ?? true;
 
               return (
                 <div
                   key={tIdx}
-                  className={`p-4 rounded-xl border transition-all space-y-2.5 ${
+                  className={`p-4 rounded-xl border transition-all space-y-3 ${
                     isBlocked
-                      ? 'bg-rose-50/40 border-rose-500/30 shadow-sm'
-                      : 'bg-canvas/60 border-border-subtle'
+                      ? 'bg-rose-50/30 border-rose-200 shadow-xs'
+                      : 'bg-white border-gray-100 shadow-xs'
                   }`}
                 >
-                  {/* Step Header */}
+                  {/* Turn Header */}
                   <div className="flex items-center justify-between text-xs">
                     <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold text-text-primary">
-                        Turn {turn.step_number} · {turn.role === 'user' ? '👤 User Prompt' : '🤖 Agent Action'}
+                      <span className="font-mono font-bold text-gray-900">
+                        &gt; {turn.step_number} {turn.role === 'user' ? 'User' : `Assistant ${agentLabel}`}
                       </span>
-                      {isBlocked && (
-                        <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-rose-600 text-white uppercase animate-pulse">
-                          🛑 Blocked
-                        </span>
-                      )}
                     </div>
-                    {turn.risk_score !== undefined && (
-                      <span className="font-mono text-[11px] text-text-secondary">
-                        Risk: {Math.round(turn.risk_score * 100)}%
-                      </span>
-                    )}
                   </div>
 
-                  {/* User Content */}
+                  {/* Internal Reasoning (Purple Box) */}
+                  {hasReasoning && (
+                    <div className="p-3 rounded-xl bg-[#faf5ff] border border-purple-100 space-y-1.5">
+                      <button
+                        type="button"
+                        onClick={() => toggleReasoning(turn.step_number)}
+                        className="flex items-center gap-1 text-[11px] font-bold text-purple-900 hover:text-purple-700 cursor-pointer"
+                      >
+                        <IonIcon icon={isReasoningOpen ? chevronUpOutline : chevronDownOutline} className="text-xs" />
+                        <span>Internal reasoning</span>
+                      </button>
+                      {isReasoningOpen && (
+                        <p className="text-xs text-purple-900/90 italic leading-relaxed font-sans pl-2 border-l-2 border-purple-200">
+                          {turn.thought}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Assistant Message Text */}
                   {turn.content && (
-                    <div className="text-xs text-text-primary bg-white p-2.5 rounded-lg border border-border-subtle leading-relaxed">
+                    <div className="text-xs text-gray-800 leading-relaxed font-sans">
                       {turn.content}
                     </div>
                   )}
 
-                  {/* Agent Reasoning */}
-                  {turn.thought && (
-                    <div className="text-xs text-text-secondary italic border-l-2 border-brand-purple/40 pl-2.5 py-0.5">
-                      "{turn.thought}"
-                    </div>
-                  )}
-
-                  {/* Tool Call & Arguments */}
+                  {/* Tool Call Box */}
                   {turn.tool && (
                     <div className="space-y-1">
-                      <div className="text-[10px] font-mono text-text-muted uppercase">Tool Action: {turn.tool}</div>
-                      <pre className={`p-2.5 rounded-lg text-xs font-mono overflow-x-auto ${
-                        isBlocked
-                          ? 'bg-rose-950 text-rose-200 border border-rose-800'
-                          : 'bg-dark-base text-emerald-300'
-                      }`}>
-                        {turn.arguments?.command || turn.arguments?.path || JSON.stringify(turn.arguments, null, 2)}
-                      </pre>
+                      <div className="text-[10px] font-mono text-gray-500 uppercase">
+                        &gt;_ {turn.tool}
+                      </div>
+                      <div className="relative group">
+                        <pre className="p-3 rounded-xl bg-[#0f172a] text-slate-200 text-xs font-mono overflow-x-auto">
+                          {String(turn.arguments?.command || JSON.stringify(turn.arguments, null, 2))}
+                        </pre>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(String(turn.arguments?.command || JSON.stringify(turn.arguments)), tIdx)}
+                          className="absolute top-2 right-2 px-2 py-1 rounded bg-white/10 text-white hover:bg-white/20 text-[10px] font-sans flex items-center gap-1 cursor-pointer"
+                        >
+                          <IonIcon icon={copiedIndex === tIdx ? checkmarkOutline : copyOutline} className="text-xs" />
+                          <span>{copiedIndex === tIdx ? 'Copied' : 'Copy'}</span>
+                        </button>
+                      </div>
                     </div>
                   )}
 
-                  {/* Observation / Firewall Interception Message */}
-                  {turn.observation && (
-                    <div className={`p-2.5 rounded-lg text-xs leading-relaxed ${
-                      isBlocked
-                        ? 'bg-rose-100 text-rose-900 border border-rose-300 font-semibold'
-                        : 'bg-white border border-border-subtle text-text-secondary font-mono text-[11px]'
-                    }`}>
-                      {turn.observation}
+                  {/* Policy Gate Intercept Card */}
+                  {isBlocked ? (
+                    <div className="p-3.5 rounded-xl border border-rose-200 bg-rose-50/60 space-y-1.5">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-rose-700">
+                        <IonIcon icon={alertCircle} className="text-sm text-rose-600" />
+                        <span>Blocked / escalated</span>
+                      </div>
+                      {turn.rule_violation_tag && (
+                        <div className="text-xs font-bold text-rose-900">
+                          {turn.rule_violation_tag}
+                        </div>
+                      )}
+                      {turn.reason && (
+                        <p className="text-[11px] text-rose-700 leading-relaxed">
+                          {turn.reason}
+                        </p>
+                      )}
                     </div>
+                  ) : (
+                    turn.observation && (
+                      <div className="p-2.5 rounded-xl bg-gray-50 border border-gray-100 text-xs text-gray-700 font-mono">
+                        <span className="font-bold text-gray-900">Result: </span>
+                        {turn.observation}
+                      </div>
+                    )
                   )}
                 </div>
               );
-            })}
+            })
+            )}
           </div>
         </div>
       </div>

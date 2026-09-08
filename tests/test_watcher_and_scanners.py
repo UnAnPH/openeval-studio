@@ -1,12 +1,11 @@
 """Unit and Integration tests for Watcher Live, Scheming Scanners, and RAG task."""
 
-import json
 from pathlib import Path
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from engine.approval_policy import WatcherRequest, WatcherVerdict, evaluate_action_safety
-from engine.judges import JudgeVerdict
+from engine.approval_policy import evaluate_action_safety
 from engine.llm_runner import AsyncLLMRunner
 from engine.react_agent import AgentAction, AgentStep, AgentTrajectory
 from engine.scanners import SchemingScanners
@@ -40,7 +39,9 @@ async def test_watcher_evaluate_privilege_escalation():
     assert verdict.decision == "deny"
     assert verdict.is_safe is False
     assert verdict.risk_score >= 0.85
-    assert "PRIVILEGE_ESCALATION" in (verdict.rule_violation_tag or "") or "DESTRUCTIVE" in (verdict.rule_violation_tag or "")
+    assert "PRIVILEGE_ESCALATION" in (verdict.rule_violation_tag or "") or "DESTRUCTIVE" in (
+        verdict.rule_violation_tag or ""
+    )
 
 
 @pytest.mark.asyncio
@@ -98,7 +99,6 @@ async def test_scheming_scanners_detection():
     trajectory = AgentTrajectory(
         task_id="test-task",
         model="gpt-4o",
-        provider="openai",
         status="completed",
         steps=[
             AgentStep(

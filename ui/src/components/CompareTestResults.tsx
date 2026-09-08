@@ -32,6 +32,7 @@ interface CompareTestResultsProps {
   initialRunAId?: string;
   initialRunBId?: string;
   onNavigateToRuns?: () => void;
+  onNavigateToStudio?: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -380,6 +381,7 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
   initialRunAId,
   initialRunBId,
   onNavigateToRuns,
+  onNavigateToStudio,
 }) => {
   const [runAId, setRunAId] = useState<string>(initialRunAId || runs[0]?.run_id || '');
   const [runBId, setRunBId] = useState<string>(initialRunBId || runs[1]?.run_id || runs[0]?.run_id || '');
@@ -449,18 +451,30 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
         </div>
         <h3 className="text-base font-bold text-text-primary">Need at Least 2 Runs to Compare</h3>
         <p className="text-xs text-text-secondary max-w-sm mx-auto">
-          Execute or record at least two evaluation runs to enable trajectory divergence and regression diffing.
+          Launch two evaluations (same or different models/tasks), then return here for trajectory
+          divergence and metric diffs. Offline fake-pass runs are disabled — real Launch or hermetic
+          verifier only.
         </p>
-        {onNavigateToRuns && (
-          <button
-            type="button"
-            onClick={onNavigateToRuns}
-            className="px-4 py-2 rounded-xl bg-dark-base text-white text-xs font-bold hover:bg-black cursor-pointer"
-          >
-            Go to Runs Hub
-          </button>
-        )}
-      </div>
+        <div className="flex items-center justify-center gap-2 flex-wrap">
+          {onNavigateToStudio && (
+            <button
+              type="button"
+              onClick={onNavigateToStudio}
+              className="px-4 py-2 rounded-xl bg-brand-purple text-white text-xs font-bold hover:opacity-90 cursor-pointer"
+            >
+              Launch Evaluation
+            </button>
+          )}
+          {onNavigateToRuns && (
+            <button
+              type="button"
+              onClick={onNavigateToRuns}
+              className="px-4 py-2 rounded-xl bg-dark-base text-white text-xs font-bold hover:bg-black cursor-pointer"
+            >
+              Go to Runs
+            </button>
+          )}
+        </div>      </div>
     );
   }
 
@@ -633,28 +647,21 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
   const hasMatchingTaskForRunB = runs.some((r) => r.task_id === runA.task_id && r.run_id !== runA.run_id);
 
   return (
-    <div className="w-full space-y-5 animate-fadeIn font-sans pb-12">
-      {/* 1. Header Bar with Tabs & Quick Presets */}
-      <div className="bg-white p-5 rounded-2xl border border-border-subtle shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-base font-bold text-text-primary">
-            Dynamic Side-by-Side Run Comparison
-          </h2>
-          <p className="text-xs text-text-secondary mt-0.5 font-mono">
-            Comparing candidate vs. baseline runs across {runs.length.toLocaleString()} total benchmark logs
-          </p>
-        </div>
+    <div className="flex-1 min-h-0 flex flex-col h-full bg-[#fcfcfd] text-[#1e2029] font-sans p-6 space-y-5 overflow-y-auto">
+      {/* 1. Card Block Header */}
+      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-border-subtle shadow-sm flex items-center justify-between shrink-0">
+        <h1 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2.5">Compare Runs</h1>
 
         {/* View Mode & Quick Action Controls */}
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2.5">
           {/* Swap Runs Button */}
           <button
             type="button"
             onClick={handleSwapRuns}
-            className="px-3 py-1.5 rounded-xl border border-border-subtle bg-white hover:bg-canvas text-xs font-bold text-text-primary flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700 transition-all shadow-xs cursor-pointer"
             title="Swap Run A (Candidate) and Run B (Baseline)"
           >
-            <IonIcon icon={swapHorizontalOutline} className="text-sm text-brand-purple" />
+            <IonIcon icon={swapHorizontalOutline} className="text-sm text-indigo-600" />
             <span>Swap A ⇄ B</span>
           </button>
 
@@ -663,33 +670,33 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
             <button
               type="button"
               onClick={handleMatchSameTask}
-              className="px-3 py-1.5 rounded-xl border border-border-subtle bg-brand-purple/10 text-brand-purple hover:bg-brand-purple/20 text-xs font-bold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-semibold transition-all shadow-xs cursor-pointer"
             >
               <IonIcon icon={sparklesOutline} className="text-sm" />
-              <span>Match Task ({runA.task_id})</span>
+              <span>Match Task</span>
             </button>
           )}
 
           {/* View mode toggle */}
-          <div className="flex items-center gap-1.5 bg-canvas p-1 rounded-xl border border-border-subtle text-xs">
+          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/60 text-xs font-medium">
             <button
               type="button"
               onClick={() => setActiveTab('timeline')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              className={`px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer ${
                 activeTab === 'timeline'
-                  ? 'bg-white text-brand-primary shadow-sm'
-                  : 'text-text-secondary hover:text-text-primary'
+                  ? 'bg-white text-slate-900 shadow-xs font-bold'
+                  : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              Trajectory Timeline
+              Trajectory
             </button>
             <button
               type="button"
               onClick={() => setActiveTab('diff')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              className={`px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer ${
                 activeTab === 'diff'
-                  ? 'bg-white text-brand-primary shadow-sm'
-                  : 'text-text-secondary hover:text-text-primary'
+                  ? 'bg-white text-slate-900 shadow-xs font-bold'
+                  : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               Code Diffs ({filesA.length + filesB.length})
@@ -743,30 +750,21 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
             </div>
           </div>
 
-          {/* Action Row: Search & Pick Modal Button + Fast Selector */}
+          {/* Action Row: Non-editable selector on the left, Choose button on the right */}
           <div className="flex items-center gap-2">
+            <div className="flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-slate-700 min-w-0">
+              <span className="text-slate-400 select-none text-[11px]">Selected:</span>
+              <span className="font-bold text-slate-900 truncate">{runA.run_id.slice(0, 10)}...</span>
+              <span className="text-slate-500 truncate text-[11px]">({runA.model})</span>
+            </div>
             <button
               type="button"
               onClick={() => setPickerTarget('candidate')}
-              className="flex-1 px-3 py-2 rounded-xl bg-dark-base hover:bg-black text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer"
+              className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer shrink-0"
             >
               <IonIcon icon={searchOutline} className="text-sm" />
-              <span>Search & Pick Candidate Run...</span>
+              <span>Choose Run</span>
             </button>
-
-            {/* Quick Select for Fast Dropdown Access */}
-            <select
-              value={runAId}
-              onChange={(e) => setRunAId(e.target.value)}
-              className="w-32 bg-canvas border border-border-subtle rounded-xl px-2.5 py-2 text-xs text-text-primary font-mono focus:outline-none focus:border-brand-primary cursor-pointer"
-              title="Quick Pick from recent runs"
-            >
-              {runs.slice(0, 20).map((r) => (
-                <option key={r.run_id} value={r.run_id}>
-                  {r.run_id.slice(0, 8)} ({r.model.slice(0, 10)})
-                </option>
-              ))}
-            </select>
           </div>
         </div>
 
@@ -813,30 +811,21 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
             </div>
           </div>
 
-          {/* Action Row: Search & Pick Modal Button + Fast Selector */}
+          {/* Action Row: Non-editable selector on the left, Choose button on the right */}
           <div className="flex items-center gap-2">
+            <div className="flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-slate-700 min-w-0">
+              <span className="text-slate-400 select-none text-[11px]">Selected:</span>
+              <span className="font-bold text-slate-900 truncate">{runB.run_id.slice(0, 10)}...</span>
+              <span className="text-slate-500 truncate text-[11px]">({runB.model})</span>
+            </div>
             <button
               type="button"
               onClick={() => setPickerTarget('baseline')}
-              className="flex-1 px-3 py-2 rounded-xl bg-accent-orange hover:bg-orange-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer"
+              className="px-4 py-2 rounded-xl bg-accent-orange hover:bg-orange-600 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer shrink-0"
             >
               <IonIcon icon={searchOutline} className="text-sm" />
-              <span>Search & Pick Baseline Run...</span>
+              <span>Choose Run</span>
             </button>
-
-            {/* Quick Select for Fast Dropdown Access */}
-            <select
-              value={runBId}
-              onChange={(e) => setRunBId(e.target.value)}
-              className="w-32 bg-canvas border border-border-subtle rounded-xl px-2.5 py-2 text-xs text-text-primary font-mono focus:outline-none focus:border-accent-orange cursor-pointer"
-              title="Quick Pick from recent runs"
-            >
-              {runs.slice(0, 20).map((r) => (
-                <option key={r.run_id} value={r.run_id}>
-                  {r.run_id.slice(0, 8)} ({r.model.slice(0, 10)})
-                </option>
-              ))}
-            </select>
           </div>
         </div>
       </div>

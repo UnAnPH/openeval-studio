@@ -1,85 +1,62 @@
-# AGENTS.md — Agent & LLM Contributor Guide 🤖
+# AGENTS.md — Operating manual for coding agents working on OpenEval Studio
 
-> **Architectural context, coding standards, and extension protocols for autonomous AI coding assistants working in the `openeval-studio` repository.**
-
----
-
-## 🏛️ System Overview & Architecture
-
-`openeval-studio` is a dual-engine evaluation workbench for autonomous coding agents:
-1. **Engine A (Custom OpenEval Engine):** FastAPI backend + Async ReAct Agent Loop (`engine/react_agent.py`) + Docker Container Sandbox (`sandbox/docker_runner.py`) + SSE Event Streaming (`/api/eval/stream/{run_id}`) + Multi-dimensional LLM Judges (`engine/judges.py`).
-2. **Engine B (UK AISI Inspect Bridge):** Native Inspect AI integration (`inspect_tasks.py`, `engine/inspect_bridge.py`, `server/inspect_loader.py`) executing via `eval_async()` and producing `.eval` log files in `logs/`.
+> **Audience:** Autonomous coding agents and humans.  
+> **Stack:** Python 3.12+ (FastAPI, DuckDB, Pydantic v2), React 19 + TypeScript + Tailwind, Docker.  
+> **Tone:** Portfolio / research lab — prefer honest claims over marketing language.
 
 ---
 
-## 📁 5-File Benchmark Task Contract
+## Mission
 
-All benchmark challenges live in `tasks/<task-id>/` and MUST contain exactly 5 components:
+OpenEval Studio is:
 
-1. **`task.toml`**: Validated by `schemas/task_spec.py::TaskSpec`. Defines `[task]` (metadata), `[agent]` (timeout, max_steps, memory_limit, cpu_quota), and `[verifier]`.
-2. **`instruction.md`**: Prompt given to the agent.
-3. **`environment/`**: Contains initial workspace files and a working `Dockerfile` based on `python:3.11-slim` or `ubuntu:22.04`.
-4. **`solution/solve.sh`**: Known reference bash solution that completes the task.
-5. **`tests/test_outputs.py`**: Held-out pytest suite injected ONLY during the verification step.
+1. An **eval IDE** (tasks, sandboxes, Inspect bridge, compare, search).  
+2. A **Watcher-style runtime gate** for Antigravity / Claude Code / Cursor hooks → `/api/watcher/evaluate`.
 
----
-
-## 🛠️ How to Add a New Benchmark Task
-
-1. Create directory `tasks/<my-task-name>/` following the 5-file standard.
-2. Register the task in `inspect_tasks.py`:
-   ```python
-   @task
-   def my_task_name() -> Task:
-       """Description of task."""
-       return build_inspect_task_for_dir("tasks/my-task-name")
-
-
-   # Add to TASKS_REGISTRY
-   TASKS_REGISTRY["my_task_name"] = my_task_name
-   ```
-3. Add a unit test in `tests/test_task_spec.py` or verify with:
-   ```bash
-   uv run python cli.py run tasks/my-task-name --model gemini-3.1-flash-lite
-   ```
+Do not describe it as enterprise SaaS, multi-tenant MDM, or “Deep LLM always-on” unless LLM env flags are enabled and wired.
 
 ---
 
-## 🛡️ How to Add a New LLM Safety Judge
+## Inviolable rules
 
-1. In `engine/judges.py`:
-   - Add the metric to `JudgeVerdict.metric_name`.
-   - Implement `@staticmethod async def audit_<metric>(trajectory: AgentTrajectory, task: TaskSpec, runner: AsyncLLMRunner) -> JudgeVerdict:`.
-   - Hook into `TrajectoryJudges.audit_full_trajectory`.
-2. In `engine/inspect_bridge.py`:
-   - Create `@scorer(metrics=[]) def <metric>_scorer(task_spec: TaskSpec) -> Scorer:`.
-   - Attach to `build_inspect_task_for_dir()`.
+1. **No fake production data** — never hardcode mock incidents/turns in UI paths (empty state instead). Demo endpoints must be labeled DEMO-ONLY.
+2. **Design system** — `lucide-react` only in new/edited views; cards `bg-white rounded-2xl border border-border-subtle shadow-sm`.
+3. **Command rules only on command tools** — when applying shell regexes in `evaluate_action_watcher_gateway`, do not treat file-write payloads as shell commands.
+4. **Quality before done:** `make check`, `uv run pytest tests/`, `cd ui && npm run build`.
 
 ---
 
-## 💻 Code Standards & Quality Rules
+## Watcher truth table
 
-* **Python:** Python 3.12+. Use strict typing (`from typing import ...`).
-* **Data Models:** Use Pydantic v2 (`BaseModel`, `Field`, `ConfigDict(extra="ignore")`).
-* **Frontend:** React 19, TypeScript, Tailwind CSS, Lucide icons.
-* **Imports:** Cleanly sorted with Ruff (`uv run ruff check --fix .`).
-* **Testing:** Every change must maintain **100% passing tests** (`uv run pytest tests/ -v`).
-* **Type Checking:** Strict Mypy compliance (`uv run mypy schemas/ engine/ sandbox/ server/`).
+| Piece | Status |
+| --- | --- |
+| Antigravity hook | `scripts/antigravity_watcher_gate.py` + `install_antigravity_watcher_hook.sh` (matcher `.*`) |
+| Claude Code hook | `scripts/claude_code_watcher_hook.py` (settings.json PreToolUse) |
+| Cursor hook | `scripts/cursor_watcher_gate.py` (`.cursor/hooks.json` beforeShellExecution) |
+| Thresholds UI | Watcher Live → Tool Thresholds (wired to store + evaluate) |
+| LLM Stage 3/4 | Optional via `OPENEVAL_WATCHER_USE_LLM=1`; else heuristics |
+| Codex | Threshold names only — no full client hook yet |
 
 ---
 
-## 🧪 Verification Commands (Run Before Submitting Work)
+## Layout (short)
 
-```bash
-# 1. Run full unit test suite
-uv run pytest tests/ -v
-
-# 2. Run Ruff linter
-uv run ruff check .
-
-# 3. Run Mypy static type checker
-uv run mypy schemas/ engine/ sandbox/ server/
-
-# 4. Build Frontend bundle
-cd ui && npm run build
 ```
+cli.py, inspect_tasks.py
+engine/          # agents, judges, scanners, sweep
+schemas/         # pydantic models
+server/          # FastAPI, stores, policy_gateway
+scripts/         # agent hooks + demo_block.sh
+tasks/           # 5-file benchmarks
+ui/              # React app
+tests/
+DEMO.md FINDINGS.md
+```
+
+---
+
+## Extension recipes
+
+- New task: `tasks/<id>/` 5-file standard + register in `inspect_tasks.py` / defaults.  
+- New command rule / threshold: Watcher Live UI or `server/command_rules.py` + tests.  
+- Hook changes: update matching script under `scripts/` and re-run install for Antigravity.

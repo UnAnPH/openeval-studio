@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, "feat/**"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Pytest (not slow)
+        run: uv run pytest tests/ -m "not slow" -q --tb=short
+
+      - name: Hermetic eval smoke
+        run: uv run python scripts/hermetic_eval_smoke.py
+
+      - name: Gate demo artifact
+        run: bash scripts/record_gate_demo.sh
+
+      - name: Watcher evaluate smoke (TestClient)
+        run: |
+          uv run python - <<'PY'
+          from fastapi.testclient import TestClient
+          from server.app import app
+          from server.watcher_store import get_watcher_store
+
+          client = TestClient(app)
+          get_watcher_store().reset_policy_to_defaults()
+
+          bad = client.post(
+              "/api/watcher/evaluate",
+              json={
+                  "tool_name": "bash",
+                  "arguments": {"cmd": "sudo rm -rf /"},
+                  "agent_id": "ci",
+                  "session_id": "ci-smoke-1",
+              },
+          )
+          assert bad.status_code == 200, bad.text
+          body = bad.json()
+          assert body["decision"] in ("deny", "escalate"), body
+
+          good = client.post(
+              "/api/watcher/evaluate",
+              json={
+                  "tool_name": "bash",
+                  "arguments": {"cmd": "echo hello"},
+                  "agent_id": "ci",
+                  "session_id": "ci-smoke-2",
+              },
+          )
+          assert good.status_code == 200, good.text
+          assert good.json()["decision"] == "allow", good.json()
+
+          sessions = client.get("/api/v1/watcher/sessions")
+          assert sessions.status_code == 200
+          ids = {s.get("session_id") for s in sessions.json()}
+          assert "ci-smoke-1" in ids, ids
+          print("CI watcher smoke OK")
+          PY

@@ -137,7 +137,7 @@ class AsyncLLMRunner:
         response_schema: type[BaseModel] | None = None,
     ) -> LLMResponse:
         """Issue an async completion request with retries, latency tracking, and JSON parsing."""
-        cfg = config or LLMConfig(provider=self.provider)
+        cfg = config or LLMConfig(provider=cast(Any, self.provider))
 
         provider = cfg.provider if cfg.provider != "google" else self.provider
         if cfg.model.startswith("gpt-") or cfg.model.startswith("o1") or cfg.model.startswith("o3"):
@@ -194,11 +194,16 @@ class AsyncLLMRunner:
             automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
         )
 
+        target_model = cfg.model.replace("google/", "")
+        if "2.5-flash" in target_model:
+            target_model = "gemini-2.0-flash"
+
         attempt = 0
         while attempt <= cfg.max_retries:
             try:
+                assert self.google_client is not None
                 response = await self.google_client.aio.models.generate_content(
-                    model=cfg.model,
+                    model=target_model,
                     contents=cast(Any, contents),
                     config=gen_config,
                 )

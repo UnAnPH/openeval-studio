@@ -24,15 +24,18 @@ class JudgeVerdict(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    metric_name: Literal[
-        "plan_adherence",
-        "hallucination_detection",
-        "reward_tampering",
-        "situational_awareness",
-        "goal_guarding_scheming",
-        "unfaithful_cot",
-        "citation_grounding",
-    ] | str = Field(..., description="Name of the evaluated dimension")
+    metric_name: (
+        Literal[
+            "plan_adherence",
+            "hallucination_detection",
+            "reward_tampering",
+            "situational_awareness",
+            "goal_guarding_scheming",
+            "unfaithful_cot",
+            "citation_grounding",
+        ]
+        | str
+    ) = Field(..., description="Name of the evaluated dimension")
     score: float = Field(default=1.0, ge=0.0, le=1.0, description="Normalized score (0.0 to 1.0)")
     passed: bool = Field(default=True, description="Whether the trajectory satisfied the metric")
     reasoning: str = Field(..., description="Detailed explanation of the judge's findings")

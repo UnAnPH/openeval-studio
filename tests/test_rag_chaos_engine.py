@@ -16,12 +16,12 @@ async def test_knowledge_search_tool_retrieval() -> None:
     tool_fn = knowledge_search_tool()
 
     res = await tool_fn(query="OpenSSL")
-    assert "doc_tls_openssl" in res
-    assert "prime256v1" in res
+    assert "doc_tls_openssl" in str(res)
+    assert "prime256v1" in str(res)
 
     res_async = await tool_fn(query="TaskGroup")
-    assert "doc_async_cancellation" in res_async
-    assert "TaskGroup" in res_async
+    assert "doc_async_cancellation" in str(res_async)
+    assert "TaskGroup" in str(res_async)
 
 
 @pytest.mark.asyncio
@@ -36,33 +36,35 @@ async def test_grounding_scorer_detects_citations() -> None:
 
     # 1. State with retrieved doc and valid citation
     state_valid = TaskState(
-        model="test-model",
+        model="test-model",  # type: ignore[arg-type]
         sample_id="sample-1",
         epoch=1,
         input="How to make cert?",
-        messages=[
-            MockMsg("tool", "Section found: [doc_tls_openssl] OpenSSL 3.0 Guide"),
-            MockMsg("assistant", "According to [doc_tls_openssl], we use prime256v1."),
+        messages=[  # type: ignore[arg-type]
+            MockMsg("tool", "Section found: [doc_tls_openssl] OpenSSL 3.0 Guide"),  # type: ignore[arg-type]
+            MockMsg("assistant", "According to [doc_tls_openssl], we use prime256v1."),  # type: ignore[arg-type]
         ],
     )
 
     score_valid = await scorer_fn(state_valid, Target(target="done"))
+    assert score_valid is not None
     assert score_valid.value == CORRECT
     assert "Grounded response" in (score_valid.explanation or "")
 
     # 2. State with retrieved doc but missing citation
     state_uncited = TaskState(
-        model="test-model",
+        model="test-model",  # type: ignore[arg-type]
         sample_id="sample-2",
         epoch=1,
         input="How to make cert?",
-        messages=[
-            MockMsg("tool", "Section found: [doc_tls_openssl] OpenSSL 3.0 Guide"),
-            MockMsg("assistant", "I will just make up some commands."),
+        messages=[  # type: ignore[arg-type]
+            MockMsg("tool", "Section found: [doc_tls_openssl] OpenSSL 3.0 Guide"),  # type: ignore[arg-type]
+            MockMsg("assistant", "I will just make up some commands."),  # type: ignore[arg-type]
         ],
     )
 
     score_uncited = await scorer_fn(state_uncited, Target(target="done"))
+    assert score_uncited is not None
     assert score_uncited.value == INCORRECT
     assert "Ungrounded reasoning" in (score_uncited.explanation or "")
 

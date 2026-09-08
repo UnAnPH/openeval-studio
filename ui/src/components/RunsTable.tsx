@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   IonIcon,
 } from '@ionic/react';
@@ -19,7 +19,6 @@ import {
   cashOutline,
   timeOutline,
   warningOutline,
-  layersOutline,
 } from 'ionicons/icons';
 import { RunRecord, TaskSummary } from '../types';
 
@@ -44,7 +43,6 @@ export const RunsTable: React.FC<RunsTableProps> = ({
   onCompareSelected,
   onExportSFT,
   onNavigateToStudio,
-  onNavigateToBenchmarks,
 }) => {
   const [searchText, setSearchText] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'passed' | 'failed' | 'safety_flagged' | 'running'>('all');
@@ -58,11 +56,23 @@ export const RunsTable: React.FC<RunsTableProps> = ({
   const [showClearAllModal, setShowClearAllModal] = useState<boolean>(false);
   const [showBatchDeleteModal, setShowBatchDeleteModal] = useState<boolean>(false);
 
+  // Sort runs newest first
+  const sortedRuns = useMemo<RunRecord[]>(() => {
+    return [...runs].sort((a, b) => {
+      const ta = new Date(a.created_at || 0).getTime();
+      const tb = new Date(b.created_at || 0).getTime();
+      return tb - ta;
+    });
+  }, [runs]);
+
   // Unique models in the run history
-  const modelOptions = Array.from(new Set(runs.map((r) => r.model))).filter(Boolean);
+  const modelOptions = useMemo<string[]>(
+    () => Array.from(new Set(runs.map((r: RunRecord) => r.model))).filter(Boolean) as string[],
+    [runs]
+  );
 
   // Filtered runs logic
-  const filteredRuns = runs.filter((run) => {
+  const filteredRuns = sortedRuns.filter((run: RunRecord) => {
     if (searchText) {
       const q = searchText.toLowerCase();
       const matchId = run.task_id.toLowerCase().includes(q) || run.run_id.toLowerCase().includes(q);
@@ -72,7 +82,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
       if (!matchId && !matchModel && !matchSummary && !matchReason) return false;
     }
     if (statusFilter === 'passed' && run.passed !== true) return false;
-    if (statusFilter === 'failed' && run.passed !== false) return false;
+    if (statusFilter === 'failed' && (run.passed === true || run.status === 'running' || run.status === 'pending')) return false;
     if (statusFilter === 'running' && run.status !== 'running' && run.status !== 'pending') return false;
     if (statusFilter === 'safety_flagged') {
       const hasFailedAudit = run.audit_verdicts?.some((v) => !v.passed);
@@ -118,40 +128,20 @@ export const RunsTable: React.FC<RunsTableProps> = ({
   const selectedRecords = runs.filter((r) => selectedRunIds.includes(r.run_id));
 
   return (
-    <div className="w-full space-y-5 animate-fadeIn font-sans">
-      {/* 1. Header & Summary Row */}
-      <div className="bg-white p-5 rounded-2xl border border-border-subtle shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <h2 className="text-lg font-bold text-text-primary">Evaluation Runs</h2>
-            <span className="px-2.5 py-0.5 rounded-full bg-surface-subtle border border-border-subtle text-xs font-mono font-bold text-brand-purple">
-              {totalRuns} Recorded
-            </span>
-          </div>
-          <p className="text-xs text-text-secondary mt-0.5 font-mono">
-            First-class registry of immutable agent trajectories, held-out verifier scores, and safety audits.
-          </p>
-        </div>
+    <div className="flex-1 min-h-0 flex flex-col h-full bg-[#fcfcfd] text-[#1e2029] font-sans p-6 space-y-5 overflow-y-auto">
+      {/* 1. Card Block Header */}
+      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-border-subtle shadow-sm flex items-center justify-between shrink-0">
+        <h1 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2.5">Evaluation Runs</h1>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2.5">
           {onNavigateToStudio && (
             <button
               type="button"
               onClick={onNavigateToStudio}
-              className="px-4 py-2 rounded-xl bg-dark-base text-white text-xs font-bold flex items-center gap-1.5 hover:bg-black transition-all shadow-sm active:scale-95 cursor-pointer"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold bg-slate-900 text-white rounded-xl hover:bg-black transition-all shadow-xs cursor-pointer"
             >
               <IonIcon icon={playSharp} className="text-xs" />
-              <span>New Live Run</span>
-            </button>
-          )}
-          {onNavigateToBenchmarks && (
-            <button
-              type="button"
-              onClick={onNavigateToBenchmarks}
-              className="px-3.5 py-2 rounded-xl bg-canvas text-text-secondary border border-border-subtle text-xs font-medium hover:text-text-primary hover:bg-surface-subtle transition-all cursor-pointer flex items-center gap-1"
-            >
-              <IonIcon icon={layersOutline} className="text-xs text-brand-purple" />
-              <span>View Benchmarks ({tasks.length})</span>
+              <span>New Run</span>
             </button>
           )}
         </div>
@@ -333,22 +323,11 @@ export const RunsTable: React.FC<RunsTableProps> = ({
               <button
                 type="button"
                 onClick={() => setShowClearAllModal(true)}
-                className="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                className="px-3 py-1.5 rounded-xl bg-white text-rose-600 hover:bg-rose-50 border border-rose-200 text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer"
                 title="Clear All Runs"
               >
                 <IonIcon icon={trashOutline} className="text-xs" />
                 <span>Clear All</span>
-              </button>
-            )}
-
-            {onNavigateToStudio && (
-              <button
-                type="button"
-                onClick={onNavigateToStudio}
-                className="px-3.5 py-1.5 rounded-xl bg-dark-base text-white text-xs font-bold flex items-center gap-1.5 hover:bg-black transition-all shadow-xs cursor-pointer active:scale-95"
-              >
-                <IonIcon icon={playSharp} className="text-xs" />
-                <span>New Run</span>
               </button>
             )}
           </div>
@@ -368,7 +347,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                 <button
                   type="button"
                   onClick={() => onCompareSelected([selectedRunIds[0], selectedRunIds[1]])}
-                  className="px-3 py-1.5 rounded-lg bg-dark-base text-white text-xs font-bold flex items-center gap-1.5 hover:bg-black transition-all shadow-sm cursor-pointer"
+                  className="px-3.5 py-1.5 rounded-xl bg-slate-900 text-white text-xs font-semibold flex items-center gap-1.5 hover:bg-black transition-all shadow-xs cursor-pointer"
                 >
                   <IonIcon icon={gitCompareOutline} className="text-xs" />
                   <span>Compare Top 2 Selected</span>

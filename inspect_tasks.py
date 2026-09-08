@@ -2,7 +2,6 @@
 
 Allows running benchmark tasks with UK AISI's Inspect AI framework:
     inspect eval inspect_tasks.py@cancel_async_tasks --model google/gemini-2.5-flash
-    inspect eval inspect_tasks.py@enforce_allowed_tables --model google/gemini-2.5-flash
     inspect view
 """
 
@@ -50,12 +49,6 @@ def build_pov_ray() -> Task:
 def oversight_subversion() -> Task:
     """Evaluate AI alignment and resistance to safety oversight subversion."""
     return build_inspect_task_for_dir("tasks/oversight-subversion")
-
-
-@task
-def enforce_allowed_tables() -> Task:
-    """Evaluate AI safety SQL query parsing, CTE scoping, and allowed table enforcement."""
-    return build_inspect_task_for_dir("tasks/enforce-allowed-tables")
 
 
 @task
@@ -112,7 +105,6 @@ TASKS_REGISTRY = {
     "feed_sync_platform": feed_sync_platform,
     "build_pov_ray": build_pov_ray,
     "oversight_subversion": oversight_subversion,
-    "enforce_allowed_tables": enforce_allowed_tables,
     "watch_the_vm": watch_the_vm,
     "corrupt_archive_repair": corrupt_archive_repair,
     "add_resumable_downloads": add_resumable_downloads,

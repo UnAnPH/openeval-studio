@@ -11,7 +11,6 @@ import {
   cashOutline,
   timeOutline,
   gitCommitOutline,
-  shieldCheckmarkOutline,
 } from 'ionicons/icons';
 import { RunRecord } from '../types';
 
@@ -22,10 +21,12 @@ interface ScorecardProps {
 export const Scorecard: React.FC<ScorecardProps> = ({ run }) => {
   if (!run) {
     return (
-      <div className="p-6 rounded-2xl bg-white border border-border-subtle text-center text-text-muted shadow-aegis-card">
-        <IonIcon icon={helpCircleOutline} className="text-3xl mx-auto mb-2 text-text-muted" />
-        <p className="text-sm font-bold text-text-primary">No Evaluation Scorecard Yet</p>
-        <p className="text-xs text-text-secondary mt-1">
+      <div className="py-12 px-4 text-center text-text-muted space-y-2">
+        <div className="w-12 h-12 rounded-2xl bg-canvas flex items-center justify-center mx-auto mb-2 text-text-muted border border-border-subtle">
+          <IonIcon icon={helpCircleOutline} className="text-2xl text-text-muted" />
+        </div>
+        <p className="text-xs font-bold font-mono uppercase tracking-wider text-text-primary">No Evaluation Scorecard Yet</p>
+        <p className="text-xs text-text-secondary max-w-xs mx-auto">
           Select a task and model, then launch an evaluation to inspect real-time verifier results & cost accounting.
         </p>
       </div>
@@ -37,27 +38,22 @@ export const Scorecard: React.FC<ScorecardProps> = ({ run }) => {
   const isRunning = run.status === 'running' || run.status === 'pending';
 
   return (
-    <div className="bg-white rounded-2xl border border-border-subtle shadow-aegis-card overflow-hidden">
-      <div className="p-4 pb-3 border-b border-border-subtle flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <IonIcon icon={shieldCheckmarkOutline} className="text-brand-purple text-base" />
-          <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-text-primary">
-            Evaluation Scorecard
-          </h3>
-        </div>
+    <div className="space-y-4">
+      {/* Run Identifier Tag */}
+      <div className="flex items-center justify-between text-xs pb-1 border-b border-border-subtle/60">
+        <span className="text-[11px] font-mono text-text-muted font-medium">Evaluation Target</span>
         <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-surface-subtle text-brand-purple font-bold">
-          {run.run_id.slice(0, 10)}...
+          {run.run_id.slice(0, 12)}...
         </span>
       </div>
 
-      <div className="p-4 space-y-4">
-        {/* Primary Reward Banner */}
-        <div
-          className={`p-4 rounded-xl border flex items-center justify-between transition-all ${
-            isPassed
-              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-800'
-              : isFailed
-              ? 'bg-rose-500/10 border-rose-500/30 text-rose-800'
+      {/* Primary Reward Banner */}
+      <div
+        className={`p-4 rounded-xl border flex items-center justify-between transition-all ${
+          isPassed
+            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-800'
+            : isFailed
+            ? 'bg-rose-500/10 border-rose-500/30 text-rose-800'
               : isRunning
               ? 'bg-purple-500/10 border-purple-500/30 text-brand-primary'
               : 'bg-canvas border-border-subtle text-text-secondary'
@@ -158,7 +154,6 @@ export const Scorecard: React.FC<ScorecardProps> = ({ run }) => {
           </div>
         )}
       </div>
-    </div>
   );
 };
 

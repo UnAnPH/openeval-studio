@@ -18,33 +18,52 @@ export const Header: React.FC<HeaderProps> = ({
       case 'dashboard':
       case 'overview':
         return 'Overview';
+      case 'control':
       case 'firewall':
-        return 'Blocked Sessions & Firewall Gate';
+        return 'Safety / Control';
+      case 'policy':
+      case 'watcher_live':
+        return 'Safety / Policy';
+      case 'sessions':
+      case 'transcripts':
       case 'incident_detail':
-        return 'Incident & Session Trace Explorer';
+        return 'Safety / Sessions';
+      case 'graders':
+        return 'Evaluate / Judges';
       case 'runs':
-        return 'Evaluation Runs';
+        return 'Evaluate / Runs';
       case 'run_detail':
         return `Runs / ${selectedRunId || 'Detail'}`;
       case 'benchmarks':
       case 'test_cases':
-        return 'Benchmarks & Test Suites';
+        return 'Evaluate / Catalog';
       case 'compare':
-        return 'Compare Runs';
+        return 'Evaluate / Compare';
       case 'studio':
-        return 'Live Studio';
+        return 'Evaluate / Launch';
       case 'inspect':
-        return 'UK AISI Inspect Portal';
+        return 'Evaluate / Inspect';
       default:
-        return 'Evaluations';
+        return 'OpenEval Studio';
     }
   };
+
+  const productPrefix =
+    activeTab === 'control' ||
+    activeTab === 'firewall' ||
+    activeTab === 'policy' ||
+    activeTab === 'watcher_live' ||
+    activeTab === 'sessions' ||
+    activeTab === 'transcripts' ||
+    activeTab === 'incident_detail'
+      ? 'Safety'
+      : 'Evaluate';
 
   return (
     <header className="h-16 border-b border-border-subtle bg-white px-7 flex items-center justify-between sticky top-0 z-30 select-none">
       {/* Left: Section Breadcrumb */}
       <div className="flex items-center gap-2">
-        <span className="text-xs text-text-muted">Evaluations /</span>
+        <span className="text-xs text-text-muted">{productPrefix} /</span>
         {activeTab === 'run_detail' && onBackToRuns ? (
           <div className="flex items-center gap-1.5 text-xs font-bold">
             <button
@@ -58,7 +77,7 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="text-text-primary font-mono">{selectedRunId}</span>
           </div>
         ) : (
-          <h1 className="text-xs font-bold text-text-primary">{getBreadcrumb()}</h1>
+          <h1 className="text-xs font-bold text-text-primary">{getBreadcrumb().replace(/^(Evaluate|Safety) \/ /, '')}</h1>
         )}
       </div>
     </header>

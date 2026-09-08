@@ -130,26 +130,26 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({
   const coreVerdicts = verdicts.filter((v) => !schemingMetrics.includes(v.metric_name));
 
   return (
-    <div className="space-y-5 font-sans w-full max-w-full overflow-hidden">
+    <div className="space-y-5 font-sans w-full max-w-full pb-10">
       {/* 1. Clinical Sign-Off Hero Bar */}
-      <div className={`bg-white rounded-2xl border border-border-subtle shadow-sm space-y-4 ${compact ? 'p-4' : 'p-5'}`}>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-subtle pb-3">
-          <div className="flex items-center gap-2">
+      <div className={`${compact ? 'bg-canvas/50 rounded-xl border border-border-subtle/80 p-3.5 space-y-3.5' : 'bg-white rounded-2xl border border-border-subtle shadow-sm p-5 space-y-4'}`}>
+        <div className={`flex ${compact ? 'flex-col gap-2.5' : 'flex-col sm:flex-row sm:items-center justify-between gap-3'} border-b border-border-subtle pb-3`}>
+          <div className="flex items-center gap-2 min-w-0">
             <div className="w-8 h-8 rounded-xl bg-purple-50 text-brand-purple flex items-center justify-center flex-shrink-0">
               <IonIcon icon={personCircleOutline} className="text-xl" />
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="text-sm font-bold text-text-primary truncate">Human Auditor Sign-Off & Review</h3>
-              <p className="text-xs text-text-secondary">Clinical safety sign-off for enterprise deployment</p>
+              <h3 className="text-xs sm:text-sm font-bold text-text-primary truncate">Human Auditor Sign-Off & Review</h3>
+              <p className="text-[11px] text-text-secondary truncate">Clinical safety sign-off for enterprise deployment</p>
             </div>
           </div>
 
           {/* Status Selection Pill Buttons */}
-          <div className="grid grid-cols-3 gap-1 bg-canvas p-1 rounded-xl border border-border-subtle text-xs w-full sm:w-auto flex-shrink-0">
+          <div className={`grid grid-cols-3 gap-1 bg-surface-subtle p-1 rounded-xl border border-border-subtle text-xs ${compact ? 'w-full' : 'w-full sm:w-auto flex-shrink-0'}`}>
             <button
               type="button"
               onClick={() => setStatus('APPROVED_SAFE')}
-              className={`px-2.5 py-1.5 rounded-lg font-bold text-[11px] transition-all text-center cursor-pointer ${
+              className={`px-2 py-1.5 rounded-lg font-bold text-[11px] transition-all text-center cursor-pointer ${
                 status === 'APPROVED_SAFE'
                   ? 'bg-emerald-600 text-white shadow-2xs'
                   : 'text-text-secondary hover:text-emerald-700'
@@ -160,7 +160,7 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({
             <button
               type="button"
               onClick={() => setStatus('REQUIRES_REVIEW')}
-              className={`px-2.5 py-1.5 rounded-lg font-bold text-[11px] transition-all text-center cursor-pointer ${
+              className={`px-2 py-1.5 rounded-lg font-bold text-[11px] transition-all text-center cursor-pointer ${
                 status === 'REQUIRES_REVIEW'
                   ? 'bg-amber-500 text-white shadow-2xs'
                   : 'text-text-secondary hover:text-amber-700'
@@ -171,7 +171,7 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({
             <button
               type="button"
               onClick={() => setStatus('FLAGGED_RISKY')}
-              className={`px-2.5 py-1.5 rounded-lg font-bold text-[11px] transition-all text-center cursor-pointer ${
+              className={`px-2 py-1.5 rounded-lg font-bold text-[11px] transition-all text-center cursor-pointer ${
                 status === 'FLAGGED_RISKY'
                   ? 'bg-rose-600 text-white shadow-2xs'
                   : 'text-text-secondary hover:text-rose-700'
@@ -191,7 +191,7 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({
               value={reviewerName}
               onChange={(e) => setReviewerName(e.target.value)}
               placeholder="e.g. auditor@safetylab.ai"
-              className="w-full bg-canvas border border-border-subtle rounded-xl px-3 py-2 text-xs text-text-primary focus:outline-none focus:border-brand-primary font-mono box-border"
+              className="w-full bg-white border border-border-subtle rounded-xl px-3 py-2 text-xs text-text-primary focus:outline-none focus:border-brand-primary font-mono box-border"
             />
           </div>
 
@@ -229,12 +229,12 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({
               value={reviewNotes}
               onChange={(e) => setReviewNotes(e.target.value)}
               placeholder="Detail reasons for pass/fail classification, human verification findings, and safety audit context..."
-              className="w-full bg-canvas border border-border-subtle rounded-xl p-2.5 text-xs text-text-primary focus:outline-none focus:border-brand-primary font-sans box-border"
+              className="w-full bg-white border border-border-subtle rounded-xl p-2.5 text-xs text-text-primary focus:outline-none focus:border-brand-primary font-sans box-border"
             />
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-1 border-t border-border-subtle/60">
+        <div className={`flex ${compact ? 'flex-col' : 'flex-col sm:flex-row'} items-stretch sm:items-center justify-between gap-2 pt-1 border-t border-border-subtle/60`}>
           {savedBanner ? (
             <span className="text-xs text-emerald-700 font-bold font-mono">✓ Sign-off saved to backend!</span>
           ) : (
@@ -245,7 +245,7 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({
             type="button"
             onClick={handleSave}
             disabled={isSaving}
-            className="px-4 py-2 rounded-xl bg-dark-base text-white text-xs font-bold hover:bg-black transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm disabled:opacity-50"
+            className={`px-4 py-2 rounded-xl bg-dark-base text-white text-xs font-bold hover:bg-black transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm disabled:opacity-50 ${compact ? 'w-full' : ''}`}
           >
             <IonIcon icon={saveOutline} className="text-xs" />
             <span>{isSaving ? 'Saving...' : 'Save & Submit Sign-Off'}</span>
@@ -254,19 +254,19 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({
       </div>
 
       {/* 2. Scheming & Deception Scanners Grid */}
-      <div className={`bg-white rounded-2xl border border-border-subtle shadow-sm space-y-4 ${compact ? 'p-4' : 'p-5'}`}>
-        <div className="flex items-center justify-between border-b border-border-subtle pb-3">
-          <div className="flex items-center gap-2">
+      <div className={`${compact ? 'bg-canvas/50 rounded-xl border border-border-subtle/80 p-3.5 space-y-3.5' : 'bg-white rounded-2xl border border-border-subtle shadow-sm p-5 space-y-4'}`}>
+        <div className="flex items-center justify-between gap-2 border-b border-border-subtle pb-3 min-w-0">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
             <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-800 flex items-center justify-center flex-shrink-0">
               <IonIcon icon={warningOutline} className="text-lg" />
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="text-sm font-bold text-text-primary truncate">Post-Hoc Scheming & Deception Scanners</h3>
-              <p className="text-xs text-text-secondary">Automated Frontier AI Safety & Alignment audit dimensions</p>
+              <h3 className="text-xs sm:text-sm font-bold text-text-primary truncate">Scheming & Deception Scanners</h3>
+              <p className="text-[11px] text-text-secondary truncate">Dimensions 1–3: Frontier AI Safety & Alignment scans</p>
             </div>
           </div>
-          <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-surface-subtle text-brand-purple flex-shrink-0">
-            3 Dimensions
+          <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-surface-subtle text-brand-purple flex-shrink-0 whitespace-nowrap">
+            {schemingVerdicts.length} Dimensions
           </span>
         </div>
 
@@ -284,10 +284,10 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({
               return (
                 <div
                   key={verdict.metric_name}
-                  className={`p-4 rounded-xl border flex flex-col justify-between space-y-3 transition-all ${
+                  className={`p-3.5 rounded-xl border flex flex-col justify-between space-y-3 transition-all ${
                     effectivePassed
-                      ? 'bg-emerald-50/30 border-emerald-200'
-                      : 'bg-rose-50/40 border-rose-300 ring-1 ring-rose-200'
+                      ? 'bg-white border-emerald-200'
+                      : 'bg-rose-50/50 border-rose-300 ring-1 ring-rose-200'
                   }`}
                 >
                   <div className="space-y-2.5">
@@ -312,7 +312,7 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({
                       {getMetricDescription(verdict.metric_name)}
                     </p>
 
-                    <div className="p-3 bg-white rounded-xl border border-border-subtle text-xs text-text-primary leading-relaxed font-sans space-y-2 break-words">
+                    <div className="p-3 bg-canvas rounded-xl border border-border-subtle text-xs text-text-primary leading-relaxed font-sans space-y-2 break-words">
                       <div><strong className="font-mono text-text-secondary">Scanner Finding:</strong> {verdict.reasoning}</div>
 
                       {/* Unfaithful CoT Visual Breakdown */}
@@ -388,19 +388,19 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({
       </div>
 
       {/* 3. Core Safety & Alignment Judges */}
-      <div className={`bg-white rounded-2xl border border-border-subtle shadow-sm space-y-4 ${compact ? 'p-4' : 'p-5'}`}>
-        <div className="flex items-center justify-between border-b border-border-subtle pb-3">
-          <div className="flex items-center gap-2">
+      <div className={`${compact ? 'bg-canvas/50 rounded-xl border border-border-subtle/80 p-3.5 space-y-3.5' : 'bg-white rounded-2xl border border-border-subtle shadow-sm p-5 space-y-4'}`}>
+        <div className="flex items-center justify-between gap-2 border-b border-border-subtle pb-3 min-w-0">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
             <div className="w-8 h-8 rounded-xl bg-purple-50 text-brand-purple flex items-center justify-center flex-shrink-0">
               <IonIcon icon={shieldOutline} className="text-lg" />
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="text-sm font-bold text-text-primary truncate">Core Evaluation Judges & Grounding</h3>
-              <p className="text-xs text-text-secondary">Trajectory fidelity, hallucination filtering, and reward defense</p>
+              <h3 className="text-xs sm:text-sm font-bold text-text-primary truncate">Core Safety & Alignment Judges</h3>
+              <p className="text-[11px] text-text-secondary truncate">Dimensions 4–7: Trajectory fidelity, hallucination & reward defense</p>
             </div>
           </div>
-          <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-surface-subtle text-brand-purple flex-shrink-0">
-            LLM Judges
+          <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-surface-subtle text-brand-purple flex-shrink-0 whitespace-nowrap">
+            {coreVerdicts.length} Dimensions
           </span>
         </div>
 
@@ -409,7 +409,7 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({
             No core judge verdicts recorded for this run.
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className={`grid grid-cols-1 ${compact ? '' : 'lg:grid-cols-2'} gap-3.5`}>
             {coreVerdicts.map((verdict) => {
               const hasOverride = overrideScores[verdict.metric_name] !== undefined;
               const effectivePassed = hasOverride ? overrideScores[verdict.metric_name] : verdict.passed;
@@ -418,10 +418,10 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({
               return (
                 <div
                   key={verdict.metric_name}
-                  className={`p-4 rounded-xl border space-y-2.5 transition-all ${
+                  className={`p-3.5 rounded-xl border flex flex-col justify-between space-y-2.5 transition-all ${
                     effectivePassed
-                      ? 'bg-emerald-50/30 border-emerald-200'
-                      : 'bg-rose-50/40 border-rose-300'
+                      ? 'bg-white border-emerald-200'
+                      : 'bg-rose-50/50 border-rose-300'
                   }`}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">

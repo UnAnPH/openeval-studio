@@ -29,3 +29,12 @@ ui/node_modules
 # Large test fixtures (>50MB)
 *graph-4-100000.json
 *generated_graph_10000n_20000e_graph.json
+
+# Experiment Results, Artifacts & Builds
+.runs/
+dossiers/
+ui/dist/
+artifacts/eval-venv/
+artifacts/true-evals/hf-cache/
+artifacts/true-evals/home/
+artifacts/true-evals/traces/

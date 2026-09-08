@@ -75,7 +75,9 @@ class VerifierRunner:
 
             test_sh_path = task.task_dir / "tests" / "test.sh"
             if test_sh_path.exists():
-                await sandbox.write_file("/workspace/tests/test.sh", test_sh_path.read_text(encoding="utf-8"))
+                await sandbox.write_file(
+                    "/workspace/tests/test.sh", test_sh_path.read_text(encoding="utf-8")
+                )
                 await sandbox.exec_command("chmod +x /workspace/tests/test.sh")
 
         timeout = task.verifier.timeout_sec
