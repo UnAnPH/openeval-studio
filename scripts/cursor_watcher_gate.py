@@ -7,13 +7,13 @@ Project hooks (.cursor/hooks.json):
   "hooks": {
     "beforeShellExecution": [
       {
-        "command": "python3 /ABS/PATH/openeval-studio/scripts/cursor_watcher_gate.py",
+        "command": "python3 \"/ABS/PATH/openeval-studio/scripts/cursor_watcher_gate.py\"",
         "timeout": 5
       }
     ],
     "preToolUse": [
       {
-        "command": "python3 /ABS/PATH/openeval-studio/scripts/cursor_watcher_gate.py",
+        "command": "python3 \"/ABS/PATH/openeval-studio/scripts/cursor_watcher_gate.py\"",
         "timeout": 5
       }
     ]

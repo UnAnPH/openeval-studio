@@ -5,15 +5,19 @@ on:
     branches: [main, master, "feat/**"]
   pull_request:
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  test:
+  check:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
 
@@ -22,6 +26,15 @@ jobs:
 
       - name: Install dependencies
         run: uv sync --extra dev
+
+      - name: Ruff lint
+        run: uv run ruff check .
+
+      - name: Ruff format check
+        run: uv run ruff format --check .
+
+      - name: Pyright
+        run: uv run pyright
 
       - name: Pytest (not slow)
         run: uv run pytest tests/ -m "not slow" -q --tb=short
@@ -73,3 +86,26 @@ jobs:
           assert "ci-smoke-1" in ids, ids
           print("CI watcher smoke OK")
           PY
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Build UI
+        working-directory: ui
+        run: |
+          npm ci
+          npm run build
+
+      - name: Docker build
+        run: docker build -t openeval-studio:ci .
+
+  # Kept as a thin alias so existing branch protection / badges still resolve.
+  test:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "CI check passed"

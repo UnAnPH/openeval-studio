@@ -1,0 +1,19 @@
+# Render Blueprint — free web service for OpenEval Studio.
+# 1. https://dashboard.render.com → New → Blueprint → select this repo
+# 2. After the service exists: Settings → Deploy Hook → copy URL
+# 3. GitHub repo → Settings → Secrets → Actions → RENDER_DEPLOY_HOOK
+services:
+  - type: web
+    name: openeval-studio
+    runtime: docker
+    plan: free
+    region: oregon
+    healthCheckPath: /api/health
+    autoDeploy: false
+    envVars:
+      - key: OPENEVAL_WATCHER_USE_LLM
+        value: "0"
+      - key: WATCHER_STORAGE_DIR
+        value: /tmp/watcher
+      - key: PYTHONUNBUFFERED
+        value: "1"

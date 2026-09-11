@@ -21,7 +21,8 @@ from uuid import uuid4
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
@@ -3197,3 +3198,24 @@ async def shutdown_event() -> None:
 
     daemon = AgentWatcherDaemon.get_instance()
     daemon.stop()
+
+
+# Serve the Vite build when present (Docker / production). API routes stay first.
+_UI_DIST = PROJECT_ROOT / "ui" / "dist"
+if _UI_DIST.is_dir():
+    _assets = _UI_DIST / "assets"
+    if _assets.is_dir():
+        app.mount("/assets", StaticFiles(directory=_assets), name="ui-assets")
+
+    @app.get("/")
+    async def spa_index() -> FileResponse:
+        return FileResponse(_UI_DIST / "index.html")
+
+    @app.get("/{full_path:path}")
+    async def spa_fallback(full_path: str) -> FileResponse:
+        if full_path.startswith("api/") or full_path.startswith("assets/"):
+            raise HTTPException(status_code=404, detail="Not found")
+        candidate = _UI_DIST / full_path
+        if candidate.is_file():
+            return FileResponse(candidate)
+        return FileResponse(_UI_DIST / "index.html")
