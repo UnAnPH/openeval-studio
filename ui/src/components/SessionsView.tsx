@@ -49,7 +49,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(initialSessionId || null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [sessionFilter, setSessionFilter] = useState<string>('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'blocked' | 'closed'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'live' | 'blocked' | 'closed'>('all');
 
   // Transcript Search state
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -70,30 +70,12 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };
-  const [daemonStatus, setDaemonStatus] = useState<{
-    is_running: boolean;
-    status_text: string;
-    events_intercepted_count: number;
-    blocked_actions_count: number;
-  } | null>(null);
-
-  const fetchDaemonStatus = async () => {
-    try {
-      const res = await fetch('/api/v1/watcher/daemon').catch(() => null);
-      if (res && res.ok) {
-        const data = await res.json();
-        setDaemonStatus(data);
-      }
-    } catch {
-      // Safe fallback
-    }
-  };
 
   // Fetch sessions from Watcher backend
   const fetchSessions = async (autoSelect = false) => {
     try {
       setIsLoading(true);
-      const res = await fetch('/api/v1/watcher/sessions');
+      const res = await fetch('/api/v1/watcher/sessions?min_messages=1');
       if (res.ok) {
         const data: WatcherSession[] = await res.json();
         if (Array.isArray(data)) {
@@ -116,10 +98,8 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
 
   useEffect(() => {
     fetchSessions(true);
-    fetchDaemonStatus();
     const interval = setInterval(() => {
       fetchSessions(false);
-      fetchDaemonStatus();
     }, 4000);
     return () => clearInterval(interval);
   }, [initialSessionId]);
@@ -140,34 +120,42 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
     [sessions, selectedSessionId]
   );
 
-  // Counts for status filter tabs
-  const activeCount = useMemo(
-    () => sessions.filter((s) => s.status === 'active' || s.status === 'working').length,
+  // Session is blocked if any review denied/blocked (accept deny|block|reject vocab) or score ≥ 8, unless operator-allowed.
+  const sessionIsBlocked = (s: WatcherSession) =>
+    (s.trajectory?.reviews || []).some(
+      (r) =>
+        (r.decision === 'block' || r.decision === 'deny' || r.decision === 'reject' || (r.score || 0) >= 8) &&
+        r.human_override !== 'allow' &&
+        r.resolution_status !== 'human_approved'
+    );
+
+  const sessionIsLive = (s: WatcherSession) =>
+    s.status === 'working' || s.status === 'active' || s.status === 'running';
+
+  // Buckets for filter pills: ALL / LIVE / BLOCKED / CLOSED
+  const totalCount = sessions.length;
+  const liveCount = useMemo(
+    () => sessions.filter((s) => sessionIsLive(s)).length,
     [sessions]
   );
   const blockedCount = useMemo(
-    () =>
-      sessions.filter((s) =>
-        (s.trajectory?.reviews || []).some((r) => r.decision === 'block' || r.score >= 8)
-      ).length,
+    () => sessions.filter((s) => sessionIsBlocked(s)).length,
     [sessions]
   );
   const closedCount = useMemo(
-    () => sessions.filter((s) => s.status !== 'active' && s.status !== 'working').length,
+    () => sessions.filter((s) => !sessionIsBlocked(s) && !sessionIsLive(s)).length,
     [sessions]
   );
 
-  // Filter sessions list by query & status
+  // Filter sessions list by query & status (All, Live, Blocked, or Closed)
   const filteredSessions = useMemo(() => {
     let list = sessions;
-    if (statusFilter === 'active') {
-      list = list.filter((s) => s.status === 'active' || s.status === 'working');
+    if (statusFilter === 'live') {
+      list = list.filter((s) => sessionIsLive(s));
     } else if (statusFilter === 'blocked') {
-      list = list.filter((s) =>
-        (s.trajectory?.reviews || []).some((r) => r.decision === 'block' || r.score >= 8)
-      );
+      list = list.filter((s) => sessionIsBlocked(s));
     } else if (statusFilter === 'closed') {
-      list = list.filter((s) => s.status !== 'active' && s.status !== 'working');
+      list = list.filter((s) => !sessionIsBlocked(s) && !sessionIsLive(s));
     }
 
     if (!sessionFilter.trim()) return list;
@@ -181,6 +169,16 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
         (s.model && s.model.toLowerCase().includes(q))
     );
   }, [sessions, sessionFilter, statusFilter]);
+
+  // Auto-sync selectedSessionId if current selection is not visible in filtered list
+  useEffect(() => {
+    if (filteredSessions.length > 0) {
+      const exists = filteredSessions.some((s) => s.session_id === selectedSessionId);
+      if (!exists) {
+        setSelectedSessionId(filteredSessions[0].session_id);
+      }
+    }
+  }, [filteredSessions, selectedSessionId]);
 
   // Handle LLM Fragment Search
   const handleSearch = async (e: React.FormEvent) => {
@@ -266,9 +264,9 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
           tool_name: r.tool_name,
           stdout: r.diff ? `Applied Diff:\n${r.diff}` : `Verdict: ${r.decision}\nExplanation: ${r.explanation || 'Approved operation.'}`,
           stderr: '',
-          exit_code: r.decision === 'block' ? 1 : 0,
+          exit_code: r.decision === 'block' || r.decision === 'deny' || r.decision === 'reject' ? 1 : 0,
           duration_ms: r.latency_ms,
-          is_error: r.decision === 'block',
+          is_error: r.decision === 'block' || r.decision === 'deny' || r.decision === 'reject',
         }));
 
     // If messages carry individual tool_calls (from updated Antigravity loader)
@@ -343,7 +341,9 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
   const messagesCount = selectedSession?.trajectory?.messages?.length || 0;
   const toolCallsCount = selectedSession?.trajectory?.tool_calls?.length || 0;
   const reviews = selectedSession?.trajectory?.reviews || [];
-  const blockedReviews = reviews.filter((r) => r.decision === 'block' || r.score >= 8);
+  const blockedReviews = reviews.filter(
+    (r) => r.decision === 'block' || r.decision === 'deny' || r.decision === 'reject' || r.score >= 8
+  );
   const hasViolations = blockedReviews.length > 0;
 
   // Structured Task & Execution Synopsis (What the task was, what was accomplished, what happened)
@@ -428,13 +428,15 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
     }
 
     // 4. What happened (Policy & Execution flow)
-    const blockedRevs = revs.filter((r) => r.decision === 'block' || r.score >= 8);
+    const blockedRevs = revs.filter(
+      (r) => r.decision === 'block' || r.decision === 'deny' || r.decision === 'reject' || r.score >= 8
+    );
     let happenedDesc = parsedVerdict;
     if (!happenedDesc) {
       if (blockedRevs.length > 0) {
         happenedDesc = `Deterministic policy firewall intercepted and contained ${blockedRevs.length} critical operation(s) (Flagged: ${blockedRevs.map((r) => r.rule_name || r.tool_name).slice(0, 2).join(', ')}). Action was blocked or gated.`;
       } else {
-        happenedDesc = `All ${tcs.length} tool executions passed security policy without violations. Monitored session status: '${selectedSession.status || 'completed'}'.`;
+        happenedDesc = `All ${tcs.length} tool executions passed security policy without violations. Monitored session status: '${selectedSession.status === 'completed' ? 'closed' : (selectedSession.status || 'closed')}'.`;
       }
     }
 
@@ -488,17 +490,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
         <div className="flex items-center gap-3">
           <h1 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
             <span>Sessions & Firewall</span>
-            <span className="px-2 py-0.5 text-[11px] font-mono font-semibold bg-slate-100 text-slate-700 rounded-full">
-              {sessions.length}
-            </span>
           </h1>
-
-          {daemonStatus && daemonStatus.is_running && (
-            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-medium">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Daemon: RUNNING (Antigravity & Claude Code)</span>
-            </div>
-          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -537,7 +529,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
         <div className="w-80 bg-white rounded-2xl border border-border-subtle shadow-sm flex flex-col shrink-0 overflow-hidden">
           {/* Filter & Status Tabs */}
           <div className="p-3 border-b border-[#e5e7eb] space-y-2">
-            {/* Status Tabs: All, Active, Blocked, Closed */}
+            {/* Status Tabs: All, Live, Blocked, and Closed */}
             <div className="grid grid-cols-4 bg-slate-100 p-1 rounded-xl gap-1 text-center">
               <button
                 type="button"
@@ -549,19 +541,42 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
                 }`}
               >
                 <span className="text-[10px] uppercase tracking-wider font-bold">All</span>
-                <span className="font-mono text-xs font-bold tabular-nums">{sessions.length}</span>
+                <span
+                  className={`font-mono text-xs font-bold tabular-nums px-1.5 py-0.2 rounded-full ${
+                    statusFilter === 'all'
+                      ? 'bg-slate-200 text-slate-900'
+                      : 'bg-slate-200/60 text-slate-600'
+                  }`}
+                >
+                  {totalCount}
+                </span>
               </button>
               <button
                 type="button"
-                onClick={() => setStatusFilter('active')}
+                onClick={() => setStatusFilter('live')}
                 className={`py-1.5 px-1 rounded-lg transition-all cursor-pointer flex flex-col items-center justify-center ${
-                  statusFilter === 'active'
-                    ? 'bg-white text-slate-900 shadow-xs font-bold'
+                  statusFilter === 'live'
+                    ? 'bg-white text-emerald-700 shadow-xs font-bold'
+                    : liveCount > 0
+                    ? 'text-emerald-600 font-bold hover:text-emerald-800'
                     : 'text-slate-600 hover:text-slate-900 font-medium'
                 }`}
               >
-                <span className="text-[10px] uppercase tracking-wider font-bold">Active</span>
-                <span className="font-mono text-xs font-bold tabular-nums text-emerald-600">{activeCount}</span>
+                <div className="flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-[10px] uppercase tracking-wider font-bold">Live</span>
+                </div>
+                <span
+                  className={`font-mono text-xs font-bold tabular-nums px-1 py-0.2 rounded-full ${
+                    statusFilter === 'live'
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : liveCount > 0
+                      ? 'bg-emerald-50 text-emerald-600'
+                      : 'bg-slate-200/60 text-slate-600'
+                  }`}
+                >
+                  {liveCount}
+                </span>
               </button>
               <button
                 type="button"
@@ -575,7 +590,15 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
                 }`}
               >
                 <span className="text-[10px] uppercase tracking-wider font-bold">Blocked</span>
-                <span className={`font-mono text-xs font-bold tabular-nums ${blockedCount > 0 ? 'text-rose-600' : ''}`}>
+                <span
+                  className={`font-mono text-xs font-bold tabular-nums px-1 py-0.2 rounded-full ${
+                    statusFilter === 'blocked'
+                      ? 'bg-rose-100 text-rose-800'
+                      : blockedCount > 0
+                      ? 'bg-rose-50 text-rose-600'
+                      : 'bg-slate-200/60 text-slate-600'
+                  }`}
+                >
                   {blockedCount}
                 </span>
               </button>
@@ -589,7 +612,15 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
                 }`}
               >
                 <span className="text-[10px] uppercase tracking-wider font-bold">Closed</span>
-                <span className="font-mono text-xs font-bold tabular-nums">{closedCount}</span>
+                <span
+                  className={`font-mono text-xs font-bold tabular-nums px-1 py-0.2 rounded-full ${
+                    statusFilter === 'closed'
+                      ? 'bg-slate-200 text-slate-900'
+                      : 'bg-slate-200/60 text-slate-600'
+                  }`}
+                >
+                  {closedCount}
+                </span>
               </button>
             </div>
 
@@ -613,13 +644,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
                 {isLoading ? (
                   <p>Loading monitored sessions...</p>
                 ) : (
-                  <>
-                    <p className="font-semibold text-slate-600">No monitored sessions yet</p>
-                    <p className="max-w-xs mx-auto leading-relaxed">
-                      Run <code className="font-mono text-[10px] bg-slate-100 px-1 rounded">bash scripts/record_gate_demo.sh</code>
-                      {' '}or connect an agent hook, then open <span className="font-semibold">Safety → Control</span> in Enforce.
-                    </p>
-                  </>
+                  <p>No sessions found matching the current filter.</p>
                 )}
               </div>
             ) : (
@@ -627,7 +652,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
                 const isSelected = s.session_id === selectedSessionId;
                 const sMsgCount = s.trajectory?.messages?.length || 0;
                 const sToolCount = s.trajectory?.tool_calls?.length || 0;
-                const sHasBlocked = (s.trajectory?.reviews || []).some((r) => r.decision === 'block' || r.score >= 8);
+                const sHasBlocked = sessionIsBlocked(s);
                 const isWorking = s.status === 'working';
 
                 return (
@@ -652,7 +677,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
                         }`}
                       >
                         {isWorking && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />}
-                        {sHasBlocked ? 'Blocked' : s.status || 'active'}
+                        {sHasBlocked ? 'Blocked' : isWorking ? 'working' : s.status === 'completed' ? 'closed' : s.status || 'closed'}
                       </span>
                     </div>
 
@@ -727,7 +752,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
                           : 'bg-slate-100 text-slate-700'
                       }`}
                     >
-                      {hasViolations ? 'Policy Intercept' : selectedSession.status === 'working' ? 'Live Working' : 'Completed'}
+                      {hasViolations ? 'Policy Intercept' : selectedSession.status === 'working' ? 'Live Working' : 'Closed'}
                     </span>
                   </div>
                 </div>

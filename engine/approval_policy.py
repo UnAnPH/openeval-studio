@@ -319,6 +319,21 @@ class WatcherVerdict(BaseModel):
         default_factory=lambda: datetime.datetime.now(datetime.UTC).isoformat(),
         description="ISO 8601 evaluation timestamp",
     )
+    review_id: str | None = Field(default=None, description="Linked WatcherStore review record ID")
+    session_id: str | None = Field(default=None, description="Linked session ID")
+    human_override: Literal["allow", "deny"] | None = Field(
+        default=None, description="Human operator override"
+    )
+    resolution_status: Literal["pending", "blocked", "human_approved"] = Field(
+        default="pending", description="Interception resolution state"
+    )
+    full_command: str | None = Field(
+        default=None, description="Complete unclipped command or tool input"
+    )
+    tool_result: str | None = Field(default=None, description="Execution stdout/stderr or result")
+    threat_category: str | None = Field(
+        default=None, description="Apollo 13-point threat taxonomy category"
+    )
 
 
 class WatcherEngine:
@@ -385,8 +400,10 @@ class WatcherEngine:
         # Build action preview
         if cmd:
             preview = f"{tool_name}: {cmd[:80]}"
+            preview = f"{tool_name}: {cmd}"
         elif path:
             preview = f"{tool_name}: {path[:80]}"
+            preview = f"{tool_name}: {path}"
         else:
             preview = f"{tool_name}({list(arguments.keys())[:3]})"
 
@@ -606,6 +623,8 @@ class WatcherEngine:
         rule_tag: str | None,
         preview: str,
         agent_id: str,
+        full_command: str | None = None,
+        tool_result: str | None = None,
     ) -> WatcherVerdict:
         """Apply active enforcement mode (enforce vs observe) and record telemetry."""
         shadow_decision: WatcherDecision | None = None
@@ -631,6 +650,13 @@ class WatcherEngine:
             is_safe=is_safe,
             action_preview=preview,
             agent_id=agent_id,
+            full_command=full_command or preview,
+            tool_result=tool_result
+            or (
+                "Execution blocked by Watcher safety gate."
+                if applied_decision in ("deny", "block")
+                else None
+            ),
         )
 
         self._interception_history.append(verdict)

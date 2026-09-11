@@ -36,10 +36,17 @@ See **[DEMO.md](DEMO.md)** (<10 min) and **[FINDINGS.md](FINDINGS.md)** (smoke +
 3. **Fast triage** — heuristic Secret Reading Law, or Gemini XML grade when `OPENEVAL_WATCHER_USE_LLM=1`  
 4. **Deep review** — heuristic adjustments, or Gemini when enabled  
 
-Modes (`GET/POST /api/watcher/config`): `enforce` (real deny), `observe` (shadow only), `paused` (allow all).  
+**Interactive Lockout (`force_ask`):** When in `enforce` mode, safety violations trigger an interactive lockout response (`"decision": "force_ask"`, `terminal_reason="lockout"`) in the client hooks. This halts autonomous agents (Antigravity, Cursor, Claude Code) and requires human intervention rather than allowing the agent to bypass the block.
+
+Modes (`GET/POST /api/watcher/config`): `enforce` (real deny / lockout), `observe` (shadow only), `paused` (allow all).  
 Hooks **fail-open** if the API is down *after* local blacklist checks.
 
-**Control vs Policy:** Control sets runtime mode only. Policy stores command rules + tool thresholds (1–10). Evaluate uses store policy only and persists sessions/decisions in WatcherStore. Hooks keep `/api/watcher/evaluate` and `/api/watcher/config`; prefer `/api/v1/watcher/*` for sessions and other Watcher APIs. `WatcherEngine.evaluate_action` is legacy (unit tests).
+**Control vs Policy vs Sessions:**
+- **Control** (`#control`) sets runtime mode (`enforce` / `observe` / `paused`), provides a real-time event stream (`All`, `Blocked`, `Closed`), displays full unclipped commands and execution outputs, and supports operator overrides (`👤 Allow All for Clarity` / single-command approval).
+- **Sessions** (`#sessions`) hosts the deep session browser with status filters (`All`, `Live` with pulsating indicator, `Blocked`, `Closed`), live active agent discovery, hybrid transcript search, and log ingestion.
+- **Policy** (`#policy`) stores command rules + tool thresholds (1–10) and resolution management.
+
+Hooks talk to `/api/watcher/evaluate` and `/api/watcher/config`; prefer `/api/v1/watcher/*` for sessions, resolution, and other Watcher APIs. `WatcherEngine.evaluate_action` is legacy (unit tests).
 
 ### UI navigation
 
@@ -47,9 +54,9 @@ Two peer products in the sidebar:
 
 - **Evaluate** — Overview · Catalog · Launch · Runs · Compare · Judges  
 - **Safety**
-  - **Control** (`#control`) — enforce / observe / paused + live feed  
-  - **Sessions** (`#sessions`) — trajectory browser / transcript search / ingest  
-  - **Policy** (`#policy`) — command rules + tool thresholds + resolve  
+  - **Control** (`#control`) — mode switch (Enforce / Observe / Paused) + live telemetry stream with All / Blocked / Closed tabs, unclipped command/output inspector, and operator resolution actions  
+  - **Sessions** (`#sessions`) — trajectory browser with All / Live / Blocked / Closed filters, active session tracking, hybrid transcript search, and log ingest  
+  - **Policy** (`#policy`) — command rules + tool thresholds (1–10) + operator review resolve  
 
 Legacy hashes `#firewall` and `#watcher_live` redirect to Control and Policy. 
 

@@ -19,10 +19,13 @@ Do not describe it as enterprise SaaS, multi-tenant MDM, or “Deep LLM always-o
 
 ## Inviolable rules
 
-1. **No fake production data** — never hardcode mock incidents/turns in UI paths (empty state instead). Demo endpoints must be labeled DEMO-ONLY.
-2. **Design system** — `lucide-react` only in new/edited views; cards `bg-white rounded-2xl border border-border-subtle shadow-sm`.
-3. **Command rules only on command tools** — when applying shell regexes in `evaluate_action_watcher_gateway`, do not treat file-write payloads as shell commands.
-4. **Quality before done:** `make check`, `uv run pytest tests/`, `cd ui && npm run build`.
+1. **No fake production data** — never hardcode mock incidents/turns in UI paths (empty state instead). Demo endpoints must be labeled DEMO-ONLY. In Sessions, 0-message sessions must not be displayed.
+2. **Interactive Lockout (`force_ask`)** — When an action is denied in `enforce` mode, client hooks (Antigravity, Cursor, Claude Code) must return an interactive lockout (`"decision": "force_ask"`, `terminal_reason="lockout"`) to halt agent execution and require operator confirmation.
+3. **No command or result truncation** — full command strings and executed tool results must be preserved unclipped in stores, SSE payloads, and UI detail cards.
+4. **Filter layout contract** — The `Live` status filter tab belongs exclusively on **Safety → Sessions** (`All` | `Live` | `Blocked` | `Closed`). **Safety → Control** strictly maintains 3 decision tabs (`All` | `Blocked` | `Closed`).
+5. **Design system** — `lucide-react` only in new/edited views; cards `bg-white rounded-2xl border border-border-subtle shadow-sm`.
+6. **Command rules only on command tools** — when applying shell regexes in `evaluate_action_watcher_gateway`, do not treat file-write payloads as shell commands.
+7. **Quality before done:** `make check`, `uv run pytest tests/` (all 136 tests passing), `cd ui && npm run build` (0 TypeScript/Vite errors).
 
 ---
 
@@ -30,10 +33,12 @@ Do not describe it as enterprise SaaS, multi-tenant MDM, or “Deep LLM always-o
 
 | Piece | Status |
 | --- | --- |
-| Antigravity hook | `scripts/antigravity_watcher_gate.py` + `install_antigravity_watcher_hook.sh` (matcher `.*`) |
-| Claude Code hook | `scripts/claude_code_watcher_hook.py` (settings.json PreToolUse) |
-| Cursor hook | `scripts/cursor_watcher_gate.py` (`.cursor/hooks.json` beforeShellExecution) |
-| Thresholds UI | Watcher Live → Tool Thresholds (wired to store + evaluate) |
+| Antigravity hook | `scripts/antigravity_watcher_gate.py` + `install_antigravity_watcher_hook.sh` (matcher `.*`, `force_ask` lockout) |
+| Claude Code hook | `scripts/claude_code_watcher_hook.py` (settings.json PreToolUse, interactive prompt on deny) |
+| Cursor hook | `scripts/cursor_watcher_gate.py` + `install_cursor_watcher_hook.sh` (`.cursor/hooks.json`, `force_ask` lockout) |
+| Operator Override | Single-action approval (`/api/v1/watcher/gate/resolve`) and bulk resolution (`/api/v1/watcher/reviews/resolve-all`) |
+| Live Session Ingest | Automatic discovery of active sessions (`working`, `active`, `running`) into Sessions `Live` tab |
+| Thresholds UI | Safety → Policy → Tool Thresholds (wired to store + evaluate) |
 | LLM Stage 3/4 | Optional via `OPENEVAL_WATCHER_USE_LLM=1`; else heuristics |
 | Codex | Threshold names only — no full client hook yet |
 
@@ -45,11 +50,11 @@ Do not describe it as enterprise SaaS, multi-tenant MDM, or “Deep LLM always-o
 cli.py, inspect_tasks.py
 engine/          # agents, judges, scanners, sweep
 schemas/         # pydantic models
-server/          # FastAPI, stores, policy_gateway
-scripts/         # agent hooks + demo_block.sh
+server/          # FastAPI, stores, policy_gateway, review resolution
+scripts/         # agent hooks + demo_block.sh + install scripts
 tasks/           # 5-file benchmarks
 ui/              # React app
-tests/
+tests/           # 136 pytest unit/integration tests
 DEMO.md FINDINGS.md
 ```
 
@@ -58,5 +63,6 @@ DEMO.md FINDINGS.md
 ## Extension recipes
 
 - New task: `tasks/<id>/` 5-file standard + register in `inspect_tasks.py` / defaults.  
-- New command rule / threshold: Watcher Live UI or `server/command_rules.py` + tests.  
-- Hook changes: update matching script under `scripts/` and re-run install for Antigravity.
+- New command rule / threshold: Safety → Policy UI or `server/command_rules.py` + tests.  
+- Operator review: Use UI resolution buttons or `POST /api/v1/watcher/gate/resolve` / `POST /api/v1/watcher/reviews/resolve-all`.
+- Hook changes: update matching script under `scripts/` and re-run install for Antigravity/Cursor.

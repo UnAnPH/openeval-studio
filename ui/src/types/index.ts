@@ -69,7 +69,7 @@ export interface RunRecord {
   task_id: string;
   model: string;
   provider: string;
-  status: 'pending' | 'running' | 'completed' | 'error' | 'max_steps_exceeded' | 'cancelled';
+  status: 'pending' | 'running' | 'completed' | 'error' | 'failed' | 'max_steps_exceeded' | 'cancelled';
   created_at: string;
   steps: AgentStep[];
   total_steps: number;
@@ -118,6 +118,21 @@ export interface WatcherConfig {
   timeout_sec: number;
 }
 
+export type ThreatCategory =
+  | 'data_exfiltration'
+  | 'exposure_of_internal_resources'
+  | 'prompt_injection'
+  | 'infrastructure_disruption'
+  | 'destructive_modification_of_shared_resources'
+  | 'undesirable_deletions'
+  | 'oversight_subversion'
+  | 'unsafe_agents'
+  | 'untrusted_code_execution'
+  | 'real_world_transactions'
+  | 'egregious_vulnerability_introduction'
+  | 'unapproved_dependency_installation'
+  | 'privilege_escalation';
+
 export interface WatcherVerdict {
   decision: 'allow' | 'deny' | 'escalate';
   stage: 'stage_1_readonly' | 'stage_2_deterministic' | 'stage_3_triage' | 'stage_4_deep_review' | 'fallback';
@@ -131,6 +146,13 @@ export interface WatcherVerdict {
   action_preview: string;
   agent_id: string;
   timestamp: string;
+  review_id?: string;
+  session_id?: string;
+  human_override?: 'allow' | 'deny' | null;
+  resolution_status?: 'pending' | 'blocked' | 'human_approved';
+  full_command?: string | null;
+  tool_result?: string | null;
+  threat_category?: ThreatCategory | string | null;
 }
 
 export interface RecommendedAction {
@@ -150,7 +172,7 @@ export interface FindingRecord {
   timestamp: string;
   severity: 'critical' | 'high' | 'medium' | 'low';
   dimension: string;
-  agent_source: 'antigravity' | 'claude_code' | 'openeval_runner';
+  agent_source: 'antigravity' | 'claude_code' | 'cursor' | 'openeval_runner';
   summary: string;
   recommended_actions: RecommendedAction[];
   flagged_turns: number[];
@@ -191,13 +213,16 @@ export interface WatcherReviewRecord {
   timestamp: string;
   tool_name: string;
   tool_input: string;
-  decision: 'allow' | 'warn' | 'block' | 'modify' | 'escalate';
+  decision: 'allow' | 'warn' | 'block' | 'deny' | 'reject' | 'modify' | 'escalate';
   score: number;
   stage: 'rule' | 'threshold' | 'triage' | 'deep_review';
   rule_name?: string | null;
   explanation: string;
   diff?: string | null;
   latency_ms: number;
+  human_override?: 'allow' | 'deny' | null;
+  resolution_status?: 'pending' | 'blocked' | 'human_approved' | null;
+  threat_category?: ThreatCategory | null;
 }
 
 export interface WatcherSession {
@@ -210,7 +235,7 @@ export interface WatcherSession {
   agent_type: 'antigravity' | 'claude_code' | 'cursor' | 'inspect_eval' | 're_act_agent' | 'custom';
   model: string;
   provider: string;
-  status: 'pending' | 'active' | 'working' | 'completed' | 'error' | 'cancelled' | 'parked';
+  status: 'pending' | 'active' | 'working' | 'running' | 'completed' | 'error' | 'cancelled' | 'parked';
   working_dir?: string | null;
   current_activity?: string | null;
   trajectory: {
@@ -243,6 +268,7 @@ export interface WatcherCommandRule {
   action: 'allow' | 'triage' | 'human' | 'deny' | 'off';
   description: string;
   is_custom: boolean;
+  threat_category?: ThreatCategory | null;
 }
 
 export interface WatcherToolThreshold {

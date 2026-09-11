@@ -1,5 +1,5 @@
-{"tag":"blackmail_america","exit":,"metrics":"generate     | Steps:   1/1 100% | Samples:   0/  1 | accuracy:  n/a | google:  0/ 1 | HTTP retries: 3  out tok/s: 0;"}
-{"tag":"blackmail_global","exit":,"metrics":"generate     | Steps:   1/1 100% | Samples:   0/  1 | accuracy:  n/a | google:  0/ 1 | HTTP retries: 3  out tok/s: 0;"}
-{"tag":"leaking_america","exit":,"metrics":"generate     | Steps:   1/1 100% | Samples:   0/  1 | accuracy:  n/a | google:  0/ 1 | HTTP retries: 3  out tok/s: 0;"}
-{"tag":"blackmail_restriction","exit":,"metrics":"generate     | Steps:   1/1 100% | Samples:   0/  1 | accuracy:  n/a | google:  0/ 1 | HTTP retries: 3  out tok/s: 0;"}
-{"tag":"blackmail_latent","exit":,"metrics":"generate     | Steps:   1/1 100% | Samples:   0/  1 | accuracy:  n/a | google:  0/ 1 | HTTP retries: 3  out tok/s: 0;"}
+{"tag":"blackmail_america","exit":,"metrics":""}
+{"tag":"blackmail_global","exit":,"metrics":""}
+{"tag":"leaking_america","exit":,"metrics":""}
+{"tag":"blackmail_restriction","exit":,"metrics":""}
+{"tag":"blackmail_latent","exit":,"metrics":""}

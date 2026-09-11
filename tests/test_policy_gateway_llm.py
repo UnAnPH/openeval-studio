@@ -1,5 +1,7 @@
 """Tests for PolicyGateway LLM XML parsing and threshold mapping."""
 
+import pytest
+
 from schemas.watcher_models import ToolThreshold
 from server.policy_gateway import PolicyGateway, _parse_decision_xml
 
@@ -37,3 +39,31 @@ def test_llm_grade_disabled_returns_heuristic() -> None:
     score, ctx = gw._fast_triage("Bash", "echo hi")
     assert score == 3
     assert "Routine" in ctx
+
+
+def test_llm_circuit_opens_after_repeated_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import email.message
+    import urllib.error
+
+    gw = PolicyGateway(use_llm=True, llm_model="gemini-does-not-exist")
+    monkeypatch.setenv("GEMINI_API_KEY", "fake-key-for-test")
+
+    def _raise(*_a: object, **_k: object) -> object:
+        raise urllib.error.HTTPError(
+            "https://example.invalid",
+            404,
+            "Not Found",
+            hdrs=email.message.Message(),
+            fp=None,  # type: ignore[arg-type]
+        )
+
+    monkeypatch.setattr("urllib.request.urlopen", _raise)
+    assert gw._llm_grade("sys", "user") is None
+    assert gw._llm_grade("sys", "user") is None
+    assert gw._llm_circuit_open is False
+    assert gw._llm_grade("sys", "user") is None
+    assert gw._llm_circuit_open is True
+    # Further calls skip the network once the circuit is open
+    assert gw._llm_grade("sys", "user") is None

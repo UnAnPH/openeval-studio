@@ -212,16 +212,31 @@ Displayed whenever the 4-stage safety firewall intercepts an unsafe tool invocat
 ## 5. View Specifications & Harmonization Rules
 
 ### 5.1 Sessions & Transcript Explorer (`SessionsView.tsx` & `TranscriptCardView.tsx`)
-* **Left Master List:** 340px fixed width, search bar with `Search` icon, session filter pills (`Active`, `Closed`, `All`), list items with active left indigo border indicator (`border-l-4 border-l-indigo-600`).
+* **Status Filter Toolbar:** 4-tab segmented control (`grid grid-cols-4`):
+  * **All:** Total ingested session count.
+  * **Live:** Actively executing sessions (`working`, `active`, `running`) featuring a pulsing emerald indicator (`w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse`).
+  * **Blocked:** Sessions containing at least one policy violation or blocked turn (accented with rose badges when count $>0$).
+  * **Closed:** Finished sessions (renamed consistently from `Completed`).
+* **Noise Suppression:** Zero-message ghost sessions are filtered out from the sidebar.
+* **Left Master List:** 340px fixed width, search bar with `Search` icon, list items with active left indigo border indicator (`border-l-4 border-l-indigo-600`), agent source pill, duration, and turn count.
 * **Right Transcript Detail:**
-  * Header with session ID, model, duration, and token counter.
+  * Header with session title, session ID copy badge, model, duration, and token counter.
   * Search chips: Hybrid search results showing Dense Vector ($60\%$), BM25 ($40\%$), and match percentage badges.
-  * Expand/collapse toggles for reasoning traces and observation stdout logs.
+  * Turn cards with expandable agent thought, full unclipped tool parameters, and observation stdout blocks.
 
-### 5.2 Watcher Live Flight Control (`WatcherLiveView.tsx`)
-* **Live Daemon Badge:** Green pulse indicator: `Daemon: RUNNING (Antigravity & Claude Code) • X events`.
-* **Decision Stream:** Expandable event rows showing tool name, timestamp, risk score badge, and resolution buttons (`Allow Once`, `Allow Session`, `Deny`).
-* **Full-Command Expansion:** Clickable rows with `Copy` buttons for shell commands and file payloads.
+### 5.2 Safety Control & Firewall Telemetry (`FirewallGateView.tsx`)
+* **Mode Header:** High-contrast pill toggle for runtime mode (`Enforce` [destructive lockout] / `Observe` [shadow log] / `Paused` [allow all]).
+* **Stream Filter Toolbar:** 3-tab segmented control (`grid grid-cols-3`):
+  * **All:** Total intercepted live events.
+  * **Blocked:** Active security policy violations (accented rose when count $>0$).
+  * **Closed:** Resolved, permitted, or operator-approved tool calls.
+  * *(Design Contract: The `Live` status filter is exclusively reserved for `SessionsView` to prevent redundant telemetry tabs).*
+* **Streamlined Telemetry Rows:** De-cluttered row format displaying expand chevron, timestamp, decision badge (`🛑 Denied` / `✓ Allowed` / `👤 Allowed (Human)`), agent source (`🤖 Antigravity`, `🖱️ Cursor`, `⚡ Claude Code`), and monospace action preview.
+* **Dual-Pane Expandable Detail Tray:**
+  * **Full Command:** Dark code surface (`bg-[#14121F]`) displaying unclipped command string with single-click `Copy Command` button.
+  * **Execution Output:** Terminal surface (`bg-[#0b1329] text-emerald-300`) displaying complete command stdout/stderr or gate lockout message with `Copy Output` button.
+  * **Metadata Grid:** Rounded latency (`Math.round(v.latency_ms) ms`), verification stage, and policy note.
+  * **Operator Resolution:** `👤 Mark as Operator Allowed` on blocked events, plus a top toolbar action `👤 Allow All for Clarity` when pending blocks exist.
 
 ### 5.3 Live Autonomous Trajectory Trace (`LiveTrajectory.tsx`)
 * **Phase Stepper:** 4-step linear flow (`1. Sandbox Init` $\rightarrow$ `2. Autonomous ReAct` $\rightarrow$ `3. Pytest Verifier` $\rightarrow$ `4. LLM Judge Audits`) with pulsating indicators.

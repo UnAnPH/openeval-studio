@@ -119,6 +119,7 @@ export function App() {
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const watcherSseRef = useRef<EventSource | null>(null);
+  const evalSettledRef = useRef<boolean>(false);
 
   const [serverConnected, setServerConnected] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -171,6 +172,31 @@ export function App() {
         } catch {}
       });
 
+      sse.addEventListener('interception_resolved', () => {
+        fetch('/api/watcher/interceptions')
+          .then((r) => r.json())
+          .then((rows) => {
+            if (Array.isArray(rows)) setLiveInterceptions(rows);
+          })
+          .catch(() => {});
+      });
+
+      sse.addEventListener('tool_result_event', (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          setLiveInterceptions((prev) =>
+            prev.map((v) => {
+              const matchRev = data.review_id && v.review_id === data.review_id;
+              const matchSess = data.session_id && v.session_id === data.session_id;
+              if (matchRev || (matchSess && (!v.tool_result || v.tool_result.includes('Awaiting')))) {
+                return { ...v, tool_result: data.tool_result };
+              }
+              return v;
+            })
+          );
+        } catch {}
+      });
+
       sse.addEventListener('config_update', (e) => {
         try {
           const cfg: WatcherConfig = JSON.parse(e.data);
@@ -195,14 +221,15 @@ export function App() {
 
   const fetchInitialData = async () => {
     try {
-      const [healthRes, modelsRes, tasksRes, runsRes, findingsRes, watcherCfgRes, sessionsRes] = await Promise.all([
+      const [healthRes, modelsRes, tasksRes, runsRes, findingsRes, watcherCfgRes, sessionsRes, interceptRes] = await Promise.all([
         fetch('/api/health').catch(() => null),
         fetch('/api/models').catch(() => null),
         fetch('/api/tasks').catch(() => null),
         fetch('/api/eval/runs').catch(() => null),
         fetch('/api/watcher/findings').catch(() => null),
         fetch('/api/watcher/config').catch(() => null),
-        fetch('/api/v1/watcher/sessions').catch(() => null),
+        fetch('/api/v1/watcher/sessions?min_messages=1').catch(() => null),
+        fetch('/api/watcher/interceptions?limit=40').catch(() => null),
       ]);
 
       if (healthRes && healthRes.ok) {
@@ -263,6 +290,27 @@ export function App() {
         const findingsData: FindingRecord[] = await findingsRes.json();
         if (findingsData.length > 0) {
           setFindings(findingsData);
+        }
+      }
+
+      if (interceptRes && interceptRes.ok) {
+        const rows: WatcherVerdict[] = await interceptRes.json();
+        if (Array.isArray(rows) && rows.length > 0) {
+          setLiveInterceptions((prev) => {
+            if (prev.length === 0) return rows;
+            const seen = new Set(
+              prev.map((v) => `${v.agent_id}|${v.decision}|${v.action_preview}|${v.timestamp}`)
+            );
+            const merged = [...prev];
+            for (const row of rows) {
+              const key = `${row.agent_id}|${row.decision}|${row.action_preview}|${row.timestamp}`;
+              if (!seen.has(key)) {
+                seen.add(key);
+                merged.push(row);
+              }
+            }
+            return merged.slice(0, 50);
+          });
         }
       }
 
@@ -425,6 +473,7 @@ export function App() {
 
   // Honest failure when offline / API unavailable — never invent a passed run
   const failEvalLaunch = (message: string) => {
+    evalSettledRef.current = true;
     setRunStatus('failed');
     setIsStreaming(false);
     setErrorMsg(message);
@@ -434,11 +483,70 @@ export function App() {
     }
   };
 
+  const isTerminalRunStatus = (status: string | undefined | null, run?: RunRecord | null) => {
+    if (run && run.passed !== null && run.passed !== undefined) return true;
+    const s = String(status || '');
+    return [
+      'completed',
+      'failed',
+      'cancelled',
+      'error',
+      'max_steps_exceeded',
+      'timeout',
+    ].includes(s);
+  };
+
+  const settleEvalRun = (status: string, run?: RunRecord | null) => {
+    evalSettledRef.current = true;
+    setIsStreaming(false);
+    setRunStatus(status);
+    if (run) {
+      setActiveRun(run);
+      if (run.steps?.length) setLiveSteps(run.steps);
+    }
+  };
+
+  /** REST fallback when SSE drops mid-run — keeps Launch trajectory updating. */
+  const pollRunUntilSettled = async (runId: string) => {
+    for (let attempt = 0; attempt < 120; attempt++) {
+      if (evalSettledRef.current || eventSourceRef.current) {
+        return; // settled or a newer stream took over
+      }
+      try {
+        const res = await fetch(`/api/eval/runs/${runId}`);
+        if (res.ok) {
+          const record: RunRecord = await res.json();
+          setActiveRun(record);
+          setLiveSteps(record.steps || []);
+          setRunStatus(record.status);
+          if (isTerminalRunStatus(record.status, record)) {
+            settleEvalRun(
+              record.status === 'running'
+                ? record.passed
+                  ? 'completed'
+                  : 'error'
+                : record.status,
+              record
+            );
+            await fetchInitialData();
+            return;
+          }
+          setIsStreaming(true);
+        }
+      } catch {
+        /* ignore transient poll errors */
+      }
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+    setIsStreaming(false);
+  };
+
   const handleLaunchEval = async (taskIdToRun?: string) => {
     const targetTaskId = taskIdToRun || selectedTaskId || tasks[0]?.task_id || DEFAULT_TASKS[0].task_id;
     const targetModelId = selectedModelId || models[0]?.id || DEFAULT_MODELS[0].id;
 
     setSelectedTaskId(targetTaskId);
+    evalSettledRef.current = false;
     setIsStreaming(true);
     setRunStatus('running');
     setLiveSteps([]);
@@ -524,30 +632,36 @@ export function App() {
       eventSource.addEventListener('completed', async (e) => {
         try {
           const result = JSON.parse(e.data);
-          setRunStatus(result.status || 'completed');
-          setIsStreaming(false);
+          const detailsRes = await fetch(`/api/eval/runs/${currentRunId}`).catch(() => null);
+          let fullRecord: RunRecord | null = null;
+          if (detailsRes && detailsRes.ok) {
+            fullRecord = await detailsRes.json();
+            setRunsHistory((prev) => [
+              fullRecord!,
+              ...prev.filter((r) => r.run_id !== fullRecord!.run_id),
+            ]);
+          }
+          settleEvalRun(result.status || fullRecord?.status || 'completed', fullRecord);
           eventSource.close();
           eventSourceRef.current = null;
-
-          // Fetch full completed RunRecord
-          const detailsRes = await fetch(`/api/eval/runs/${currentRunId}`).catch(() => null);
-          if (detailsRes && detailsRes.ok) {
-            const fullRecord: RunRecord = await detailsRes.json();
-            setActiveRun(fullRecord);
-            setRunsHistory((prev) => [fullRecord, ...prev.filter((r) => r.run_id !== fullRecord.run_id)]);
-          }
           await fetchInitialData();
         } catch (err) {
           console.error('Error parsing completed event:', err);
+          settleEvalRun('completed');
+          eventSource.close();
+          eventSourceRef.current = null;
         }
       });
 
-      eventSource.addEventListener('error', (e) => {
-        console.warn('SSE stream error or termination:', e);
-        setIsStreaming(false);
+      eventSource.addEventListener('error', () => {
+        // Ignore errors after we've already settled, and ignore transient reconnecting.
+        if (evalSettledRef.current || eventSource.readyState === EventSource.CONNECTING) {
+          return;
+        }
+        console.warn('SSE stream closed; falling back to run polling');
         eventSource.close();
         eventSourceRef.current = null;
-        fetchInitialData();
+        void pollRunUntilSettled(currentRunId);
       });
     } catch (err: any) {
       console.warn('Error launching eval:', err);
@@ -556,6 +670,7 @@ export function App() {
   };
 
   const handleStopEval = async () => {
+    evalSettledRef.current = true;
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
       eventSourceRef.current = null;

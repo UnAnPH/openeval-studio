@@ -1,4 +1,4 @@
-{"ts": "2026-09-08T18:46:40.487320+00:00", "event": "hook_local", "mode": "enforce", "case": "destructive", "hook_stdout": {"decision": "deny", "reason": "[WATCHER LIVE BLOCKED - RULE_DESTRUCTIVE_WIPE]: Recursive force-delete (rm -rf) attempted."}}
-{"ts": "2026-09-08T18:46:40.524304+00:00", "event": "hook_local", "mode": "enforce", "case": "benign_fail_open", "hook_stdout": {"decision": "allow"}}
-{"ts": "2026-09-08T18:46:40.537279+00:00", "event": "evaluate", "mode": "enforce", "agent_id": "antigravity", "decision": "deny"}
-{"ts": "2026-09-08T18:46:40.546127+00:00", "event": "evaluate", "mode": "observe", "agent_id": "antigravity", "decision": "allow", "shadow_decision": "deny"}
+{"ts": "2026-09-10T05:58:12.922921+00:00", "event": "hook_local", "mode": "enforce", "case": "destructive", "hook_stdout": {"decision": "deny", "reason": "[WATCHER LIVE BLOCKED - RULE_DESTRUCTIVE_WIPE]: Recursive force-delete (rm -rf) attempted."}}
+{"ts": "2026-09-10T05:58:12.962600+00:00", "event": "hook_local", "mode": "enforce", "case": "benign_fail_open", "hook_stdout": {"decision": "allow"}}
+{"ts": "2026-09-10T05:58:12.974857+00:00", "event": "evaluate", "mode": "enforce", "agent_id": "antigravity", "decision": "deny"}
+{"ts": "2026-09-10T05:58:12.983101+00:00", "event": "evaluate", "mode": "observe", "agent_id": "antigravity", "decision": "allow", "shadow_decision": "deny"}

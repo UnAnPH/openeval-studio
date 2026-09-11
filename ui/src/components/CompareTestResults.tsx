@@ -992,15 +992,11 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
             </div>
           </div>
         ) : (
-          !isLoadingSemantic && (
-            <div className="p-3 bg-canvas rounded-xl text-center text-xs text-text-muted font-sans">
-              Click <strong>Run AI Semantic Comparison</strong> above to have an LLM synthesize the exact behavioral delta between <code>{runA.model}</code> and <code>{runB.model}</code>, filtering out whitespace and cosmetic syntax differences.
-            </div>
-          )
+          !isLoadingSemantic
         )}
       </div>
 
-      {/* 5. Divergence Notification Banner */}
+      {/* 5. Divergence Notification Banner
       {divergenceTurn !== null && (
         <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-900 flex items-center justify-between text-xs shadow-sm">
           <div className="flex items-center gap-2.5">
@@ -1010,7 +1006,7 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
             </span>
           </div>
         </div>
-      )}
+      )} */}
 
       {/* 5. TAB 1: SYNCHRONIZED TIMELINE */}
       {activeTab === 'timeline' && (

@@ -7,6 +7,7 @@ token/cost deltas, and automatic divergence point detection.
 
 import difflib
 import logging
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
@@ -361,27 +362,32 @@ class TrajectoryDiffEngine:
             except Exception:
                 runner = None
 
+        # Default to a live Gemini Flash-Lite id (not provider name — that silently
+        # failed API calls and fell back to the local heuristic).
+        judge_model = model or os.environ.get("OPENEVAL_COMPARE_MODEL", "gemini-3.1-flash-lite")
         cfg = LLMConfig(
-            model=model or (runner.provider if runner else "google/gemini-2.5-flash"),
+            model=judge_model,
+            provider="google",
             temperature=0.0,
         )
 
         if runner is not None:
             try:
-                resp = await runner.generate_structured(
+                resp = await runner.generate(
                     messages=messages,
-                    response_schema=SemanticComparisonVerdict,
                     config=cfg,
+                    response_schema=SemanticComparisonVerdict,
                 )
-                if resp.parsed:
-                    verdict = resp.parsed
+                if resp.parsed_json:
+                    verdict = SemanticComparisonVerdict.model_validate(resp.parsed_json)
                     verdict.run_a_id = run_a.run_id
                     verdict.run_b_id = run_b.run_id
                     verdict.task_id = run_a.task_id
                     return verdict
             except Exception as e:
                 logger.warning(
-                    f"LLM semantic comparison failed, falling back to heuristic evaluation: {e}"
+                    "LLM semantic comparison failed, falling back to heuristic evaluation: %s",
+                    e,
                 )
 
         # Heuristic fallback if LLM is unreachable or offline

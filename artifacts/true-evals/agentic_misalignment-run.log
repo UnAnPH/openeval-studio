@@ -1,0 +1,122 @@
+[09/07/26 23:17:30] WARNING  Control server failed to start (eval server.py:1708
+                             will run without control surface):                 
+                             AF_UNIX path too long                              
+Running 1 tasks...
+---------------------------------------------------------    
+agentic_misalignment (1 sample): google/gemini-3.1-flash-lite
+max_connections: 2, message_limit: 3, dataset: (samples)     
+---------------------------------------------------------    
+                                                             
+                    WARNING  sample=blackmail_explicit-americ _api_client.py:139
+                             a_replacement                                      
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+                    WARNING  sample=blackmail_explicit-america_re models.py:8422
+                             placement                                          
+                             Direct use of automatic function                   
+                             calling (AFC) in                                   
+                             AsyncModels.generate_content is not                
+                             recommended. Instead, we recommend                 
+                             to use AFC in                                      
+                             AsyncChat.send_message. Similarly,                 
+                             direct use of AFC in                               
+                             AsyncModels.generate_content_stream                
+                             is not recommended. Instead, we                    
+                             recommend to use AFC in                            
+                             AsyncChat.send_message_stream.                     
+generate     | Steps:   1/1 100% | Samples:   0/  1 | accuracy:  n/a | google:  0/ 2 | HTTP retries: 0
+
+---------------------------------------------------------                       
+agentic_misalignment (1 sample): google/gemini-3.1-flash-lite                   
+                                                                                
+╭───────────────────── Traceback (most recent call last) ──────────────────────╮
+│ /Users/jaysonandal/Documents/AI                                              │
+│ safety/openeval-studio/artifacts/eval-venv/lib/python3.12/site-packages/ins… │
+│ in task_run                                                                  │
+│                                                                              │
+│ /Users/jaysonandal/Documents/AI                                              │
+│ safety/openeval-studio/artifacts/eval-venv/lib/python3.12/site-packages/ins… │
+│ in run                                                                       │
+│                                                                              │
+│ /Users/jaysonandal/Documents/AI                                              │
+│ safety/openeval-studio/artifacts/eval-venv/lib/python3.12/site-packages/any… │
+│ in _run_coro                                                                 │
+│                                                                              │
+│   324 │   │                                                                  │
+│   325 │   │   with self._cancel_scope:                                       │
+│   326 │   │   │   try:                                                       │
+│ ❱ 327 │   │   │   │   retval = await self._coro                              │
+│   328 │   │   │   except BaseException as exc:                               │
+│   329 │   │   │   │   self._exception = exc                                  │
+│   330 │   │   │   │   raise                                                  │
+│                                                                              │
+│ /Users/jaysonandal/Documents/AI                                              │
+│ safety/openeval-studio/artifacts/eval-venv/lib/python3.12/site-packages/ins… │
+│ in run_one                                                                   │
+│                                                                              │
+│ /Users/jaysonandal/Documents/AI                                              │
+│ safety/openeval-studio/artifacts/eval-venv/lib/python3.12/site-packages/ins… │
+│ in run_sample                                                                │
+│                                                                              │
+│ /Users/jaysonandal/Documents/AI                                              │
+│ safety/openeval-studio/artifacts/eval-venv/lib/python3.12/site-packages/ins… │
+│ in task_run_sample                                                           │
+│                                                                              │
+│ /Users/jaysonandal/Documents/AI                                              │
+│ safety/openeval-studio/artifacts/eval-venv/lib/python3.12/site-packages/ins… │
+│ in _task_run_sample_attempt                                                  │
+│                                                                              │
+│ /Users/jaysonandal/Documents/AI                                              │
+│ safety/openeval-studio/artifacts/eval-venv/lib/python3.12/site-packages/ins… │
+│ in _task_run_sample_attempt                                                  │
+│                                                                              │
+│ /Users/jaysonandal/Documents/AI                                              │
+│ safety/inspect_evals-main/src/inspect_evals/agentic_misalignment/scorers.py… │
+│ in score                                                                     │
+│                                                                              │
+│   109 │   │   │   case _:                                                    │
+│   110 │   │   │   │   raise ValueError("unknown scenario")                   │
+│   111 │   │                                                                  │
+│ ❱ 112 │   │   return await score_from_classifier(                            │
+│   113 │   │   │   state=state,                                               │
+│   114 │   │   │   classifier=classifier,                                     │
+│   115 │   │   │   email_content=prompts.email_content,                       │
+│                                                                              │
+│ /Users/jaysonandal/Documents/AI                                              │
+│ safety/inspect_evals-main/src/inspect_evals/agentic_misalignment/scorers.py… │
+│ in score_from_classifier                                                     │
+│                                                                              │
+│    31 │   │   email_content=email_content, response=response                 │
+│    32 │   )                                                                  │
+│    33 │                                                                      │
+│ ❱  34 │   grader = get_model(grader_model or classifier.model_id)            │
+│    35 │                                                                      │
+│    36 │   grader_response = await grader.generate(grader_model_input)        │
+│    37                                                                        │
+│                                                                              │
+│ /Users/jaysonandal/Documents/AI                                              │
+│ safety/openeval-studio/artifacts/eval-venv/lib/python3.12/site-packages/ins… │
+│ in get_model                                                                 │
+│                                                                              │
+│ /Users/jaysonandal/Documents/AI                                              │
+│ safety/openeval-studio/artifacts/eval-venv/lib/python3.12/site-packages/ins… │
+│ in model_wrapper                                                             │
+│                                                                              │
+│ /Users/jaysonandal/Documents/AI                                              │
+│ safety/openeval-studio/artifacts/eval-venv/lib/python3.12/site-packages/ins… │
+│ in anthropic                                                                 │
+│                                                                              │
+│ /Users/jaysonandal/Documents/AI                                              │
+│ safety/openeval-studio/artifacts/eval-venv/lib/python3.12/site-packages/ins… │
+│ in validate_anthropic_client                                                 │
+╰──────────────────────────────────────────────────────────────────────────────╯
+PrerequisiteError: [bold]ERROR[/bold]: Anthropic API requires optional          
+dependencies. Install with:                                                     
+                                                                                
+[bold]pip install anthropic[/bold]                                              
+Task interrupted (no samples completed before interruption)                     
+Log:                                                                            
+artifacts/true-evals/agentic_misalignment/2026-09-07T21-17-30-00-00_agentic-mis…
+---------------------------------------------------------                       
+                                                                                

@@ -63,10 +63,26 @@ uv run python scripts/hermetic_eval_smoke.py
 
 ## 4. Claude Code / Cursor hooks
 
-See install snippets in repo history / `AGENTS.md`. Matcher notes:
+```bash
+bash scripts/install_antigravity_watcher_hook.sh
+bash scripts/install_cursor_watcher_hook.sh   # writes .cursor/hooks.json + ~/.cursor/hooks.json
+```
+
+Matcher notes:
 
 - Antigravity PreToolUse matcher must be `.*` (not `*`)  
+- Cursor: `beforeShellExecution` + `preToolUse` → `scripts/cursor_watcher_gate.py`  
 - Fail-open: server down → local blacklist still denies high-severity; else allow  
+- Local blacklist denies now also **report** to `/api/watcher/evaluate` so Control Live Stream / Sessions show the block  
+
+Verify:
+
+1. API + UI running; Safety → Control → **Enforce**  
+2. `curl` force-push via `./scripts/demo_block.sh` → expect deny; Live Stream shows it  
+3. In Cursor/Antigravity, ask agent to `git push --force origin main` → hard deny + Live Stream row  
+4. Safety → Sessions → refresh → antigravity / cursor rows from disk ingest  
+
+**Restart API after pulling these fixes** (ingest + interceptions seed are server-side). Reload UI.  
 
 ## What not to claim
 

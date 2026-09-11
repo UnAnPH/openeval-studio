@@ -82,7 +82,29 @@ export const LiveTrajectory: React.FC<LiveTrajectoryProps> = ({
     }
   };
 
-  const isCompleted = run && run.status !== 'pending' && run.status !== 'running';
+  const isCompleted =
+    !!run &&
+    (run.passed !== null && run.passed !== undefined
+      ? true
+      : !['pending', 'running', 'active', 'working'].includes(String(run.status || status)));
+
+  // Never show live spinners once the run record (or status prop) is terminal.
+  const showLive =
+    isStreaming &&
+    !isCompleted &&
+    !['completed', 'error', 'failed', 'cancelled', 'max_steps_exceeded', 'timeout'].includes(
+      String(status)
+    );
+
+  const displayStatus = isCompleted
+    ? run?.passed === false
+      ? status === 'cancelled'
+        ? 'cancelled'
+        : 'error'
+      : status === 'cancelled'
+        ? 'cancelled'
+        : 'completed'
+    : status;
 
   return (
     <div className="flex flex-col h-full bg-white rounded-2xl border border-border-subtle overflow-hidden shadow-sm">
@@ -124,7 +146,7 @@ export const LiveTrajectory: React.FC<LiveTrajectoryProps> = ({
               </button>
             </div>
           )}
-          {isStreaming && (
+          {showLive && (
             <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-200 text-xs font-bold text-indigo-700">
               <Loader2 className="w-3.5 h-3.5 text-indigo-600 animate-spin" />
               <span>Agent Executing</span>
@@ -132,16 +154,16 @@ export const LiveTrajectory: React.FC<LiveTrajectoryProps> = ({
           )}
           <span
             className={`text-[10px] uppercase font-mono px-2.5 py-0.5 rounded-full font-bold border ${
-              status === 'completed' || run?.passed
+              displayStatus === 'completed' || run?.passed
                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                : status === 'cancelled'
+                : displayStatus === 'cancelled'
                 ? 'bg-amber-50 text-amber-700 border-amber-200'
-                : status === 'error' || run?.passed === false
+                : displayStatus === 'error' || displayStatus === 'failed' || run?.passed === false
                 ? 'bg-rose-50 text-rose-700 border-rose-200'
                 : 'bg-slate-50 text-slate-700 border-slate-200'
             }`}
           >
-            {status}
+            {displayStatus}
           </span>
         </div>
       </div>
@@ -149,12 +171,12 @@ export const LiveTrajectory: React.FC<LiveTrajectoryProps> = ({
       {/* Execution Phase Stepper */}
       <div className="px-5 py-2.5 bg-slate-50 border-b border-border-subtle flex items-center justify-between text-xs font-mono text-slate-600 overflow-x-auto gap-3 shrink-0">
         <div className="flex items-center gap-1.5 whitespace-nowrap">
-          <span className={`w-2 h-2 rounded-full ${isStreaming || steps.length > 0 ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+          <span className={`w-2 h-2 rounded-full ${showLive || steps.length > 0 ? 'bg-emerald-500' : 'bg-slate-300'}`} />
           <span className={steps.length > 0 ? 'text-slate-900 font-bold' : ''}>1. Sandbox Init</span>
         </div>
         <span className="text-slate-400">&rarr;</span>
         <div className="flex items-center gap-1.5 whitespace-nowrap">
-          <span className={`w-2 h-2 rounded-full ${isStreaming ? 'bg-indigo-600 animate-ping' : steps.length > 0 ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+          <span className={`w-2 h-2 rounded-full ${showLive ? 'bg-indigo-600 animate-ping' : steps.length > 0 ? 'bg-emerald-500' : 'bg-slate-300'}`} />
           <span className={steps.length > 0 ? 'text-slate-900 font-bold' : ''}>2. Autonomous ReAct</span>
         </div>
         <span className="text-slate-400">&rarr;</span>
@@ -171,7 +193,7 @@ export const LiveTrajectory: React.FC<LiveTrajectoryProps> = ({
 
       {/* Trajectory Timeline */}
       <div className="flex-1 overflow-y-auto p-5 space-y-4 font-sans bg-slate-50/50">
-        {steps.length === 0 && !isStreaming && (
+        {steps.length === 0 && !showLive && (
           <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-3">
             <div className="w-12 h-12 rounded-2xl bg-white border border-border-subtle flex items-center justify-center text-slate-400 shadow-sm">
               <Terminal className="w-6 h-6" />
@@ -460,7 +482,7 @@ export const LiveTrajectory: React.FC<LiveTrajectoryProps> = ({
         })}
 
         {/* Live Running Indicator */}
-        {isStreaming && (
+        {showLive && (
           <div className="p-4 rounded-xl bg-indigo-50 border border-dashed border-indigo-300 flex items-center gap-3 text-xs text-indigo-700 font-mono">
             <Loader2 className="w-4 h-4 text-indigo-600 animate-spin" />
             <span>Agent is executing tools inside isolated Docker container...</span>

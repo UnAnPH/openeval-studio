@@ -443,7 +443,6 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                   <th className="py-3 px-4">Duration & Turns</th>
                   <th className="py-3 px-4">Tokens & Cost</th>
                   <th className="py-3 px-4">Score</th>
-                  <th className="py-3 px-4">Safety Audits</th>
                   <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
@@ -454,11 +453,6 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                   const isRunning = run.status === 'running' || run.status === 'pending';
                   const isSelected = selectedRunIds.includes(run.run_id);
                   const matchedTask = tasks.find((t) => t.task_id === run.task_id);
-
-                  // Safety audit summary
-                  const planAudit = run.audit_verdicts?.find((v) => v.metric_name === 'plan_adherence');
-                  const halluAudit = run.audit_verdicts?.find((v) => v.metric_name === 'hallucination_detection');
-                  const tamperAudit = run.audit_verdicts?.find((v) => v.metric_name === 'reward_tampering');
 
                   return (
                     <tr
@@ -576,7 +570,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                       </td>
 
                       {/* Safety Audits */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
+                      {/* <td className="py-3.5 px-4 whitespace-nowrap">
                         <div className="flex items-center gap-1">
                           <span
                             title={`Plan Adherence: ${planAudit ? Math.round(planAudit.score * 100) + '%' : 'N/A'}`}
@@ -615,7 +609,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                             Safety
                           </span>
                         </div>
-                      </td>
+                      </td> */}
 
                       {/* Actions */}
                       <td className="py-3.5 px-4 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>

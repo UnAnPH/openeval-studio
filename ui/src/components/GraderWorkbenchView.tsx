@@ -1,7 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { IonIcon } from '@ionic/react';
 import {
-  layersOutline,
   pulseOutline,
   refreshOutline,
   shieldCheckmark,
@@ -14,6 +13,9 @@ import {
   chevronDownOutline,
   chevronUpOutline,
 } from 'ionicons/icons';
+import { ChevronDown } from 'lucide-react';
+import { WatcherSession } from '../types';
+import { SessionPickerModal, sessionIsBlocked } from './SessionPickerModal';
 
 interface GraderDefinition {
   name: string;
@@ -64,16 +66,6 @@ interface TelemetryReport {
   grader_metrics: { precision: number; recall: number; f1_score: number; total_evaluated: number };
 }
 
-interface WatcherSession {
-  session_id: string;
-  title?: string;
-  project_name?: string;
-  status: string;
-  agent_type?: string;
-  model?: string;
-  working_dir?: string;
-}
-
 interface LiveAuditResult {
   grader_name: string;
   score: number;
@@ -91,7 +83,7 @@ export const GraderWorkbenchView: React.FC = () => {
     'step4' | 'definition' | 'step1' | 'step2' | 'step3' | 'example'
   >('step4');
   const [customPrompt, setCustomPrompt] = useState<string>('');
-  const [useEnsemble, setUseEnsemble] = useState<boolean>(false);
+  const useEnsemble = false;
   const [selectedModel, setSelectedModel] = useState<string>('gemini-3.1-flash-lite');
 
   // Right Panel Tab: live_audit | rubric_guide | backtest
@@ -101,6 +93,12 @@ export const GraderWorkbenchView: React.FC = () => {
   const [telemetry, setTelemetry] = useState<TelemetryReport | null>(null);
   const [sessions, setSessions] = useState<WatcherSession[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string>('');
+  const [isPickerOpen, setIsPickerOpen] = useState<boolean>(false);
+
+  const selectedSession = useMemo(
+    () => sessions.find((s) => s.session_id === selectedSessionId) || null,
+    [sessions, selectedSessionId]
+  );
 
   // Live Audit State
   const [isAuditing, setIsAuditing] = useState<boolean>(false);
@@ -305,12 +303,11 @@ export const GraderWorkbenchView: React.FC = () => {
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-4 sm:p-5 rounded-2xl border border-border-subtle shadow-sm shrink-0">
         <div>
           <h1 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
-            <IonIcon icon={shieldCheckmark} className="text-indigo-600 text-lg" />
             Safety Judges & Rubric Calibration
           </h1>
-          <p className="text-xs text-slate-500 mt-0.5">
+          {/* <p className="text-xs text-slate-500 mt-0.5">
             Calibrate and test automated LLM safety judges against real live agent transcripts and benchmark rubrics.
-          </p>
+          </p> */}
         </div>
 
         {/* Real Telemetry Pills (Truthful: no fake fallbacks) */}
@@ -352,7 +349,7 @@ export const GraderWorkbenchView: React.FC = () => {
           {/* Grader Selector Cards */}
           <div className="bg-white p-5 rounded-2xl border border-border-subtle shadow-sm space-y-3">
             <div className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-              1. Select Canonical Failure Mode
+              Select Canonical Failure Mode
             </div>
             <div className="grid grid-cols-1 gap-2">
               {[
@@ -383,7 +380,7 @@ export const GraderWorkbenchView: React.FC = () => {
             </div>
           </div>
 
-          {/* Model & Ensemble Controls */}
+          {/* Model & Ensemble Controls
           <div className="bg-white p-5 rounded-2xl border border-border-subtle shadow-sm space-y-3">
             <div className="text-xs font-bold text-gray-500 uppercase tracking-wider">
               2. Judge Model Configuration
@@ -414,13 +411,13 @@ export const GraderWorkbenchView: React.FC = () => {
             <div className="text-[11px] text-gray-500 italic">
               Multi-model ensemble averaging improves discrimination robustness across boundary edge-cases.
             </div>
-          </div>
+          </div> */}
 
           {/* Prompt Anatomy Section Editor */}
           <div className="bg-white p-5 rounded-2xl border border-border-subtle shadow-sm space-y-3 flex-1 flex flex-col">
             <div className="flex items-center justify-between">
               <div className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                3. Canonical Prompt Anatomy (C1–C15)
+                Canonical Prompt Anatomy (C1–C15)
               </div>
               <button
                 onClick={handleResetPrompt}
@@ -538,30 +535,70 @@ export const GraderWorkbenchView: React.FC = () => {
 
               {/* Session Selector & Audit Action */}
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                <div className="flex-1">
-                  <select
-                    value={selectedSessionId}
-                    onChange={(e) => setSelectedSessionId(e.target.value)}
-                    className="w-full text-xs font-mono bg-gray-50 border border-gray-200 rounded-xl p-2.5 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-gray-800"
-                  >
-                    {sessions.length === 0 ? (
-                      <option value="">No monitored sessions loaded</option>
-                    ) : (
-                      sessions.map((s) => (
-                        <option key={s.session_id} value={s.session_id}>
-                          {s.title || s.project_name || s.session_id} [{s.agent_type || 'agent'}] ({s.status})
-                        </option>
-                      ))
-                    )}
-                  </select>
+                <div
+                  onClick={() => setIsPickerOpen(true)}
+                  className="flex-1 p-3 px-4 rounded-xl border border-gray-200 bg-gray-50/70 hover:bg-gray-100/80 transition-all cursor-pointer flex items-center justify-between gap-3 group shadow-2xs select-none"
+                  title="Click to choose a monitored agent session"
+                >
+                  {selectedSession ? (
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      {/* Agent Badge */}
+                      <span className="px-2 py-0.5 rounded-md bg-dark-base text-white text-[10px] font-mono font-semibold shrink-0">
+                        {selectedSession.agent_type === 'antigravity'
+                          ? '🤖 Antigravity'
+                          : selectedSession.agent_type === 'claude_code'
+                          ? '⚡ Claude Code'
+                          : selectedSession.agent_type === 'cursor'
+                          ? '🖱️ Cursor'
+                          : selectedSession.agent_type || 'Agent'}
+                      </span>
+
+                      {/* Status Badge */}
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider shrink-0 ${
+                          sessionIsBlocked(selectedSession)
+                            ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                            : selectedSession.status === 'working' || selectedSession.status === 'active'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : 'bg-slate-100 text-slate-600 border border-slate-200'
+                        }`}
+                      >
+                        {sessionIsBlocked(selectedSession)
+                          ? '🛑 Blocked'
+                          : selectedSession.status === 'working' || selectedSession.status === 'active'
+                          ? '🟢 Active'
+                          : '✓ Closed'}
+                      </span>
+
+                      {/* Session Title & Info */}
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-bold text-gray-900 truncate">
+                          {selectedSession.title || selectedSession.project_name || selectedSession.session_id}
+                        </div>
+                        <div className="text-[10px] text-gray-400 font-mono truncate">
+                          id: {selectedSession.session_id.slice(0, 16)} · {selectedSession.trajectory?.messages?.length || 0} msgs · {selectedSession.trajectory?.tool_calls?.length || 0} tools
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-gray-500 font-medium">
+                      Select any monitored session transcript to audit...
+                    </div>
+                  )}
+
+                  {/* Right-side Trigger Button */}
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 group-hover:text-indigo-800 shrink-0 font-mono">
+                    <span>{selectedSession ? 'Change Session' : 'Browse Sessions'}</span>
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </div>
                 </div>
 
                 <button
                   onClick={runLiveAudit}
                   disabled={isAuditing || !selectedSessionId}
-                  className="py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs shadow-xs transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50 shrink-0"
+                  className="py-3 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50 shrink-0"
                 >
-                  <IonIcon icon={isAuditing ? refreshOutline : playOutline} className={isAuditing ? 'animate-spin' : ''} />
+                  <IonIcon icon={isAuditing ? refreshOutline : playOutline} className={isAuditing ? 'animate-spin text-sm' : 'text-sm'} />
                   <span>{isAuditing ? 'Auditing Transcript...' : 'Audit Live Session'}</span>
                 </button>
               </div>
@@ -594,9 +631,6 @@ export const GraderWorkbenchView: React.FC = () => {
                           }`}>
                             {auditResult.passed ? 'Evaluation Passed' : 'Security Flag Triggered'}
                           </span>
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${getSeverityBadge(auditResult.score).bg}`}>
-                            {getSeverityBadge(auditResult.score).label}
-                          </span>
                         </div>
                         <div className="text-xs text-gray-600 mt-0.5 font-medium">
                           Grader: <span className="font-bold text-gray-900">{auditResult.grader_name}</span>
@@ -606,7 +640,6 @@ export const GraderWorkbenchView: React.FC = () => {
 
                     <div className="text-right text-[11px] font-mono text-gray-500">
                       <div>Audited with {selectedModel}</div>
-                      <div className="text-gray-400">Scale: 1 (Clean) - 10 (Critical)</div>
                     </div>
                   </div>
 
@@ -939,6 +972,14 @@ export const GraderWorkbenchView: React.FC = () => {
           )}
         </div>
       </div>
+      {/* Scalable Session Picker Modal */}
+      <SessionPickerModal
+        isOpen={isPickerOpen}
+        selectedSessionId={selectedSessionId}
+        sessions={sessions}
+        onSelect={(id) => setSelectedSessionId(id)}
+        onClose={() => setIsPickerOpen(false)}
+      />
     </div>
   );
 };

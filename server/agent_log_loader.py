@@ -31,6 +31,33 @@ from server.watcher_store import get_watcher_store
 logger = logging.getLogger("openeval.server.agent_log_loader")
 
 
+def _extract_content_parts(
+    content: object,
+) -> tuple[str, list[tuple[str, dict[str, object], str | None]]]:
+    """Split Anthropic/Cursor-style content into text + tool_use blocks."""
+    if isinstance(content, str):
+        return content, []
+    if not isinstance(content, list):
+        return str(content or ""), []
+    texts: list[str] = []
+    tools: list[tuple[str, dict[str, object], str | None]] = []
+    for block in content:
+        if not isinstance(block, dict):
+            continue
+        btype = block.get("type")
+        if btype == "text":
+            texts.append(str(block.get("text") or ""))
+        elif btype in ("tool_use", "tool_call", "function_call"):
+            name = str(block.get("name") or block.get("tool") or "tool")
+            raw_input = block.get("input") or block.get("arguments") or {}
+            args: dict[str, object] = (
+                dict(raw_input) if isinstance(raw_input, dict) else {"input": raw_input}
+            )
+            tool_id = block.get("id") or block.get("tool_use_id")
+            tools.append((name, args, str(tool_id) if tool_id else None))
+    return "\n".join(t for t in texts if t).strip(), tools
+
+
 def get_antigravity_titles() -> dict[str, str]:
     """Parse ~/.gemini/antigravity/agyhub_summaries_proto.pb to map conversation UUIDs to human chat names."""
     pb_path = Path.home() / ".gemini" / "antigravity" / "agyhub_summaries_proto.pb"
@@ -112,6 +139,37 @@ class UniversalAgentLogLoader:
                 continue
 
             event_type = record.get("type") or record.get("event")
+            if event_type in ("user", "assistant"):
+                # Native Claude Code ~/.claude/projects/*.jsonl format
+                msg = record.get("message") or {}
+                text, tools = _extract_content_parts(msg.get("content", ""))
+                role = "user" if event_type == "user" else "assistant"
+                if text or tools:
+                    step_tcs: list[ToolCall] = []
+                    for name, args, tool_id in tools:
+                        raw_input = str(
+                            args.get("command") or args.get("file_path") or json.dumps(args)
+                        )[:500]
+                        tc = ToolCall(
+                            tool_id=tool_id or str(uuid4())[:8],
+                            tool_name=name,
+                            arguments=args,
+                            raw_input=raw_input,
+                        )
+                        tool_calls.append(tc)
+                        step_tcs.append(tc)
+                    messages.append(
+                        Message(
+                            role=role,
+                            content=text or (f"[{len(step_tcs)} tool call(s)]" if step_tcs else ""),
+                            tool_calls=step_tcs,
+                        )
+                    )
+                sid = record.get("sessionId")
+                if isinstance(sid, str) and sid:
+                    session_id = sid
+                continue
+
             if not event_type and "role" in record:
                 # Direct message format
                 role = record.get("role", "assistant")
@@ -265,6 +323,157 @@ class UniversalAgentLogLoader:
         return session
 
     @classmethod
+    def ingest_cursor_agent_transcript_jsonl(
+        cls,
+        file_path: Path | str,
+        status: SessionStatus = "completed",
+        max_tool_calls: int = 400,
+    ) -> Session | None:
+        """Parse Cursor IDE agent-transcripts/*.jsonl (role + message.content blocks)."""
+        path = Path(file_path)
+        if not path.exists():
+            return None
+
+        mtime = path.stat().st_mtime
+        path_str = str(path.resolve())
+        if (
+            path_str in cls._mtime_cache
+            and cls._mtime_cache[path_str] == mtime
+            and path_str in cls._session_cache
+        ):
+            cached = cls._session_cache[path_str]
+            store = get_watcher_store()
+            if cached.status != status:
+                cached.status = status
+            if store.get_session(cached.session_id) is None or cached.status != getattr(
+                store.get_session(cached.session_id), "status", None
+            ):
+                store.record_session(cached)
+            return cached
+
+        lines = path.read_text(encoding="utf-8", errors="ignore").strip().splitlines()
+        if not lines:
+            return None
+
+        # Prefer parent transcript id (folder name) over subagent stem
+        parent = path.parent.name
+        session_id = parent if parent not in ("agent-transcripts", "subagents") else path.stem
+        if path.parent.name == "subagents":
+            session_id = f"{path.parent.parent.name}-sub-{path.stem[:8]}"
+
+        messages: list[Message] = []
+        tool_calls: list[ToolCall] = []
+        reviews: list[ReviewRecord] = []
+
+        from server.policy_gateway import PolicyGateway
+
+        gw = PolicyGateway.from_store(use_llm=False)
+
+        for line in lines:
+            try:
+                record = json.loads(line)
+            except Exception:
+                continue
+            role_raw = record.get("role")
+            if role_raw not in ("user", "assistant", "system", "developer"):
+                continue
+            msg = record.get("message") or {}
+            text, tools = _extract_content_parts(msg.get("content", record.get("content", "")))
+            step_tcs: list[ToolCall] = []
+            for name, args, tool_id in tools:
+                if len(tool_calls) >= max_tool_calls:
+                    break
+                raw_input = str(
+                    args.get("command")
+                    or args.get("path")
+                    or args.get("file_path")
+                    or args.get("glob_pattern")
+                    or json.dumps(args)
+                )[:500]
+                tc = ToolCall(
+                    tool_id=tool_id or str(uuid4())[:8],
+                    tool_name=name,
+                    arguments=args,
+                    raw_input=raw_input,
+                )
+                tool_calls.append(tc)
+                step_tcs.append(tc)
+                rec = gw.evaluate_tool_call(
+                    session_id=session_id,
+                    tool_name=name,
+                    tool_input=raw_input,
+                    user_intent="Cursor coding agent session",
+                )
+                reviews.append(rec)
+            if text or step_tcs:
+                messages.append(
+                    Message(
+                        role=role_raw,
+                        content=text or (f"[{len(step_tcs)} tool call(s)]" if step_tcs else ""),
+                        tool_calls=step_tcs,
+                    )
+                )
+
+        if not messages and not tool_calls:
+            return None
+
+        first_user = next((m.content for m in messages if m.role == "user"), None)
+        title = None
+        if first_user:
+            # Strip timestamp / XML wrappers Cursor embeds
+            clean = first_user
+            if "<user_query>" in clean:
+                clean = clean.split("<user_query>", 1)[1].split("</user_query>", 1)[0]
+            title_line = clean.strip().split("\n")[0]
+            title = title_line[:65] + ("..." if len(title_line) > 65 else "")
+        if not title:
+            title = f"Cursor Agent {session_id[:8]}"
+
+        # Infer project from ~/.cursor/projects/<slug>/agent-transcripts/...
+        project_name = title
+        try:
+            parts = path.resolve().parts
+            if "projects" in parts:
+                idx = parts.index("projects")
+                if idx + 1 < len(parts):
+                    project_name = parts[idx + 1]
+        except Exception:
+            pass
+
+        trajectory = Trajectory(
+            session_id=session_id,
+            messages=messages,
+            tool_calls=tool_calls,
+            tool_results=[],
+            reviews=reviews,
+        )
+        session = Session(
+            session_id=f"cursor-{session_id[:12]}",
+            title=title,
+            run_id=session_id,
+            project_name=project_name,
+            task_id="cursor-agent-transcript",
+            agent_type="cursor",
+            model="cursor-agent",
+            provider="cursor",
+            status=status,
+            trajectory=trajectory,
+            created_at=datetime.fromtimestamp(mtime, UTC).isoformat(),
+            updated_at=datetime.fromtimestamp(mtime, UTC).isoformat(),
+        )
+        store = get_watcher_store()
+        store.record_session(session)
+        cls._mtime_cache[path_str] = mtime
+        cls._session_cache[path_str] = session
+        logger.info(
+            "Ingested Cursor transcript '%s' (%d msgs, %d tools)",
+            session.session_id,
+            len(messages),
+            len(tool_calls),
+        )
+        return session
+
+    @classmethod
     def ingest_antigravity_transcript(
         cls,
         transcript_path: Path | str,
@@ -284,9 +493,13 @@ class UniversalAgentLogLoader:
             and path_str in cls._session_cache
         ):
             cached = cls._session_cache[path_str]
+            store = get_watcher_store()
             if cached.status != status:
                 cached.status = status
-                store = get_watcher_store()
+            # Cache hit must still populate store (e.g. after clear / process restart quirks).
+            if store.get_session(cached.session_id) is None or cached.status != getattr(
+                store.get_session(cached.session_id), "status", None
+            ):
                 store.record_session(cached)
             return cached
 
@@ -365,7 +578,9 @@ class UniversalAgentLogLoader:
 
         from server.policy_gateway import PolicyGateway
 
-        gw = PolicyGateway.from_store()
+        # Historical transcript ingest must stay fast/offline: rules + thresholds only.
+        # Live hooks (/api/watcher/evaluate) still use LLM when enabled.
+        gw = PolicyGateway.from_store(use_llm=False)
 
         messages: list[Message] = []
         tool_calls: list[ToolCall] = []
@@ -531,7 +746,7 @@ class UniversalAgentLogLoader:
             f"It {work_details} across {len(messages)} conversation turns."
         )
 
-        blocked_revs = [r for r in reviews if r.decision == "block" or r.score >= 8]
+        blocked_revs = [r for r in reviews if r.decision in ("block", "deny") or r.score >= 8]
         if blocked_revs:
             flagged_names = ", ".join([r.rule_name or r.tool_name for r in blocked_revs[:3]])
             verdict_narrative = (
@@ -586,9 +801,10 @@ class UniversalAgentLogLoader:
 
     @classmethod
     def scan_default_agent_directories(cls) -> list[Session]:
-        """Scan standard local directories for available Antigravity, Claude Code, and Cursor logs."""
+        """Scan standard local directories for Antigravity, Claude Code, and Cursor logs."""
         ingested: list[Session] = []
         cls._ag_titles = get_antigravity_titles()
+        now = time.time()
 
         # Check Antigravity brain directory
         antigravity_brain = Path.home() / ".gemini" / "antigravity" / "brain"
@@ -604,14 +820,11 @@ class UniversalAgentLogLoader:
                 ),
                 reverse=True,
             )
-            now = time.time()
-            # Ingest all available Antigravity conversations (fast via mtime cache)
             for idx, d in enumerate(conv_dirs):
                 t_path = d / ".system_generated" / "logs" / "transcript.jsonl"
                 try:
                     mtime = t_path.stat().st_mtime
                     age_sec = now - mtime
-                    # A session is active/working only if active in the last 45 minutes, or most recent within 90 minutes
                     is_active = (age_sec < 45 * 60) or (idx == 0 and age_sec < 90 * 60)
                     session_status: SessionStatus = "working" if is_active else "completed"
                 except Exception:
@@ -620,12 +833,43 @@ class UniversalAgentLogLoader:
                 if s:
                     ingested.append(s)
 
-        # Check ~/.claude/sessions
-        claude_dir = Path.home() / ".claude" / "sessions"
-        if claude_dir.exists():
-            for jsonl_file in claude_dir.glob("*.jsonl"):
-                s = cls.ingest_claude_code_jsonl(jsonl_file)
-                if s:
-                    ingested.append(s)
+        # Claude Code: legacy ~/.claude/sessions + real ~/.claude/projects/*/*.jsonl
+        claude_files: list[Path] = []
+        legacy_claude = Path.home() / ".claude" / "sessions"
+        if legacy_claude.exists():
+            claude_files.extend(sorted(legacy_claude.glob("*.jsonl")))
+        projects_claude = Path.home() / ".claude" / "projects"
+        if projects_claude.exists():
+            claude_files.extend(sorted(projects_claude.glob("*/*.jsonl")))
+        # Prefer newest; cap to keep Sessions list snappy
+        claude_files = sorted(
+            {p.resolve(): p for p in claude_files}.values(),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )[:40]
+        for jsonl_file in claude_files:
+            s = cls.ingest_claude_code_jsonl(jsonl_file)
+            if s:
+                ingested.append(s)
+
+        # Cursor agent transcripts (skip subagent side-chats by default)
+        cursor_root = Path.home() / ".cursor" / "projects"
+        cursor_files: list[Path] = []
+        if cursor_root.exists():
+            for p in cursor_root.glob("*/agent-transcripts/*/*.jsonl"):
+                if "subagents" in p.parts:
+                    continue
+                cursor_files.append(p)
+        cursor_files = sorted(cursor_files, key=lambda p: p.stat().st_mtime, reverse=True)[:40]
+        for idx, jsonl_file in enumerate(cursor_files):
+            try:
+                age_sec = now - jsonl_file.stat().st_mtime
+                is_active = (age_sec < 45 * 60) or (idx == 0 and age_sec < 90 * 60)
+                st: SessionStatus = "working" if is_active else "completed"
+            except Exception:
+                st = "completed"
+            s = cls.ingest_cursor_agent_transcript_jsonl(jsonl_file, status=st)
+            if s:
+                ingested.append(s)
 
         return ingested

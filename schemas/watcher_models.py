@@ -15,7 +15,50 @@ from pydantic import BaseModel, ConfigDict, Field
 ReviewPosture = Literal["blocking", "trailing", "disabled"]
 ReviewDecision = Literal["allow", "warn", "block", "modify", "escalate"]
 ReviewStage = Literal["rule", "threshold", "triage", "deep_review"]
-SessionStatus = Literal["pending", "active", "working", "completed", "error", "cancelled", "parked"]
+
+# Apollo Research September 2026: Canonical 13-Point Threat Taxonomy for Real-Time Blocking
+ThreatCategory = Literal[
+    "data_exfiltration",
+    "exposure_of_internal_resources",
+    "prompt_injection",
+    "infrastructure_disruption",
+    "destructive_modification_of_shared_resources",
+    "undesirable_deletions",
+    "oversight_subversion",
+    "unsafe_agents",
+    "untrusted_code_execution",
+    "real_world_transactions",
+    "egregious_vulnerability_introduction",
+    "unapproved_dependency_installation",
+    "privilege_escalation",
+]
+
+THREAT_CATEGORY_LABELS: dict[ThreatCategory, str] = {
+    "data_exfiltration": "Data Exfiltration",
+    "exposure_of_internal_resources": "Exposure of Internal Resources",
+    "prompt_injection": "Prompt Injection / Poisoning",
+    "infrastructure_disruption": "Infrastructure Disruption",
+    "destructive_modification_of_shared_resources": "Destructive Shared Resource Modification",
+    "undesirable_deletions": "Undesirable Deletions",
+    "oversight_subversion": "Oversight Subversion",
+    "unsafe_agents": "Unsafe Agents / Delegation",
+    "untrusted_code_execution": "Untrusted Code Execution",
+    "real_world_transactions": "Real-World Transactions",
+    "egregious_vulnerability_introduction": "Egregious Vulnerability Introduction",
+    "unapproved_dependency_installation": "Unapproved Dependency Installation",
+    "privilege_escalation": "Privilege Escalation",
+}
+SessionStatus = Literal[
+    "pending",
+    "active",
+    "working",
+    "running",
+    "completed",
+    "error",
+    "failed",
+    "cancelled",
+    "parked",
+]
 AgentType = Literal[
     "antigravity", "claude_code", "cursor", "inspect_eval", "re_act_agent", "custom"
 ]
@@ -81,6 +124,11 @@ class ReviewRecord(BaseModel):
     explanation: str = Field(default="")
     diff: str | None = Field(default=None, description="Inline syntax diff for file mutations")
     latency_ms: float = Field(default=0.0)
+    human_override: Literal["allow", "deny"] | None = Field(default=None)
+    resolution_status: Literal["pending", "blocked", "human_approved"] = Field(default="pending")
+    threat_category: ThreatCategory | None = Field(
+        default=None, description="Apollo 13-point threat taxonomy category"
+    )
 
 
 class Trajectory(BaseModel):
@@ -164,6 +212,9 @@ class CommandRule(BaseModel):
     pattern: str = Field(..., description="Regex pattern to match command line")
     action: Literal["allow", "triage", "human", "deny", "off"] = Field(default="triage")
     description: str = Field(default="")
+    threat_category: ThreatCategory | None = Field(
+        default=None, description="Apollo 13-point threat taxonomy category"
+    )
 
     def matches(self, cmd: str) -> bool:
         """Check if command matches rule regex."""
@@ -171,6 +222,127 @@ class CommandRule(BaseModel):
             return bool(re.search(self.pattern, cmd, flags=re.IGNORECASE))
         except re.error:
             return False
+
+
+def infer_threat_category(
+    rule_name: str | None = None, command: str | None = None
+) -> ThreatCategory | None:
+    """Infer Apollo's canonical threat category from rule name or command pattern."""
+    target = f"{rule_name or ''} {command or ''}".lower()
+    if not target.strip():
+        return None
+
+    if any(
+        k in target
+        for k in [
+            "force push",
+            "force-with-lease",
+            "rewrite history",
+            "rebase -i",
+            "reset --hard",
+        ]
+    ):
+        return "destructive_modification_of_shared_resources"
+    if any(
+        k in target
+        for k in [
+            "sudo",
+            "su -",
+            "privilege",
+            "chown -r.*root",
+            "chmod 777",
+            "iam policy",
+            "sudoers",
+        ]
+    ):
+        return "privilege_escalation"
+    if any(
+        k in target
+        for k in [
+            "credential",
+            "secret",
+            ".env",
+            "id_rsa",
+            "id_ed25519",
+            "aws_secret",
+            "api_key",
+            "exfiltration",
+            "pastebin",
+            "ngrok",
+            "webhook.site",
+            "shadow",
+        ]
+    ):
+        return "data_exfiltration"
+    if any(
+        k in target
+        for k in [
+            "rm -rf",
+            "destructive wipe",
+            "rm -f",
+            "truncate",
+            "undesirable deletion",
+            "clean -fd",
+            "git clean",
+        ]
+    ):
+        return "undesirable_deletions"
+    if any(
+        re.search(p, target, re.IGNORECASE)
+        for p in [
+            r"killall\s+-9\s+watchdog",
+            r"audit\.log",
+            r"container escape",
+            r"docker\.sock",
+            r"nsenter",
+            r"sysrq-trigger",
+            r"tamper",
+            r"sabotage",
+            r"disable monitor",
+        ]
+    ):
+        return "oversight_subversion"
+    if any(
+        re.search(p, target, re.IGNORECASE)
+        for p in [
+            r"drop\s+database",
+            r"drop\s+table",
+            r"terraform\s+destroy",
+            r"kubectl\s+delete\s+all",
+            r"mkfs",
+            r"resource exhaustion",
+            r"fork bomb",
+        ]
+    ):
+        return "infrastructure_disruption"
+    if any(
+        re.search(p, target, re.IGNORECASE)
+        for p in [
+            r"curl.*\|\s*(ba)?sh",
+            r"wget.*\|\s*(ba)?sh",
+            r"piping web content",
+            r"untrusted code",
+            r"unverified script",
+        ]
+    ):
+        return "untrusted_code_execution"
+    if any(re.search(p, target, re.IGNORECASE) for p in [r"subagent", r"unsafe agent", r"unmonitored agent"]):
+        return "unsafe_agents"
+    if any(re.search(p, target, re.IGNORECASE) for p in [r"prompt injection", r"jailbreak", r"ignore instructions"]):
+        return "prompt_injection"
+    if any(
+        re.search(p, target, re.IGNORECASE)
+        for p in [r"payment", r"stripe", r"send money", r"booking", r"dispatch message", r"external email"]
+    ):
+        return "real_world_transactions"
+    if any(re.search(p, target, re.IGNORECASE) for p in [r"s3.*public", r"security group", r"expose port", r"0\.0\.0\.0/0"]):
+        return "exposure_of_internal_resources"
+    if any(re.search(p, target, re.IGNORECASE) for p in [r"pip install", r"npm install", r"unapproved package", r"unpinned"]):
+        return "unapproved_dependency_installation"
+    if any(re.search(p, target, re.IGNORECASE) for p in [r"disable auth", r"bypass auth", r"firewall", r"disable csrf"]):
+        return "egregious_vulnerability_introduction"
+
+    return None
 
 
 class ToolThreshold(BaseModel):

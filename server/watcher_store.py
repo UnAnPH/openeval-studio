@@ -34,6 +34,17 @@ from schemas.watcher_models import (
 logger = logging.getLogger("openeval.server.watcher_store")
 
 
+def _to_jsonable(value: Any) -> Any:
+    """Recursively convert Pydantic models / nested containers for JSON/SSE."""
+    if hasattr(value, "model_dump") and callable(value.model_dump):
+        return value.model_dump()
+    if isinstance(value, dict):
+        return {k: _to_jsonable(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_to_jsonable(v) for v in value]
+    return value
+
+
 class WatcherStore:
     """Thread-safe DuckDB + JSON store for sessions, trajectories, and reviews."""
 
@@ -242,8 +253,16 @@ class WatcherStore:
         session.updated_at = datetime.now(UTC).isoformat()
         self._upsert_duckdb_session(session)
         self._persist_session_json(session)
-        self.broadcast_sync(session_id, "session_updated", updates)
+        # Broadcast JSON-safe payloads only — raw updates may contain Pydantic
+        # models (e.g. AgentStep) that break eval SSE json.dumps.
+        self.broadcast_sync(session_id, "session_updated", _to_jsonable(updates))
         return session
+
+    def reload_from_disk(self) -> int:
+        """Re-read session JSON files into memory (picks up ingest from other processes)."""
+        before = len(self._sessions)
+        self._load_cached_sessions()
+        return max(0, len(self._sessions) - before)
 
     def list_sessions(
         self,
@@ -275,6 +294,50 @@ class WatcherStore:
                 with contextlib.suppress(Exception):
                     f.unlink()
 
+    def delete_session(self, session_id: str) -> bool:
+        """Delete a single session from memory, DuckDB, and disk cache."""
+        with self._lock:
+            found = False
+            if session_id in self._sessions:
+                del self._sessions[session_id]
+                found = True
+            if session_id in self._trajectories:
+                del self._trajectories[session_id]
+            if session_id in self._reviews:
+                del self._reviews[session_id]
+            if session_id in self._subscribers:
+                del self._subscribers[session_id]
+
+            try:
+                self.con.execute("DELETE FROM sessions WHERE session_id = ?", [session_id])
+                self.con.execute("DELETE FROM reviews WHERE session_id = ?", [session_id])
+                found = True
+            except Exception as e:
+                logger.warning("Error deleting session %s from DuckDB: %s", session_id, e)
+
+            disk_file = self.storage_dir / f"{session_id}.json"
+            if disk_file.exists():
+                with contextlib.suppress(Exception):
+                    disk_file.unlink()
+                    found = True
+            return found
+
+    def purge_empty_sessions(self, min_messages: int = 1) -> list[str]:
+        """Remove sessions that have fewer than min_messages (e.g. fake gate hits with 0 messages)."""
+        to_delete: list[str] = []
+        with self._lock:
+            for session_id, session in list(self._sessions.items()):
+                traj = session.trajectory
+                msgs = traj.messages if traj else []
+                if len(msgs) < min_messages:
+                    to_delete.append(session_id)
+
+        purged: list[str] = []
+        for sid in to_delete:
+            if self.delete_session(sid):
+                purged.append(sid)
+        return purged
+
     def get_analytics_overview(self) -> dict[str, Any]:
         """Aggregate high-level overview metrics directly from DuckDB."""
         with self._lock:
@@ -287,12 +350,12 @@ class WatcherStore:
             deep_reviewed = int(deep_reviewed_row[0]) if deep_reviewed_row else 0
 
             blocked_row = self.con.execute(
-                "SELECT COUNT(*) FROM reviews WHERE decision = 'block'"
+                "SELECT COUNT(*) FROM reviews WHERE decision IN ('block', 'deny')"
             ).fetchone()
             blocked_count = int(blocked_row[0]) if blocked_row else 0
 
             critical_row = self.con.execute(
-                "SELECT COUNT(*) FROM reviews WHERE score >= 8 OR decision = 'block'"
+                "SELECT COUNT(*) FROM reviews WHERE score >= 8 OR decision IN ('block', 'deny')"
             ).fetchone()
             critical_reviews = int(critical_row[0]) if critical_row else 0
 

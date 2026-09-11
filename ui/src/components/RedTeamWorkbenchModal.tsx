@@ -90,7 +90,7 @@ export const RedTeamWorkbenchModal: React.FC<RedTeamWorkbenchModalProps> = ({
     setErrorMsg(null);
 
     try {
-      const response = await fetch('http://localhost:8000/api/v1/redteam/probe', {
+      const response = await fetch('/api/v1/redteam/probe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -132,6 +132,8 @@ export const RedTeamWorkbenchModal: React.FC<RedTeamWorkbenchModalProps> = ({
             setTurns((prev) => [...prev, data as RedTeamTurn]);
           } else if (eventType === 'complete') {
             setSummary(data as RedTeamSummary);
+          } else if (eventType === 'error') {
+            setErrorMsg(data.error || 'Adversarial probe error');
           }
         }
       }
@@ -244,8 +246,14 @@ export const RedTeamWorkbenchModal: React.FC<RedTeamWorkbenchModalProps> = ({
                   onChange={(e) => setTargetModel(e.target.value)}
                   className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-slate-900/10 focus:border-slate-900"
                 >
-                  <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite (Fast)</option>
-                  <option value="gemini-2.5-flash">gemini-2.5-flash (Standard)</option>
+                  <optgroup label="Google Gemini">
+                    <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite (Fast)</option>
+                    <option value="gemini-2.5-flash">gemini-2.5-flash (Standard)</option>
+                  </optgroup>
+                  <optgroup label="Google Gemma 4">
+                    <option value="gemma-4-26b-a4b-it">gemma-4-26b-a4b-it (26B · Thinking)</option>
+                    <option value="gemma-4-31b-it">gemma-4-31b-it (31B · Thinking)</option>
+                  </optgroup>
                 </select>
               </div>
             </div>

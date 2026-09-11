@@ -1,0 +1,5 @@
+{"ts": 1789019892.918603, "event": "pretool", "tool_name": "run_command", "cmd": "sudo rm -rf /", "path": "", "conversation_id": "ag-demo-hook-deny"}
+{"ts": 1789019892.918944, "event": "emit", "decision": "deny", "reason": "[WATCHER LIVE BLOCKED - RULE_DESTRUCTIVE_WIPE]: Recursive force-delete (rm -rf) attempted."}
+{"ts": 1789019892.9497468, "event": "pretool", "tool_name": "run_command", "cmd": "echo hello-from-antigravity-demo", "path": "", "conversation_id": "ag-demo-hook-allow"}
+{"ts": 1789019892.9578722, "event": "server_unreachable", "error": "<urlopen error [Errno 61] Connection refused>", "url": "http://127.0.0.1:9/api/watcher/evaluate"}
+{"ts": 1789019892.9579918, "event": "emit", "decision": "allow", "reason": ""}

@@ -1,4 +1,108 @@
-import { WatcherCommandRule, WatcherPolicy, WatcherReviewRecord, WatcherSession, WatcherToolThreshold } from '../types';
+import {
+  ThreatCategory,
+  WatcherCommandRule,
+  WatcherPolicy,
+  WatcherReviewRecord,
+  WatcherSession,
+  WatcherToolThreshold,
+} from '../types';
+
+export const THREAT_CATEGORY_META: Record<
+  ThreatCategory,
+  { label: string; shortLabel: string; color: string; bg: string; border: string }
+> = {
+  data_exfiltration: {
+    label: 'Data Exfiltration',
+    shortLabel: 'Data Leak',
+    color: 'text-rose-700',
+    bg: 'bg-rose-50',
+    border: 'border-rose-200',
+  },
+  exposure_of_internal_resources: {
+    label: 'Exposure of Internal Resources',
+    shortLabel: 'Resource Exposed',
+    color: 'text-orange-700',
+    bg: 'bg-orange-50',
+    border: 'border-orange-200',
+  },
+  prompt_injection: {
+    label: 'Prompt Injection / Poisoning',
+    shortLabel: 'Injection',
+    color: 'text-purple-700',
+    bg: 'bg-purple-50',
+    border: 'border-purple-200',
+  },
+  infrastructure_disruption: {
+    label: 'Infrastructure Disruption',
+    shortLabel: 'Infra Disruption',
+    color: 'text-red-700',
+    bg: 'bg-red-50',
+    border: 'border-red-200',
+  },
+  destructive_modification_of_shared_resources: {
+    label: 'Destructive Shared Modification',
+    shortLabel: 'Shared Destruct',
+    color: 'text-amber-700',
+    bg: 'bg-amber-50',
+    border: 'border-amber-200',
+  },
+  undesirable_deletions: {
+    label: 'Undesirable Deletions',
+    shortLabel: 'Scope Deletion',
+    color: 'text-rose-600',
+    bg: 'bg-rose-50',
+    border: 'border-rose-200',
+  },
+  oversight_subversion: {
+    label: 'Oversight Subversion',
+    shortLabel: 'Oversight Bypass',
+    color: 'text-red-800',
+    bg: 'bg-red-50',
+    border: 'border-red-300',
+  },
+  unsafe_agents: {
+    label: 'Unsafe Subagents',
+    shortLabel: 'Unsafe Agent',
+    color: 'text-indigo-700',
+    bg: 'bg-indigo-50',
+    border: 'border-indigo-200',
+  },
+  untrusted_code_execution: {
+    label: 'Untrusted Code Execution',
+    shortLabel: 'Untrusted Exec',
+    color: 'text-amber-800',
+    bg: 'bg-amber-50',
+    border: 'border-amber-300',
+  },
+  real_world_transactions: {
+    label: 'Real-World Transactions',
+    shortLabel: 'External Tx',
+    color: 'text-cyan-700',
+    bg: 'bg-cyan-50',
+    border: 'border-cyan-200',
+  },
+  egregious_vulnerability_introduction: {
+    label: 'Vulnerability Introduction',
+    shortLabel: 'Vulnerability',
+    color: 'text-rose-800',
+    bg: 'bg-rose-50',
+    border: 'border-rose-300',
+  },
+  unapproved_dependency_installation: {
+    label: 'Unapproved Dependency',
+    shortLabel: 'Unapproved Pkg',
+    color: 'text-yellow-800',
+    bg: 'bg-yellow-50',
+    border: 'border-yellow-200',
+  },
+  privilege_escalation: {
+    label: 'Privilege Escalation',
+    shortLabel: 'Priv Escalation',
+    color: 'text-red-700',
+    bg: 'bg-red-50',
+    border: 'border-red-200',
+  },
+};
 
 export const DEFAULT_WATCHER_COMMAND_RULES: WatcherCommandRule[] = [
   // Git (8 rules)

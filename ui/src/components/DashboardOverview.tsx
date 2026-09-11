@@ -33,12 +33,15 @@ interface RawSession {
   blocked_turn?: number | null;
   total_turns?: number;
   turns?: any[];
-}
-
-interface AnalyzerLite {
-  blocked_decisions: number;
-  escalated_decisions: number;
-  session_count: number;
+  // WatcherStore session shape (API uses created_at, not timestamp)
+  created_at?: string;
+  updated_at?: string;
+  title?: string;
+  agent_type?: string;
+  final_summary?: string;
+  status?: string;
+  steps?: any[];
+  total_steps?: number;
 }
 
 export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
@@ -46,11 +49,10 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   findings: propFindings,
   onSelectIncident,
 }) => {
-  const [dateFilter, setDateFilter] = useState<'30d' | 'this_week' | 'last_week' | 'this_month' | 'last_month'>('30d');
+  const [dateFilter, setDateFilter] = useState<'today' | 'this_week' | 'last_week' | 'this_month' | 'last_month'>('today');
   const [watcherSessions, setWatcherSessions] = useState<RawSession[]>([]);
-  const [analyzer, setAnalyzer] = useState<AnalyzerLite | null>(null);
 
-  // Fetch real sessions + analyzer-lite aggregates
+  // Fetch monitored watcher sessions (same source as Safety → Sessions)
   useEffect(() => {
     const fetchSessions = async () => {
       try {
@@ -63,22 +65,8 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         console.warn('Failed to fetch watcher sessions:', err);
       }
     };
-    const fetchAnalyzer = async () => {
-      try {
-        const res = await fetch('/api/v1/watcher/analyzer');
-        if (res.ok) {
-          setAnalyzer(await res.json());
-        }
-      } catch (err) {
-        console.warn('Failed to fetch analyzer lite:', err);
-      }
-    };
     fetchSessions();
-    fetchAnalyzer();
-    const interval = setInterval(() => {
-      fetchSessions();
-      fetchAnalyzer();
-    }, 5000);
+    const interval = setInterval(fetchSessions, 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -89,14 +77,30 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     return isNaN(t) ? 0 : t;
   };
 
+  const sessionObservedAt = (s: RawSession): string | undefined =>
+    s.timestamp || s.created_at || s.updated_at;
+
   // Combine and deduplicate real sessions without inventing fake ones
   const allSessions = useMemo(() => {
     const sessionMap = new Map<string, RawSession>();
 
-    // 1. Monitored sessions from backend
+    // 1. Monitored sessions from WatcherStore (normalize API fields for Overview)
     for (const ws of watcherSessions) {
       const id = ws.session_id || ws.id;
-      sessionMap.set(id, ws);
+      const observedAt = sessionObservedAt(ws);
+      sessionMap.set(id, {
+        ...ws,
+        id: id,
+        session_id: id,
+        headline: ws.headline || ws.title || `Session ${id}`,
+        summary: ws.summary || ws.final_summary || (ws.total_steps ? `${ws.total_steps} steps` : undefined),
+        timestamp: observedAt,
+        agent_source: ws.agent_source || ws.agent_type,
+        developer: ws.developer || ws.agent_type || 'Agent',
+        turns: ws.turns || ws.steps || [],
+        total_turns: ws.total_turns ?? ws.total_steps ?? 0,
+        is_blocked: ws.is_blocked ?? ws.status === 'blocked',
+      });
     }
 
     // 2. Monitored evaluation runs
@@ -191,13 +195,11 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       return { start, end, prevStart, prevEnd };
     }
 
-    // Default: '30d' (Last 30 days)
-    const start = new Date(now.getTime() - 29 * 24 * 60 * 60 * 1000);
-    start.setHours(0, 0, 0, 0);
+    // Default: 'today'
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
     const end = todayEnd;
-    const prevEnd = new Date(start.getTime() - 1);
-    const prevStart = new Date(prevEnd.getTime() - 29 * 24 * 60 * 60 * 1000);
-    prevStart.setHours(0, 0, 0, 0);
+    const prevStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0, 0);
+    const prevEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59, 999);
     return { start, end, prevStart, prevEnd };
   }, [dateFilter]);
 
@@ -211,20 +213,30 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     return `${sStr} - ${eStr}`;
   };
 
-  const dateRangeSubtitle = `${formatDate(rangeConfig.start)} - ${formatDate(rangeConfig.end)}`;
-  const prevRangeLabel = formatShortRange(rangeConfig.prevStart, rangeConfig.prevEnd);
+  const dateRangeSubtitle =
+    dateFilter === 'today'
+      ? formatDate(rangeConfig.start)
+      : `${formatDate(rangeConfig.start)} - ${formatDate(rangeConfig.end)}`;
+  const prevRangeLabel =
+    dateFilter === 'today'
+      ? `Yesterday (${formatShortRange(rangeConfig.prevStart, rangeConfig.prevEnd)})`
+      : formatShortRange(rangeConfig.prevStart, rangeConfig.prevEnd);
 
   // Filter sessions in current and prior windows
   const startMs = rangeConfig.start.getTime();
   const endMs = rangeConfig.end.getTime();
 
   const currentSessions = allSessions.filter((s) => {
-    const t = parseTimestamp(s.timestamp);
+    const t = parseTimestamp(sessionObservedAt(s));
+    // Include sessions with no usable timestamp in the current window so the KPI
+    // matches WatcherStore totals when ingest timestamps are missing.
+    if (!t) return dateFilter === 'today';
     return t >= startMs && t <= endMs;
   });
 
   const prevSessions = allSessions.filter((s) => {
-    const t = parseTimestamp(s.timestamp);
+    const t = parseTimestamp(sessionObservedAt(s));
+    if (!t) return false;
     return t >= rangeConfig.prevStart.getTime() && t <= rangeConfig.prevEnd.getTime();
   });
 
@@ -244,8 +256,42 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 
   const criticalRate = observedCount > 0 ? ((criticalCount / observedCount) * 100).toFixed(1) : '0.0';
 
-  // Generate Daily Data relative to today for Charts
+  // Generate Data for Charts (Hourly for 'today', Daily for multi-day windows)
   const chartDailyData = useMemo(() => {
+    if (dateFilter === 'today') {
+      const points: { dateIso: string; dateLabel: string; total: number; critical: number }[] = [];
+      const todayStartMs = rangeConfig.start.getTime();
+      const currentHour = new Date().getHours();
+
+      for (let h = 0; h < 24; h++) {
+        const bucketStart = todayStartMs + h * 3600 * 1000;
+        const bucketEnd = bucketStart + 3600 * 1000 - 1;
+        const hourStr = String(h).padStart(2, '0') + ':00';
+        const nextHourStr = String(h + 1).padStart(2, '0') + ':00';
+
+        const hourSessions = currentSessions.filter((s) => {
+          const t = parseTimestamp(sessionObservedAt(s));
+          if (!t) return h === currentHour;
+          return t >= bucketStart && t <= bucketEnd;
+        });
+
+        const hourCritical = hourSessions.filter(
+          (s) =>
+            s.severity === 'critical' ||
+            s.is_blocked ||
+            (s.turns && s.turns.some((t: any) => t.is_blocked))
+        );
+
+        points.push({
+          dateIso: `${hourStr} - ${nextHourStr}`,
+          dateLabel: hourStr,
+          total: hourSessions.length,
+          critical: hourCritical.length,
+        });
+      }
+      return points;
+    }
+
     const diffMs = endMs - startMs;
     const daysCount = Math.max(1, Math.round(diffMs / (24 * 60 * 60 * 1000)));
     const points: { dateIso: string; dateLabel: string; total: number; critical: number }[] = [];
@@ -257,7 +303,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       const dateLabel = cur.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
       const daySessions = currentSessions.filter((s) => {
-        const ts = s.timestamp;
+        const ts = sessionObservedAt(s);
         return ts && ts.startsWith(dateIso);
       });
 
@@ -273,16 +319,22 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       });
     }
     return points;
-  }, [currentSessions, startMs, endMs, rangeConfig.start]);
+  }, [dateFilter, currentSessions, startMs, endMs, rangeConfig.start]);
 
   const maxDailyTotal = Math.max(1, ...chartDailyData.map((d) => d.total));
   const maxDailyCritical = Math.max(1, ...chartDailyData.map((d) => d.critical));
 
-  // Pick ~8 evenly spaced tick labels for X-axis
-  const tickCount = Math.min(8, chartDailyData.length);
-  const tickIndices = Array.from({ length: tickCount }, (_, i) =>
-    Math.floor((i * (chartDailyData.length - 1)) / (tickCount - 1 || 1))
-  );
+  // Pick tick indices for X-axis labels (~6-8 labels)
+  const tickIndices = useMemo(() => {
+    if (dateFilter === 'today') {
+      // 4-hour marks across the 24-hour day: 00:00, 04:00, 08:00, 12:00, 16:00, 20:00, 23:00
+      return [0, 4, 8, 12, 16, 20, 23];
+    }
+    const tickCount = Math.min(8, chartDailyData.length);
+    return Array.from({ length: tickCount }, (_, i) =>
+      Math.floor((i * (chartDailyData.length - 1)) / (tickCount - 1 || 1))
+    );
+  }, [dateFilter, chartDailyData.length]);
 
   return (
     <div className="flex-1 min-h-0 flex flex-col h-full bg-[#fcfcfd] text-[#1e2029] font-sans p-6 space-y-6 overflow-y-auto">
@@ -298,7 +350,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         {/* Date Selector Tabs */}
         <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/60 text-xs font-medium overflow-x-auto">
           {[
-            { id: '30d', label: 'Last 30 days' },
+            { id: 'today', label: 'Today' },
             { id: 'this_week', label: 'This week' },
             { id: 'last_week', label: 'Last week' },
             { id: 'this_month', label: 'This month' },
@@ -318,25 +370,6 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           ))}
         </div>
       </div>
-
-      {/* Analyzer-lite org strip (DuckDB reviews) */}
-      {analyzer && (
-        <div className="bg-white px-5 py-3 rounded-2xl border border-border-subtle shadow-sm flex flex-wrap items-center gap-6 text-xs shrink-0">
-          <span className="font-bold text-slate-800 flex items-center gap-1.5">
-            <IonIcon icon={shieldCheckmark} className="text-sm text-emerald-600" />
-            Analyzer lite
-          </span>
-          <span className="text-slate-500">
-            Sessions <strong className="text-slate-800">{analyzer.session_count}</strong>
-          </span>
-          <span className="text-slate-500">
-            Blocked decisions <strong className="text-rose-600">{analyzer.blocked_decisions}</strong>
-          </span>
-          <span className="text-slate-500">
-            Escalated <strong className="text-amber-600">{analyzer.escalated_decisions}</strong>
-          </span>
-        </div>
-      )}
 
       {/* 2. Top KPI Cards Row */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
@@ -402,7 +435,11 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-sm font-bold text-gray-900">Total Sessions</h3>
-              <p className="text-xs text-gray-500 mt-0.5">Daily active sessions in the selected period</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {dateFilter === 'today'
+                  ? 'Hourly active sessions today (24h breakdown)'
+                  : 'Daily active sessions in the selected period'}
+              </p>
             </div>
             <span className="text-xs font-mono font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
               {observedCount} active
@@ -440,7 +477,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             {/* X-Axis Dates */}
             <div className="flex items-center justify-between text-[10px] font-mono text-gray-400 pt-2">
               {tickIndices.map((tIdx) => (
-                <span key={tIdx}>{chartDailyData[tIdx]?.dateIso || ''}</span>
+                <span key={tIdx}>{chartDailyData[tIdx]?.dateLabel || ''}</span>
               ))}
             </div>
           </div>
@@ -451,7 +488,11 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-sm font-bold text-gray-900">Critical Agent Actions</h3>
-              <p className="text-xs text-gray-500 mt-0.5">Critical agent actions per day in the selected period</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {dateFilter === 'today'
+                  ? 'Critical agent actions per hour today (24h breakdown)'
+                  : 'Critical agent actions per day in the selected period'}
+              </p>
             </div>
             <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded border ${criticalCount > 0 ? 'text-rose-700 bg-rose-50 border-rose-200' : 'text-gray-500 bg-gray-50 border-gray-200'}`}>
               {criticalCount} critical
@@ -491,7 +532,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             {/* X-Axis Dates */}
             <div className="flex items-center justify-between text-[10px] font-mono text-gray-400 pt-2">
               {tickIndices.map((tIdx) => (
-                <span key={tIdx}>{chartDailyData[tIdx]?.dateIso || ''}</span>
+                <span key={tIdx}>{chartDailyData[tIdx]?.dateLabel || ''}</span>
               ))}
             </div>
           </div>

@@ -14,7 +14,6 @@ import {
   Shield,
   ShieldAlert,
   Terminal,
-  Trash2,
   XCircle,
 } from 'lucide-react';
 import {
@@ -27,6 +26,7 @@ import {
 import {
   DEFAULT_FALLBACK_POLICY,
   DEFAULT_WATCHER_TOOL_THRESHOLDS,
+  THREAT_CATEGORY_META,
   toolThresholdAgentGroup,
 } from '../data/defaultWatcherData';
 
@@ -75,24 +75,6 @@ export const WatcherLiveView: React.FC<WatcherLiveViewProps> = ({
   const [resolveNotes, setResolveNotes] = useState('');
   const [isResolving, setIsResolving] = useState(false);
   const [rulesCategory, setRulesCategory] = useState<'all' | 'git' | 'security' | 'fs'>('all');
-  const [daemonStatus, setDaemonStatus] = useState<{
-    is_running: boolean;
-    status_text: string;
-    events_intercepted_count: number;
-    blocked_actions_count: number;
-  } | null>(null);
-
-  const fetchDaemonStatus = async () => {
-    try {
-      const res = await fetch('/api/v1/watcher/daemon').catch(() => null);
-      if (res && res.ok) {
-        const data = await res.json();
-        setDaemonStatus(data);
-      }
-    } catch {
-      // Safe fallback
-    }
-  };
 
   // Fetch all sessions & active policy on mount
   const fetchSessions = async () => {
@@ -134,10 +116,8 @@ export const WatcherLiveView: React.FC<WatcherLiveViewProps> = ({
   useEffect(() => {
     fetchSessions();
     fetchPolicy();
-    fetchDaemonStatus();
     const interval = setInterval(() => {
       fetchSessions();
-      fetchDaemonStatus();
     }, 4000);
     return () => clearInterval(interval);
   }, []);
@@ -285,18 +265,6 @@ export const WatcherLiveView: React.FC<WatcherLiveViewProps> = ({
     }
   };
 
-  // Handle Clear All Sessions
-  const handleClearAllSessions = async () => {
-    try {
-      await fetch('/api/v1/watcher/sessions/clear', { method: 'POST' });
-      setSessions([]);
-      setSelectedSessionId(null);
-      setDecisions([]);
-      fetchSessions();
-    } catch (err) {
-      console.error('Failed to clear sessions:', err);
-    }
-  };
 
   // =========================================================================
   // Tool Threshold Interactivity:
@@ -471,15 +439,6 @@ export const WatcherLiveView: React.FC<WatcherLiveViewProps> = ({
           <h1 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
             Policy
           </h1>
-          {daemonStatus && daemonStatus.is_running && (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-medium">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Hooks active</span>
-              <span className="text-[10px] font-mono opacity-80">
-                • {daemonStatus.events_intercepted_count} events
-              </span>
-            </div>
-          )}
         </div>
 
         <div className="flex items-center gap-2.5">
@@ -626,14 +585,14 @@ export const WatcherLiveView: React.FC<WatcherLiveViewProps> = ({
                 <div className="flex items-center gap-3">
                   <div className="text-xs font-mono flex items-center gap-2">
                     <span className="font-bold text-sm text-[#111827]">
-                      {selectedSession.title || selectedSession.project_name || selectedSession.session_id}
+                      {selectedSession?.title || selectedSession?.project_name || selectedSession?.session_id}
                     </span>
                     <span className="text-[11px] text-[#6b7280]">
-                      ({selectedSession.session_id})
+                      ({selectedSession?.session_id})
                     </span>
                     <span className="text-[#d1d5db]">•</span>
                     <span className="text-[#6b7280]">Model: </span>
-                    <strong className="text-[#4f46e5]">{selectedSession.model}</strong>
+                    <strong className="text-[#4f46e5]">{selectedSession?.model}</strong>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -671,7 +630,7 @@ export const WatcherLiveView: React.FC<WatcherLiveViewProps> = ({
                     </button>
                   )}
                   <a
-                    href={`#sessions/${encodeURIComponent(selectedSession.session_id)}`}
+                    href={`#sessions/${encodeURIComponent(selectedSession?.session_id || '')}`}
                     className="px-2.5 py-1 rounded-lg text-[11px] font-mono font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-colors cursor-pointer"
                   >
                     View Full Session ↗
@@ -811,15 +770,20 @@ export const WatcherLiveView: React.FC<WatcherLiveViewProps> = ({
                           </span>
 
                           {/* Tool Name & Input Preview */}
-                          <div className="min-w-0 flex items-center gap-2 truncate">
+                          <div className={`min-w-0 flex items-center gap-2 ${isExpanded ? 'flex-wrap flex-1' : 'truncate'}`}>
                             <span className="text-xs font-mono font-bold text-[#111827] shrink-0">
                               {dec.tool_name}
                             </span>
-                            {!isExpanded && (
-                              <span className="text-xs font-mono text-[#4b5563] truncate">
-                                {displayCommand}
-                              </span>
-                            )}
+                            <span
+                              className={`text-xs font-mono ${
+                                isExpanded
+                                  ? 'text-[#111827] font-semibold break-all whitespace-pre-wrap flex-1'
+                                  : 'text-[#4b5563] truncate'
+                              }`}
+                              title={displayCommand}
+                            >
+                              {displayCommand}
+                            </span>
                           </div>
                         </div>
 
@@ -854,6 +818,16 @@ export const WatcherLiveView: React.FC<WatcherLiveViewProps> = ({
                           >
                             Score {dec.score}
                           </span>
+
+                          {/* Apollo 13 Threat Taxonomy Badge */}
+                          {dec.threat_category && THREAT_CATEGORY_META[dec.threat_category] && (
+                            <span
+                              className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-bold border ${THREAT_CATEGORY_META[dec.threat_category].bg} ${THREAT_CATEGORY_META[dec.threat_category].color} ${THREAT_CATEGORY_META[dec.threat_category].border}`}
+                              title={THREAT_CATEGORY_META[dec.threat_category].label}
+                            >
+                              {THREAT_CATEGORY_META[dec.threat_category].shortLabel}
+                            </span>
+                          )}
 
                           {/* Override / Review Action Button */}
                           {(isBlocked || isEscalated) && (

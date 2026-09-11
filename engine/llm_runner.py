@@ -57,6 +57,11 @@ class LLMConfig(BaseModel):
         default=4, ge=0, description="Maximum retry attempts on 429/5xx errors"
     )
     seed: int | None = Field(default=42, description="Random seed for reproducible completions")
+    thinking_level: Literal["high", "minimal"] | None = Field(
+        default=None,
+        description="Thinking level for models that support it (e.g. Gemma 4). "
+        "'high' enables the thinking process; 'minimal' disables it.",
+    )
 
 
 class LLMUsage(BaseModel):
@@ -142,6 +147,8 @@ class AsyncLLMRunner:
         provider = cfg.provider if cfg.provider != "google" else self.provider
         if cfg.model.startswith("gpt-") or cfg.model.startswith("o1") or cfg.model.startswith("o3"):
             provider = "openai"
+        if cfg.model.startswith("gemini-") or cfg.model.startswith("gemma-"):
+            provider = "google"
 
         if provider == "google":
             if self.google_client is None:
@@ -184,11 +191,19 @@ class AsyncLLMRunner:
                     )
                 )
 
+        # Inject ThinkingConfig for Gemma 4 or when explicitly requested
+        _is_thinking_model = cfg.model.startswith("gemma-4-") or cfg.thinking_level is not None
+        _thinking_config: types.ThinkingConfig | None = None
+        if _is_thinking_model:
+            _level = cfg.thinking_level or "high"
+            _thinking_config = types.ThinkingConfig(thinking_level=_level)
+
         gen_config = types.GenerateContentConfig(
             temperature=cfg.temperature,
             top_p=cfg.top_p,
             max_output_tokens=cfg.max_tokens,
             system_instruction=system_prompt,
+            thinking_config=_thinking_config,
             response_mime_type="application/json" if response_schema is not None else None,
             response_schema=response_schema if response_schema is not None else None,
             automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
@@ -209,7 +224,21 @@ class AsyncLLMRunner:
                 )
 
                 elapsed_ms = (time.perf_counter() - start_time) * 1000.0
-                raw_text = response.text or ""
+
+                # For thinking models the SDK may return thought parts + answer parts.
+                # Extract only the non-thought (answer) text; fall back to response.text.
+                raw_text = ""
+                if response.candidates:
+                    candidate = response.candidates[0]
+                    if candidate.content and candidate.content.parts:
+                        non_thought = [
+                            p.text
+                            for p in candidate.content.parts
+                            if p.text and not getattr(p, "thought", False)
+                        ]
+                        raw_text = "".join(non_thought)
+                if not raw_text:
+                    raw_text = response.text or ""
 
                 prompt_toks = 0
                 comp_toks = 0
@@ -245,17 +274,27 @@ class AsyncLLMRunner:
                 )
 
             except Exception as exc:
+                err_str = str(exc)
+                if (
+                    "RESOURCE_EXHAUSTED" in err_str
+                    or "Quota exceeded" in err_str
+                    or "credit_balance_exhausted" in err_str
+                    or "insufficient_quota" in err_str
+                    or "404 NOT_FOUND" in err_str
+                    or "no longer available" in err_str
+                ):
+                    raise RuntimeError(f"Google GenAI quota or model unavailable: {exc}") from exc
+
                 attempt += 1
                 if attempt > cfg.max_retries:
                     raise RuntimeError(
                         f"Google GenAI request failed after {cfg.max_retries} retries: {exc}"
                     ) from exc
 
-                err_str = str(exc)
-                if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "Quota" in err_str:
-                    backoff = 5.0 + (attempt * 2.0)
+                if "429" in err_str:
+                    backoff = 2.0 + (attempt * 1.0)
                     logger.warning(
-                        "Google API quota limit (429). Retrying in %.1fs (attempt %d/%d)...",
+                        "Google API rate limit (429). Retrying in %.1fs (attempt %d/%d)...",
                         backoff,
                         attempt,
                         cfg.max_retries,

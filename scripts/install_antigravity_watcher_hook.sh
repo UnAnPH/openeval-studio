@@ -35,6 +35,18 @@ payload = {
                 ],
             }
         ],
+        "PostToolUse": [
+            {
+                "matcher": ".*",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": f"python3 {gate} --post",
+                        "timeout": 3,
+                    }
+                ],
+            }
+        ],
     }
 }
 if hooks_path.exists():

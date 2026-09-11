@@ -35,6 +35,7 @@ from pathlib import Path
 
 WATCHER_URL = os.environ.get("OPENEVAL_WATCHER_URL", "http://127.0.0.1:8000/api/watcher/evaluate")
 TIMEOUT_SEC = float(os.environ.get("OPENEVAL_WATCHER_TIMEOUT", "1.5"))
+LOCKOUT_PERMISSION = os.environ.get("OPENEVAL_LOCKOUT_PERMISSION", "ask")
 LOG_PATH = Path.home() / ".openeval" / "cursor-watcher-gate.log"
 
 LOCAL_BLACKLIST = [
@@ -58,12 +59,51 @@ def _log(event: str, **fields: object) -> None:
 def _emit(permission: str, message: str = "") -> None:
     out = {
         "permission": permission,
-        "continue": permission != "deny",
+        "continue": permission == "allow",
         "user_message": message,
         "agent_message": message,
     }
     print(json.dumps(out, ensure_ascii=False))
     _log("emit", permission=permission, message=message[:240])
+
+
+def _report_to_watcher(
+    *,
+    tool_name: str,
+    args: dict,
+    conversation_id: str,
+    cmd: str,
+) -> None:
+    """Best-effort POST so Live Stream / Sessions see local-blacklist denies."""
+    try:
+        req = urllib.request.Request(
+            WATCHER_URL,
+            data=json.dumps(
+                {
+                    "agent_id": "cursor",
+                    "tool_name": tool_name,
+                    "arguments": args
+                    if args
+                    else ({"command": cmd, "CommandLine": cmd} if cmd else {}),
+                    "session_id": f"cursor-{conversation_id[:8]}" if conversation_id else None,
+                    "thought_context": conversation_id,
+                }
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=TIMEOUT_SEC) as resp:
+            verdict = json.loads(resp.read().decode("utf-8"))
+            _log(
+                "server_verdict",
+                decision=str(verdict.get("decision", "")).lower(),
+                risk_score=float(verdict.get("risk_score") or 0.0),
+                shadow_decision=verdict.get("shadow_decision"),
+                mode_applied=verdict.get("mode_applied"),
+                source="local_blacklist_report",
+            )
+    except Exception as err:
+        _log("server_unreachable", error=str(err), source="local_blacklist_report")
 
 
 def main() -> None:
@@ -92,7 +132,19 @@ def main() -> None:
 
     for pattern, reason in LOCAL_BLACKLIST:
         if cmd and re.search(pattern, cmd, re.IGNORECASE):
-            _emit("deny", f"[WATCHER] {reason}")
+            args = tool_input if isinstance(tool_input, dict) else {}
+            if cmd:
+                args = {**args, "command": cmd, "CommandLine": cmd}
+            _report_to_watcher(
+                tool_name=tool_name,
+                args=args,
+                conversation_id=conversation_id,
+                cmd=cmd,
+            )
+            _emit(
+                LOCKOUT_PERMISSION,
+                f"[WATCHER INTERACTIVE LOCKOUT]: {reason}. Execution frozen pending human operator approval.",
+            )
             return
 
     args = tool_input if isinstance(tool_input, dict) else {}
@@ -134,7 +186,10 @@ def main() -> None:
 
     # Obey server decision only (observe mode: allow + high risk + shadow_decision).
     if decision in ("deny", "reject", "block"):
-        _emit("deny", f"[WATCHER BLOCKED] {reason}")
+        _emit(
+            LOCKOUT_PERMISSION,
+            f"[WATCHER INTERACTIVE LOCKOUT]: {reason} (Risk: {int(risk * 100)}%). Execution frozen pending human operator approval.",
+        )
         return
     if decision in ("escalate", "ask", "warn"):
         _emit("ask", f"[WATCHER ESCALATION] {reason}")

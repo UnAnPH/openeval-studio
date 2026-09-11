@@ -197,3 +197,38 @@ def test_watcher_analyzer_lite(client: TestClient) -> None:
     assert "escalated_decisions" in data
     assert "session_count" in data
     assert "fleet" in data
+
+
+def test_watcher_tool_result_endpoint(client: TestClient) -> None:
+    """Verify tool execution result reporting endpoint."""
+    store = get_watcher_store()
+    sess = Session(
+        session_id="test-result-sess-1",
+        project_name="openeval-studio",
+        agent_type="antigravity",
+        status="working",
+    )
+    store.create_session(sess)
+
+    # Report tool result
+    res = client.post(
+        "/api/watcher/result",
+        json={
+            "session_id": "test-result-sess-1",
+            "agent_id": "antigravity",
+            "tool_name": "run_command",
+            "stdout": "total 42\n-rw-r--r-- file.txt",
+            "stderr": "",
+            "exit_code": 0,
+        },
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "recorded"
+    assert "total 42" in data["tool_result"]
+
+    # Verify session in store was updated with ToolResult
+    updated = store.get_session("test-result-sess-1")
+    assert updated is not None
+    assert len(updated.trajectory.tool_results) >= 1
+    assert "total 42" in updated.trajectory.tool_results[-1].stdout

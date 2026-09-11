@@ -72,7 +72,7 @@ class FindingRecord(BaseModel):
     )
     severity: SeverityLevel = Field(..., description="Severity level: critical, high, medium, low")
     dimension: str = Field(..., description="One of the 7 Security Scoring Dimensions")
-    agent_source: Literal["antigravity", "claude_code", "openeval_runner"] = Field(
+    agent_source: Literal["antigravity", "claude_code", "cursor", "openeval_runner"] = Field(
         default="antigravity", description="Monitored agent platform"
     )
     summary: str = Field(..., description="Plain-English incident summary")
@@ -368,7 +368,9 @@ class SchemingScanners:
         summary: str,
         flagged_turns: list[int],
         blocked_turn: int | None = None,
-        agent_source: Literal["antigravity", "claude_code", "openeval_runner"] = "antigravity",
+        agent_source: Literal[
+            "antigravity", "claude_code", "cursor", "openeval_runner"
+        ] = "antigravity",
         developer: str = "Ellis Cardoso",
         severity: SeverityLevel = "critical",
     ) -> FindingRecord:

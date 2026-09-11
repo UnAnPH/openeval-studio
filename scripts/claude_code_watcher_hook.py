@@ -33,6 +33,7 @@ from pathlib import Path
 
 WATCHER_URL = os.environ.get("OPENEVAL_WATCHER_URL", "http://127.0.0.1:8000/api/watcher/evaluate")
 TIMEOUT_SEC = float(os.environ.get("OPENEVAL_WATCHER_TIMEOUT", "1.5"))
+LOCKOUT_PERMISSION = os.environ.get("OPENEVAL_LOCKOUT_PERMISSION", "ask")
 LOG_PATH = Path.home() / ".openeval" / "claude-watcher-gate.log"
 
 LOCAL_BLACKLIST = [
@@ -75,6 +76,68 @@ def _cmd_from_input(tool_name: str, tool_input: dict) -> str:
     ).strip()
 
 
+def _report_tool_result(payload: dict) -> None:
+    result_url = os.environ.get(
+        "OPENEVAL_WATCHER_RESULT_URL",
+        WATCHER_URL.replace("/api/watcher/evaluate", "/api/watcher/result"),
+    )
+    hook_input = payload.get("hookSpecificInput") or payload
+    tool_name = str(payload.get("tool_name") or hook_input.get("toolName") or "unknown")
+    session_id = str(payload.get("session_id") or hook_input.get("sessionId") or "")
+
+    tool_response = (
+        hook_input.get("toolResponse")
+        or hook_input.get("tool_result")
+        or hook_input.get("toolResult")
+        or {}
+    )
+    if isinstance(tool_response, str):
+        stdout = tool_response
+        stderr = ""
+        exit_code = 0
+    elif isinstance(tool_response, dict):
+        stdout = str(
+            tool_response.get("stdout")
+            or tool_response.get("output")
+            or tool_response.get("content")
+            or ""
+        )
+        stderr = str(tool_response.get("stderr") or "")
+        exit_code = int(tool_response.get("exitCode") or tool_response.get("exit_code") or 0)
+    else:
+        stdout = str(tool_response or "")
+        stderr = ""
+        exit_code = 0
+
+    err = str(payload.get("error") or hook_input.get("error") or "")
+    if err and not stderr:
+        stderr = err
+
+    req_body = {
+        "session_id": f"claude-{session_id[:12]}"
+        if session_id and not session_id.startswith("claude-")
+        else session_id,
+        "agent_id": "claude_code",
+        "tool_name": tool_name,
+        "stdout": stdout,
+        "stderr": stderr,
+        "exit_code": exit_code,
+        "error": err or None,
+    }
+    try:
+        req = urllib.request.Request(
+            result_url,
+            data=json.dumps(req_body).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=TIMEOUT_SEC):
+            pass
+        _log("posttool_result_reported", session_id=session_id)
+    except Exception as err:
+        _log("posttool_result_error", error=str(err))
+
+
 def main() -> None:
     raw = sys.stdin.read()
     if not raw.strip():
@@ -84,6 +147,17 @@ def main() -> None:
         payload = json.loads(raw)
     except json.JSONDecodeError:
         _emit("allow", "invalid stdin JSON")
+        return
+
+    hook_name = str(
+        payload.get("hookSpecificInput", {}).get("hookEventName")
+        or payload.get("hookEventName")
+        or payload.get("hook_name")
+        or ""
+    )
+    if "--post" in sys.argv or hook_name == "PostToolUse":
+        _report_tool_result(payload)
+        print("{}")
         return
 
     tool_name = str(payload.get("tool_name") or payload.get("toolName") or "unknown")
@@ -97,13 +171,19 @@ def main() -> None:
 
     for pattern, reason in LOCAL_BLACKLIST:
         if cmd and re.search(pattern, cmd, re.IGNORECASE):
-            _emit("deny", f"[WATCHER] {reason}")
+            _emit(
+                LOCKOUT_PERMISSION,
+                f"[WATCHER INTERACTIVE LOCKOUT]: {reason}. Execution frozen pending human operator approval.",
+            )
             return
 
     # Sensitive path writes
     path = str(tool_input.get("file_path") or tool_input.get("path") or "")
     if path.endswith(".env") or "id_rsa" in path or "/.aws/credentials" in path:
-        _emit("deny", "[WATCHER] Sensitive file path")
+        _emit(
+            LOCKOUT_PERMISSION,
+            "[WATCHER INTERACTIVE LOCKOUT]: Sensitive file path. Execution frozen pending human operator approval.",
+        )
         return
 
     args = dict(tool_input)
@@ -145,7 +225,10 @@ def main() -> None:
 
     # Obey server decision only (observe mode: allow + high risk + shadow_decision).
     if decision in ("deny", "reject", "block"):
-        _emit("deny", f"[WATCHER BLOCKED] {reason}")
+        _emit(
+            LOCKOUT_PERMISSION,
+            f"[WATCHER INTERACTIVE LOCKOUT]: {reason} (Risk: {int(risk * 100)}%). Execution frozen pending human operator approval.",
+        )
         return
     if decision in ("escalate", "ask", "warn"):
         _emit("ask", f"[WATCHER ESCALATION] {reason}")
