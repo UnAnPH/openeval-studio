@@ -250,10 +250,12 @@ export const RedTeamWorkbenchModal: React.FC<RedTeamWorkbenchModalProps> = ({
                     <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite (Fast)</option>
                     <option value="gemini-2.5-flash">gemini-2.5-flash (Standard)</option>
                   </optgroup>
+                  {/*
                   <optgroup label="Google Gemma 4">
                     <option value="gemma-4-26b-a4b-it">gemma-4-26b-a4b-it (26B · Thinking)</option>
                     <option value="gemma-4-31b-it">gemma-4-31b-it (31B · Thinking)</option>
                   </optgroup>
+                  */}
                 </select>
               </div>
             </div>

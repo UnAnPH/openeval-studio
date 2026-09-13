@@ -19,10 +19,10 @@ payload = {
     "version": 1,
     "hooks": {
         "beforeShellExecution": [
-            {"command": f"python3 {gate}", "timeout": 5}
+            {"command": f'python3 "{gate}"', "timeout": 5}
         ],
         "preToolUse": [
-            {"command": f"python3 {gate}", "timeout": 5}
+            {"command": f'python3 "{gate}"', "timeout": 5}
         ],
     },
 }

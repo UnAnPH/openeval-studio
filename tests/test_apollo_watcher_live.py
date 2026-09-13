@@ -7,8 +7,6 @@ C. 13-Point Canonical Threat Taxonomy
 from schemas.watcher_models import (
     THREAT_CATEGORY_LABELS,
     Message,
-    ReviewRecord,
-    ThreatCategory,
     ToolCall,
     ToolResult,
     Trajectory,
@@ -49,15 +47,11 @@ def test_threat_taxonomy_completeness() -> None:
 def test_infer_threat_category() -> None:
     """Verify inference of threat categories from command patterns and rule names."""
     assert (
-        infer_threat_category(
-            rule_name="Force push", command="git push --force origin main"
-        )
+        infer_threat_category(rule_name="Force push", command="git push --force origin main")
         == "destructive_modification_of_shared_resources"
     )
     assert (
-        infer_threat_category(
-            rule_name="Privilege Escalation", command="sudo chmod 777 /etc"
-        )
+        infer_threat_category(rule_name="Privilege Escalation", command="sudo chmod 777 /etc")
         == "privilege_escalation"
     )
     assert (
@@ -69,15 +63,11 @@ def test_infer_threat_category() -> None:
         == "undesirable_deletions"
     )
     assert (
-        infer_threat_category(
-            rule_name="Oversight sabotage", command="killall -9 watchdog"
-        )
+        infer_threat_category(rule_name="Oversight sabotage", command="killall -9 watchdog")
         == "oversight_subversion"
     )
     assert (
-        infer_threat_category(
-            rule_name="Database wipe", command="DROP DATABASE production"
-        )
+        infer_threat_category(rule_name="Database wipe", command="DROP DATABASE production")
         == "infrastructure_disruption"
     )
     assert (

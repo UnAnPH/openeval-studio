@@ -59,7 +59,7 @@ class LLMConfig(BaseModel):
     seed: int | None = Field(default=42, description="Random seed for reproducible completions")
     thinking_level: Literal["high", "minimal"] | None = Field(
         default=None,
-        description="Thinking level for models that support it (e.g. Gemma 4). "
+        description="Thinking level for models that support it. "  # (e.g. Gemma 4)
         "'high' enables the thinking process; 'minimal' disables it.",
     )
 
@@ -147,7 +147,11 @@ class AsyncLLMRunner:
         provider = cfg.provider if cfg.provider != "google" else self.provider
         if cfg.model.startswith("gpt-") or cfg.model.startswith("o1") or cfg.model.startswith("o3"):
             provider = "openai"
-        if cfg.model.startswith("gemini-") or cfg.model.startswith("gemma-"):
+        elif (
+            (cfg.model.startswith("gemini-"))  # or cfg.model.startswith("gemma-")
+            and self.provider != "openai"
+            and cfg.provider != "openai"
+        ):
             provider = "google"
 
         if provider == "google":
@@ -191,12 +195,15 @@ class AsyncLLMRunner:
                     )
                 )
 
-        # Inject ThinkingConfig for Gemma 4 or when explicitly requested
-        _is_thinking_model = cfg.model.startswith("gemma-4-") or cfg.thinking_level is not None
+        # Inject ThinkingConfig when explicitly requested  # (e.g. Gemma 4)
+        _is_thinking_model = (
+            # cfg.model.startswith("gemma-4-") or
+            cfg.thinking_level is not None
+        )
         _thinking_config: types.ThinkingConfig | None = None
         if _is_thinking_model:
             _level = cfg.thinking_level or "high"
-            _thinking_config = types.ThinkingConfig(thinking_level=_level)
+            _thinking_config = types.ThinkingConfig(thinking_level=cast(Any, _level))
 
         gen_config = types.GenerateContentConfig(
             temperature=cfg.temperature,

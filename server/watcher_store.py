@@ -49,7 +49,13 @@ class WatcherStore:
     """Thread-safe DuckDB + JSON store for sessions, trajectories, and reviews."""
 
     def __init__(self, storage_dir: Path | None = None, db_path: str = ":memory:") -> None:
-        self.storage_dir = storage_dir or Path(os.getenv("WATCHER_STORAGE_DIR", ".runs/watcher"))
+        if storage_dir is None:
+            from server.demo_seed import is_demo_seed_enabled
+
+            default_dir = ".runs/demo_watcher" if is_demo_seed_enabled() else ".runs/watcher"
+            self.storage_dir = Path(os.getenv("WATCHER_STORAGE_DIR", default_dir))
+        else:
+            self.storage_dir = storage_dir
         self.storage_dir.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
         self._subscribers: dict[str, list[asyncio.Queue[dict[str, Any]]]] = {}
@@ -62,7 +68,7 @@ class WatcherStore:
         # Default MDM Policy
         self._policy = Policy(
             policy_id="default_policy",
-            name="Default Watcher Security Policy",
+            name="OpenEval Runtime Security Policy",
             org_id="default_org",
             command_rules=[r.model_copy() for r in DEFAULT_COMMAND_RULES],
             tool_thresholds=[t.model_copy() for t in DEFAULT_TOOL_THRESHOLDS],
@@ -209,6 +215,8 @@ class WatcherStore:
             agent = "cursor"
         elif "inspect" in lowered:
             agent = "inspect_eval"
+        elif "red_team" in lowered or "redteam" in lowered:
+            agent = "red_team"
 
         session = Session(
             session_id=session_id,
@@ -599,6 +607,11 @@ def get_watcher_store() -> WatcherStore:
     """Retrieve global singleton WatcherStore instance."""
     global _GLOBAL_WATCHER_STORE
     env_dir = os.getenv("WATCHER_STORAGE_DIR")
+    if not env_dir:
+        from server.demo_seed import is_demo_seed_enabled
+
+        if is_demo_seed_enabled():
+            env_dir = ".runs/demo_watcher"
     effective_dir = Path(env_dir) if env_dir else None
     if _GLOBAL_WATCHER_STORE is None or (
         effective_dir is not None and _GLOBAL_WATCHER_STORE.storage_dir != effective_dir

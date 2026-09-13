@@ -191,7 +191,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
               <div className="p-8 text-center text-xs text-slate-500 font-mono border border-dashed border-slate-200 rounded-xl">
                 No trajectory turns recorded for this session.
                 <div className="mt-1 text-[11px] text-slate-400">
-                  Live blocks appear here when Watcher gates a tool call.
+                  Live blocks appear here when OpenEval gates a tool call.
                 </div>
               </div>
             ) : (

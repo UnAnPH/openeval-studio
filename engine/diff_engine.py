@@ -167,8 +167,14 @@ class TrajectoryDiffEngine:
     @classmethod
     def compare_runs(cls, run_a: RunRecord, run_b: RunRecord) -> TrajectoryDiffSummary:
         """Perform full turn-by-turn alignment and metric diff between Run A and Run B."""
-        steps_a = run_a.steps or []
-        steps_b = run_b.steps or []
+        steps_a = [
+            s if isinstance(s, AgentStep) else AgentStep.model_validate(s)
+            for s in (run_a.steps or [])
+        ]
+        steps_b = [
+            s if isinstance(s, AgentStep) else AgentStep.model_validate(s)
+            for s in (run_b.steps or [])
+        ]
         max_turns = max(len(steps_a), len(steps_b))
 
         step_diffs: list[StepDiff] = []

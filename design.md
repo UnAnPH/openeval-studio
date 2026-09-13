@@ -9,7 +9,7 @@
 OpenEval Studio implements a **high-contrast, minimalist light-mode design system** optimized for complex autonomous trajectory inspection, safety auditing, and real-time monitoring.
 
 ### 1.1 Core Principles
-1. **Single Unified Visual Identity:** Regardless of which model or engineer generated a view, all 4 trajectory views (Sessions, Watcher Live, Live Autonomous Trajectory Trace, and Finished Run Trajectory Trace) share identical card containers, headers, typography, and color tokens.
+1. **Single Unified Visual Identity:** Regardless of which model or engineer generated a view, all 4 trajectory views (Sessions, Safety Policy, Live Autonomous Trajectory Trace, and Finished Run Trajectory Trace) share identical card containers, headers, typography, and color tokens.
 2. **Cognitive Clarity:** High-density data (tokens, latencies, exit codes, diffs) is presented with strict visual hierarchy. Monospaced metadata is cleanly separated from human-readable agent reasoning.
 3. **Zero Ionic Dependencies:** 100% of icons and UI elements utilize native `lucide-react` SVG components and Tailwind CSS. `@ionic/react` and `ionicons` are strictly prohibited in core views to eliminate hydration and layout squishing bugs.
 4. **Copyable & Terminal-Centric:** All bash commands, observations, and tool payloads render inside dark monospace code blocks with one-click copy buttons and standard command prompts (`$ `).
@@ -106,7 +106,7 @@ Header bar atop studio views with breadcrumb, live status, and actions:
 ```
 
 ### 4.3 Pill Tab Navigation
-Unified tab switcher used across Run Detail, Watcher Live, and Grader Workbench:
+Unified tab switcher used across Run Detail, Safety Policy, and Grader Workbench:
 ```tsx
 <div className="bg-white p-1.5 rounded-2xl border border-border-subtle shadow-sm flex items-center gap-1.5 text-xs font-semibold overflow-x-auto shrink-0">
   {tabs.map((tab) => {
@@ -164,7 +164,7 @@ Used for all bash command executions, file mutations, and container observation 
 </div>
 ```
 
-### 4.5 Watcher Runtime Interception Crimson Banner
+### 4.5 OpenEval Runtime Interception Crimson Banner
 Displayed whenever the 4-stage safety firewall intercepts an unsafe tool invocation:
 ```tsx
 <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-950 space-y-3">
@@ -174,7 +174,7 @@ Displayed whenever the 4-stage safety firewall intercepts an unsafe tool invocat
         <ShieldAlert className="w-4 h-4 text-white" />
       </div>
       <div className="font-bold font-mono text-rose-900 text-xs flex items-center gap-1.5">
-        <span>WATCHER LIVE: RUNTIME INTERCEPTION</span>
+        <span>OPENEVAL: RUNTIME INTERCEPTION</span>
         <span className="px-2 py-0.5 rounded bg-rose-100 text-rose-800 text-[10px] uppercase font-bold">
           {ruleTag}
         </span>
@@ -236,7 +236,7 @@ Displayed whenever the 4-stage safety firewall intercepts an unsafe tool invocat
   * **Full Command:** Dark code surface (`bg-[#14121F]`) displaying unclipped command string with single-click `Copy Command` button.
   * **Execution Output:** Terminal surface (`bg-[#0b1329] text-emerald-300`) displaying complete command stdout/stderr or gate lockout message with `Copy Output` button.
   * **Metadata Grid:** Rounded latency (`Math.round(v.latency_ms) ms`), verification stage, and policy note.
-  * **Operator Resolution:** `👤 Mark as Operator Allowed` on blocked events, plus a top toolbar action `👤 Allow All for Clarity` when pending blocks exist.
+  * **Operator Resolution:** `👤 Mark as Operator Allowed` on blocked events
 
 ### 5.3 Live Autonomous Trajectory Trace (`LiveTrajectory.tsx`)
 * **Phase Stepper:** 4-step linear flow (`1. Sandbox Init` $\rightarrow$ `2. Autonomous ReAct` $\rightarrow$ `3. Pytest Verifier` $\rightarrow$ `4. LLM Judge Audits`) with pulsating indicators.

@@ -11,9 +11,11 @@
 OpenEval Studio is:
 
 1. An **eval IDE** (tasks, sandboxes, Inspect bridge, compare, search).  
-2. A **Watcher-style runtime gate** for Antigravity / Claude Code / Cursor hooks → `/api/watcher/evaluate`.
+2. A **runtime safety gate** for Antigravity / Claude Code / Cursor hooks → `/api/gate/evaluate` (alias `/api/watcher/evaluate`).
 
 Do not describe it as enterprise SaaS, multi-tenant MDM, or “Deep LLM always-on” unless LLM env flags are enabled and wired.
+
+> **Naming & Architecture Note:** All visitor-facing copy, UI labels, and user documentation use **OpenEval Studio** and **runtime gate**. Internal code artifacts (`server/watcher_store.py`, `/api/watcher/*` aliases, and hook script filenames such as `antigravity_watcher_gate.py`) are deliberately maintained for backward compatibility with existing agent integrations and tests.
 
 ---
 
@@ -25,11 +27,11 @@ Do not describe it as enterprise SaaS, multi-tenant MDM, or “Deep LLM always-o
 4. **Filter layout contract** — The `Live` status filter tab belongs exclusively on **Safety → Sessions** (`All` | `Live` | `Blocked` | `Closed`). **Safety → Control** strictly maintains 3 decision tabs (`All` | `Blocked` | `Closed`).
 5. **Design system** — `lucide-react` only in new/edited views; cards `bg-white rounded-2xl border border-border-subtle shadow-sm`.
 6. **Command rules only on command tools** — when applying shell regexes in `evaluate_action_watcher_gateway`, do not treat file-write payloads as shell commands.
-7. **Quality before done:** `make check`, `uv run pytest tests/` (all 136 tests passing), `cd ui && npm run build` (0 TypeScript/Vite errors).
+7. **Quality before done:** `make check`, `uv run pytest tests/`, `cd ui && npm run build` (0 TypeScript/Vite errors).
 
 ---
 
-## Watcher truth table
+## Runtime gate truth table
 
 | Piece | Status |
 | --- | --- |

@@ -6,7 +6,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from engine.llm_runner import AsyncLLMRunner
+from engine.llm_runner import AsyncLLMRunner, LLMConfig
 from engine.react_agent import AgentAction, AgentStep, ReActAgent
 from schemas.task_spec import load_task_spec
 
@@ -91,6 +91,7 @@ async def test_react_agent_successful_resolution(sample_task) -> None:
         streamed_steps: list[AgentStep] = []
         trajectory = await agent.solve_task(
             task=sample_task,
+            config=LLMConfig(model="gpt-4o", provider="openai"),
             on_step_callback=lambda step: streamed_steps.append(step),
         )
 
@@ -135,7 +136,9 @@ async def test_react_agent_max_steps_exceeded(sample_task) -> None:
         runner = AsyncLLMRunner(client=client, provider="openai")
         agent = ReActAgent(runner=runner, executor=mock_executor)
 
-        trajectory = await agent.solve_task(task=sample_task)
+        trajectory = await agent.solve_task(
+            task=sample_task, config=LLMConfig(model="gpt-4o", provider="openai")
+        )
 
         assert trajectory.status == "max_steps_exceeded"
         assert trajectory.total_steps == 5  # sample_task max_steps = 5

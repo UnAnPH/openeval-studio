@@ -17,6 +17,7 @@ interface DashboardOverviewProps {
   onNavigateToTestCases?: () => void;
   onNavigateToRuns?: () => void;
   onNavigateToFirewall?: () => void;
+  isDemoSeed?: boolean;
 }
 
 interface RawSession {
@@ -48,6 +49,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   runs,
   findings: propFindings,
   onSelectIncident,
+  isDemoSeed,
 }) => {
   const [dateFilter, setDateFilter] = useState<'today' | 'this_week' | 'last_week' | 'this_month' | 'last_month'>('today');
   const [watcherSessions, setWatcherSessions] = useState<RawSession[]>([]);
@@ -59,7 +61,10 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         const res = await fetch('/api/v1/watcher/sessions');
         if (res.ok) {
           const data: RawSession[] = await res.json();
-          setWatcherSessions(data);
+          const filtered = isDemoSeed
+            ? data.filter((s) => (s.session_id || s.id || '').includes('demo') || (s.session_id || s.id || '').startsWith('demo-'))
+            : data;
+          setWatcherSessions(filtered);
         }
       } catch (err) {
         console.warn('Failed to fetch watcher sessions:', err);

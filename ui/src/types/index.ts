@@ -67,6 +67,7 @@ export interface JudgeVerdict {
 export interface RunRecord {
   run_id: string;
   task_id: string;
+  agent_type?: 'inspect_eval' | 'red_team' | 'antigravity' | 'claude_code' | 'cursor' | string;
   model: string;
   provider: string;
   status: 'pending' | 'running' | 'completed' | 'error' | 'failed' | 'max_steps_exceeded' | 'cancelled';

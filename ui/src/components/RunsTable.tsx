@@ -45,7 +45,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
   onNavigateToStudio,
 }) => {
   const [searchText, setSearchText] = useState<string>('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'passed' | 'failed' | 'safety_flagged' | 'running'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'passed' | 'failed' | 'safety_flagged' | 'running' | 'red_team'>('all');
   const [selectedModel, setSelectedModel] = useState<string>('all');
   const [selectedTaskId, setSelectedTaskId] = useState<string>('all');
   const [selectedRunIds, setSelectedRunIds] = useState<string[]>([]);
@@ -79,7 +79,8 @@ export const RunsTable: React.FC<RunsTableProps> = ({
       const matchModel = run.model.toLowerCase().includes(q);
       const matchSummary = run.final_summary?.toLowerCase().includes(q);
       const matchReason = run.failure_reason?.toLowerCase().includes(q);
-      if (!matchId && !matchModel && !matchSummary && !matchReason) return false;
+      const matchAgentType = run.agent_type?.toLowerCase().includes(q);
+      if (!matchId && !matchModel && !matchSummary && !matchReason && !matchAgentType) return false;
     }
     if (statusFilter === 'passed' && run.passed !== true) return false;
     if (statusFilter === 'failed' && (run.passed === true || run.status === 'running' || run.status === 'pending')) return false;
@@ -88,6 +89,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
       const hasFailedAudit = run.audit_verdicts?.some((v) => !v.passed);
       if (!hasFailedAudit) return false;
     }
+    if (statusFilter === 'red_team' && run.agent_type !== 'red_team') return false;
     if (selectedModel !== 'all' && run.model !== selectedModel) return false;
     if (selectedTaskId !== 'all' && run.task_id !== selectedTaskId) return false;
     return true;
@@ -119,6 +121,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
   const passedRuns = runs.filter((r) => r.passed === true).length;
   const failedRuns = runs.filter((r) => r.passed === false).length;
   const flaggedRuns = runs.filter((r) => r.audit_verdicts?.some((v) => !v.passed)).length;
+  const redTeamRuns = runs.filter((r) => r.agent_type === 'red_team').length;
   const totalCost = runs.reduce((acc, r) => acc + (r.estimated_cost_usd || 0), 0);
   const totalTokens = runs.reduce((acc, r) => acc + (r.total_tokens || 0), 0);
   const avgDuration = totalRuns > 0
@@ -128,7 +131,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
   const selectedRecords = runs.filter((r) => selectedRunIds.includes(r.run_id));
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col h-full bg-[#fcfcfd] text-[#1e2029] font-sans p-6 space-y-5 overflow-y-auto">
+    <div className="flex-1 min-h-0 flex flex-col h-full overflow-y-auto bg-[#fcfcfd] text-[#1e2029] font-sans p-6 pb-16 space-y-5">
       {/* 1. Card Block Header */}
       <div className="bg-white p-4 sm:p-5 rounded-2xl border border-border-subtle shadow-sm flex items-center justify-between shrink-0">
         <h1 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2.5">Evaluation Runs</h1>
@@ -148,7 +151,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
       </div>
 
       {/* 2. Key Metrics Bar (Clickable Filter Cards) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 shrink-0">
         {/* Card 1: Total Runs */}
         <button
           type="button"
@@ -251,14 +254,14 @@ export const RunsTable: React.FC<RunsTableProps> = ({
       </div>
 
       {/* 3. Filter Bar & Bulk Selection Action Banner */}
-      <div className="bg-white p-4 rounded-2xl border border-border-subtle shadow-sm space-y-3">
+      <div className="bg-white p-4 rounded-2xl border border-border-subtle shadow-sm space-y-3 shrink-0">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           {/* Left Side: Active Filter Tag, Model & Benchmark Dropdowns, Search */}
           <div className="flex items-center gap-2.5 flex-wrap flex-1 min-w-0">
             {/* Active Status Badge if filtered */}
             {statusFilter !== 'all' && (
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface-subtle border border-border-subtle text-xs font-bold text-brand-purple">
-                <span>Filter: {statusFilter === 'passed' ? 'Passed' : statusFilter === 'failed' ? 'Failed' : 'Safety Flagged'}</span>
+                <span>Filter: {statusFilter === 'passed' ? 'Passed' : statusFilter === 'failed' ? 'Failed' : statusFilter === 'safety_flagged' ? 'Safety Flagged' : statusFilter === 'red_team' ? 'Red Team Probes' : statusFilter}</span>
                 <button
                   type="button"
                   onClick={() => setStatusFilter('all')}
@@ -268,6 +271,22 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                   ✕
                 </button>
               </div>
+            )}
+
+            {/* Red Team filter chip */}
+            {redTeamRuns > 0 && (
+              <button
+                type="button"
+                onClick={() => setStatusFilter(statusFilter === 'red_team' ? 'all' : 'red_team')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all cursor-pointer ${
+                  statusFilter === 'red_team'
+                    ? 'bg-rose-50 text-rose-800 border-rose-300 ring-2 ring-rose-300/30'
+                    : 'bg-canvas border-border-subtle hover:bg-surface-subtle text-text-secondary'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-rose-500" />
+                <span>Red Team ({redTeamRuns})</span>
+              </button>
             )}
 
             {/* Model Dropdown Filter */}
@@ -391,7 +410,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
       </div>
 
       {/* 4. High-Density Runs Table */}
-      <div className="bg-white rounded-2xl border border-border-subtle shadow-sm overflow-hidden">
+      <div className="bg-white rounded-2xl border border-border-subtle shadow-sm overflow-hidden shrink-0">
         {filteredRuns.length === 0 ? (
           <div className="p-12 text-center space-y-3">
             <div className="w-12 h-12 rounded-2xl bg-canvas border border-border-subtle mx-auto flex items-center justify-center text-text-muted">
@@ -532,12 +551,19 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                       {/* Task ID */}
                       <td className="py-3.5 px-4 font-sans">
                         <div className="space-y-0.5">
-                          <div className="font-bold text-text-primary text-xs font-mono">{run.task_id}</div>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-bold text-text-primary text-xs font-mono">{run.task_id}</span>
+                            {run.agent_type === 'red_team' && (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 uppercase tracking-wider">
+                                Red Team
+                              </span>
+                            )}
+                          </div>
                           <div className="text-[10px] text-text-secondary flex items-center gap-1.5">
-                            <span className="capitalize">{matchedTask?.category || 'General'}</span>
+                            <span className="capitalize">{run.agent_type === 'red_team' ? 'Adversarial Probe' : (matchedTask?.category || 'General')}</span>
                             <span>•</span>
                             <span className="uppercase text-[9px] px-1.5 py-0.2 rounded bg-canvas border border-border-subtle">
-                              {matchedTask?.difficulty || 'Medium'}
+                              {run.agent_type === 'red_team' ? 'Red Team' : (matchedTask?.difficulty || 'Medium')}
                             </span>
                           </div>
                         </div>

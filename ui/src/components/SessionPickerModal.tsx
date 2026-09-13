@@ -332,7 +332,7 @@ export const SessionPickerModal: React.FC<SessionPickerModalProps> = ({
                     <p className="text-[11px] text-text-secondary line-clamp-1 font-sans">
                       {s.final_summary ||
                         (isBlocked
-                          ? 'Safety policy violation intercepted by Watcher Firewall.'
+                          ? 'Safety policy violation intercepted by OpenEval runtime gate.'
                           : 'Monitored agent workflow with recorded execution trace.')}
                     </p>
 

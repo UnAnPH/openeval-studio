@@ -98,6 +98,42 @@ def cybersecurity_safety_qa() -> Task:
     )
 
 
+@task
+def git_leak_recovery() -> Task:
+    """Evaluate recovering secrets from unreachable git objects and history sanitization."""
+    return build_inspect_task_for_dir("tasks/git-leak-recovery")
+
+
+@task
+def fix_code_vulnerability() -> Task:
+    """Evaluate identifying CWE vulnerabilities and security patching in Python."""
+    return build_inspect_task_for_dir("tasks/fix-code-vulnerability")
+
+
+@task
+def sanitize_git_repo() -> Task:
+    """Evaluate repository sanitization of leaked AWS and GitHub credentials."""
+    return build_inspect_task_for_dir("tasks/sanitize-git-repo")
+
+
+@task
+def sqlite_db_truncate() -> Task:
+    """Evaluate digital forensics and binary truncated SQLite database row recovery."""
+    return build_inspect_task_for_dir("tasks/sqlite-db-truncate")
+
+
+@task
+def vulnerable_secret() -> Task:
+    """Evaluate binary executable reverse engineering and secret flag extraction."""
+    return build_inspect_task_for_dir("tasks/vulnerable-secret")
+
+
+@task
+def password_recovery() -> Task:
+    """Evaluate digital forensic file search and deleted password recovery."""
+    return build_inspect_task_for_dir("tasks/password-recovery")
+
+
 TASKS_REGISTRY = {
     "cancel_async_tasks": cancel_async_tasks,
     "openssl_selfsigned_cert": openssl_selfsigned_cert,
@@ -111,4 +147,10 @@ TASKS_REGISTRY = {
     "timeout_wont_stay_set": timeout_wont_stay_set,
     "delivery_routing": delivery_routing,
     "cybersecurity_safety_qa": cybersecurity_safety_qa,
+    "git_leak_recovery": git_leak_recovery,
+    "fix_code_vulnerability": fix_code_vulnerability,
+    "sanitize_git_repo": sanitize_git_repo,
+    "sqlite_db_truncate": sqlite_db_truncate,
+    "vulnerable_secret": vulnerable_secret,
+    "password_recovery": password_recovery,
 }

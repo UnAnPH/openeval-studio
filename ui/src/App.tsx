@@ -26,6 +26,7 @@ import { RunDetailView } from './components/RunDetailView';
 import { BenchmarksList } from './components/BenchmarksList';
 import { CompareTestResults } from './components/CompareTestResults';
 import { DEFAULT_MODELS, DEFAULT_TASKS } from './data/defaults';
+import { DEMO_SESSIONS, DEMO_EVAL_RUNS, DEMO_INTERCEPTIONS } from './data/demoFixtures';
 import {
   AgentStep,
   FindingRecord,
@@ -122,6 +123,7 @@ export function App() {
   const evalSettledRef = useRef<boolean>(false);
 
   const [serverConnected, setServerConnected] = useState<boolean>(false);
+  const [isDemoSeed, setIsDemoSeed] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // Persistent client-side tombstone set for deleted runs
@@ -232,17 +234,29 @@ export function App() {
         fetch('/api/watcher/interceptions?limit=40').catch(() => null),
       ]);
 
+      let isDemo = false;
       if (healthRes && healthRes.ok) {
         setServerConnected(true);
+        const healthData = await healthRes.json().catch(() => ({}));
+        isDemo = Boolean(healthData?.demo_seed);
+        setIsDemoSeed(isDemo);
       } else {
-        setServerConnected(false);
+        // Appwrite Sites static demo mode (seamless fallback when no backend is running)
+        setServerConnected(true);
+        setIsDemoSeed(true);
+        isDemo = true;
       }
 
       if (sessionsRes && sessionsRes.ok) {
         const sessData = await sessionsRes.json();
         if (Array.isArray(sessData)) {
-          setDiscoveredSessions(sessData);
+          const filtered = isDemo
+            ? sessData.filter((s: any) => (s.session_id || s.id || '').includes('demo') || (s.session_id || s.id || '').startsWith('demo-'))
+            : sessData;
+          setDiscoveredSessions(filtered);
         }
+      } else {
+        setDiscoveredSessions((prev) => (prev.length === 0 ? (DEMO_SESSIONS as unknown as any[]) : prev));
       }
 
       if (modelsRes && modelsRes.ok) {
@@ -284,6 +298,8 @@ export function App() {
           });
 
         setRunsHistory(activeOnly);
+      } else {
+        setRunsHistory((prev) => (prev.length === 0 ? (DEMO_EVAL_RUNS as unknown as RunRecord[]) : prev));
       }
 
       if (findingsRes && findingsRes.ok) {
@@ -291,6 +307,8 @@ export function App() {
         if (findingsData.length > 0) {
           setFindings(findingsData);
         }
+      } else {
+        setFindings((prev) => (prev.length === 0 ? (DEMO_INTERCEPTIONS as unknown as any[]) : prev));
       }
 
       if (interceptRes && interceptRes.ok) {
@@ -312,6 +330,8 @@ export function App() {
             return merged.slice(0, 50);
           });
         }
+      } else {
+        setLiveInterceptions((prev) => (prev.length === 0 ? (DEMO_INTERCEPTIONS as unknown as any[]) : prev));
       }
 
       if (watcherCfgRes && watcherCfgRes.ok) {
@@ -936,6 +956,7 @@ export function App() {
                 onNavigateToTestCases={() => setRoute('benchmarks')}
                 onNavigateToRuns={() => setRoute('runs')}
                 onNavigateToFirewall={() => setRoute('control')}
+                isDemoSeed={isDemoSeed}
               />
             )}
 
@@ -943,6 +964,7 @@ export function App() {
             {(navTab === 'sessions' || navTab === 'incident_detail' || navTab === 'transcripts') && (
               <SessionsView
                 initialSessionId={selectedSessionId}
+                isDemoSeed={isDemoSeed}
                 onBack={() => {
                   if (window.history.length > 1) {
                     window.history.back();
@@ -975,6 +997,7 @@ export function App() {
                 discoveredSessions={discoveredSessions}
                 watcherConfig={watcherConfig}
                 liveInterceptions={liveInterceptions}
+                isDemoSeed={isDemoSeed}
                 onSelectIncident={handleSelectIncident}
                 onUpdateWatcherConfig={handleUpdateWatcherConfig}
                 onNavigateToSessions={() => setRoute('sessions')}
@@ -1076,7 +1099,7 @@ export function App() {
                         className="bg-[#f9fafb] border border-[#e5e7eb] rounded-xl px-3 py-1.5 text-xs text-[#111827] font-medium focus:outline-none focus:border-indigo-500 cursor-pointer"
                       >
                         {googleModels.length > 0 && (
-                          <optgroup label="Google Gemini & Gemma">
+                          <optgroup label={"Google Gemini" /* & Gemma */}>
                             {googleModels.map((m) => (
                               <option key={m.id} value={m.id} className="bg-white text-text-primary">
                                 {m.name}

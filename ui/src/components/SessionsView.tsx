@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { TranscriptCardView, TranscriptMessage } from './TranscriptCardView';
 import { WatcherSession } from '../types';
+import { DEMO_SESSIONS } from '../data/demoFixtures';
 
 interface FragmentMatch {
   session_id: string;
@@ -39,11 +40,13 @@ interface FragmentMatch {
 
 interface SessionsViewProps {
   initialSessionId?: string | null;
+  isDemoSeed?: boolean;
   onBack?: () => void;
 }
 
 export const SessionsView: React.FC<SessionsViewProps> = ({
   initialSessionId,
+  isDemoSeed,
 }) => {
   const [sessions, setSessions] = useState<WatcherSession[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(initialSessionId || null);
@@ -71,14 +74,14 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  // Fetch sessions from Watcher backend
+  // Fetch sessions from Watcher backend (with automatic fallback to bundled demo fixtures on static hosts)
   const fetchSessions = async (autoSelect = false) => {
     try {
       setIsLoading(true);
-      const res = await fetch('/api/v1/watcher/sessions?min_messages=1');
-      if (res.ok) {
+      const res = await fetch('/api/v1/watcher/sessions?min_messages=1').catch(() => null);
+      if (res && res.ok) {
         const data: WatcherSession[] = await res.json();
-        if (Array.isArray(data)) {
+        if (Array.isArray(data) && data.length > 0) {
           setSessions(data);
           if (autoSelect || !selectedSessionId) {
             if (initialSessionId && data.some((s) => s.session_id === initialSessionId)) {
@@ -87,10 +90,26 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
               setSelectedSessionId(data[0].session_id);
             }
           }
+          return;
+        }
+      }
+      // Static Appwrite Sites fallback
+      const fallback = DEMO_SESSIONS as unknown as WatcherSession[];
+      setSessions(fallback);
+      if (autoSelect || !selectedSessionId) {
+        if (initialSessionId && fallback.some((s) => s.session_id === initialSessionId)) {
+          setSelectedSessionId(initialSessionId);
+        } else if (fallback.length > 0) {
+          setSelectedSessionId(fallback[0].session_id);
         }
       }
     } catch (err) {
-      console.warn('Failed to load watcher sessions:', err);
+      console.warn('Backend unavailable, using bundled demo sessions:', err);
+      const fallback = DEMO_SESSIONS as unknown as WatcherSession[];
+      setSessions(fallback);
+      if (fallback.length > 0 && !selectedSessionId) {
+        setSelectedSessionId(fallback[0].session_id);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -115,9 +134,19 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
     }
   };
 
+  // Ensure demo mode only ever shows demo sessions (defense in depth)
+  const displaySessions = useMemo(() => {
+    if (isDemoSeed) {
+      return sessions.filter(
+        (s) => s.session_id.includes('demo') || s.session_id.startsWith('demo-')
+      );
+    }
+    return sessions;
+  }, [sessions, isDemoSeed]);
+
   const selectedSession = useMemo(
-    () => sessions.find((s) => s.session_id === selectedSessionId) || null,
-    [sessions, selectedSessionId]
+    () => displaySessions.find((s) => s.session_id === selectedSessionId) || null,
+    [displaySessions, selectedSessionId]
   );
 
   // Session is blocked if any review denied/blocked (accept deny|block|reject vocab) or score ≥ 8, unless operator-allowed.
@@ -133,23 +162,23 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
     s.status === 'working' || s.status === 'active' || s.status === 'running';
 
   // Buckets for filter pills: ALL / LIVE / BLOCKED / CLOSED
-  const totalCount = sessions.length;
+  const totalCount = displaySessions.length;
   const liveCount = useMemo(
-    () => sessions.filter((s) => sessionIsLive(s)).length,
-    [sessions]
+    () => displaySessions.filter((s) => sessionIsLive(s)).length,
+    [displaySessions]
   );
   const blockedCount = useMemo(
-    () => sessions.filter((s) => sessionIsBlocked(s)).length,
-    [sessions]
+    () => displaySessions.filter((s) => sessionIsBlocked(s)).length,
+    [displaySessions]
   );
   const closedCount = useMemo(
-    () => sessions.filter((s) => !sessionIsBlocked(s) && !sessionIsLive(s)).length,
-    [sessions]
+    () => displaySessions.filter((s) => !sessionIsBlocked(s) && !sessionIsLive(s)).length,
+    [displaySessions]
   );
 
   // Filter sessions list by query & status (All, Live, Blocked, or Closed)
   const filteredSessions = useMemo(() => {
-    let list = sessions;
+    let list = displaySessions;
     if (statusFilter === 'live') {
       list = list.filter((s) => sessionIsLive(s));
     } else if (statusFilter === 'blocked') {
@@ -194,12 +223,42 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: searchQuery }),
-      });
-      if (res.ok) {
+      }).catch(() => null);
+      if (res && res.ok) {
         const data: FragmentMatch[] = await res.json();
         setFragmentMatches(data);
         setVisibleFragmentsCount(5);
+        return;
       }
+      // Static Appwrite Sites client-side search fallback
+      const q = searchQuery.toLowerCase();
+      const matches: FragmentMatch[] = [];
+      displaySessions.forEach((s) => {
+        (s.trajectory?.messages || []).forEach((m, idx) => {
+          const content = m.content || '';
+          const thinking = m.thinking || '';
+          const full = `${content} ${thinking}`;
+          if (full.toLowerCase().includes(q)) {
+            matches.push({
+              session_id: s.session_id,
+              project_or_task: s.project_name || s.session_id,
+              model: s.model || s.agent_type,
+              turn_start: idx + 1,
+              turn_end: idx + 1,
+              matched_role: m.role || 'assistant',
+              matched_span: content.slice(0, 160) || thinking.slice(0, 160),
+              explanation: `Direct lexical match for "${searchQuery}" in ${s.session_id} turn ${idx + 1}.`,
+              relevance_score: 0.85,
+              match_type: 'lexical',
+              dense_score: 0.0,
+              lexical_score: 0.85,
+              combined_score: 0.85,
+            });
+          }
+        });
+      });
+      setFragmentMatches(matches);
+      setVisibleFragmentsCount(5);
     } catch (err) {
       console.error('Fragment search failed:', err);
     } finally {
@@ -485,6 +544,19 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-[#fcfcfd] text-[#1e2029] font-sans p-6 space-y-5 overflow-hidden">
+      {isDemoSeed && (
+        <div className="sticky top-0 z-20 flex items-center justify-between gap-3 px-4 py-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-900 text-xs font-medium shadow-xs shrink-0 backdrop-blur-sm">
+          <div className="flex items-center gap-2.5">
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500 text-white tracking-wide uppercase">
+              DEMO
+            </span>
+            <span>
+              <strong>DEMO-ONLY DATA</strong> — Displaying simulated developer session fixtures for hosted demonstration. Live agent hooks are inactive in this environment.
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* 1. TOP TOOLBAR CARD */}
       <div className="bg-white p-4 sm:p-5 rounded-2xl border border-border-subtle shadow-sm flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
@@ -1084,7 +1156,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
             </div>
 
             <p className="text-xs text-slate-600">
-              Provide an absolute file path to a Claude Code (<code className="font-mono text-indigo-600">.jsonl</code>) or Antigravity (<code className="font-mono text-indigo-600">.jsonl</code>) log to ingest into Watcher.
+              Provide an absolute file path to a Claude Code (<code className="font-mono text-indigo-600">.jsonl</code>) or Antigravity (<code className="font-mono text-indigo-600">.jsonl</code>) log to ingest into OpenEval.
             </p>
 
             <div className="space-y-1.5">

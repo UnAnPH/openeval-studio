@@ -775,8 +775,7 @@ class UniversalAgentLogLoader:
             model="gemini-3.7-flash",
             provider="google",
             status=status,
-            working_dir=detected_working_dir
-            or "/Users/jaysonandal/Documents/AI safety/openeval-studio",
+            working_dir=detected_working_dir or str(Path.cwd()),
             current_activity=latest_activity,
             trajectory=trajectory,
             total_tokens=len(tool_calls) * 120,
@@ -802,6 +801,11 @@ class UniversalAgentLogLoader:
     @classmethod
     def scan_default_agent_directories(cls) -> list[Session]:
         """Scan standard local directories for Antigravity, Claude Code, and Cursor logs."""
+        from server.demo_seed import is_demo_seed_enabled
+
+        if is_demo_seed_enabled():
+            return []
+
         ingested: list[Session] = []
         cls._ag_titles = get_antigravity_titles()
         now = time.time()

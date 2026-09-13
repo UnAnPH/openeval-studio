@@ -357,7 +357,7 @@ def main() -> None:
                 )
                 _emit(
                     LOCKOUT_DECISION,
-                    f"[WATCHER INTERACTIVE LOCKOUT - {tag}]: {reason} Execution frozen pending human operator approval.",
+                    f"[OPENEVAL INTERACTIVE LOCKOUT - {tag}]: {reason} Execution frozen pending human operator approval.",
                     conversation_id=conversation_id,
                 )
                 return
@@ -375,7 +375,7 @@ def main() -> None:
         )
         _emit(
             LOCKOUT_DECISION,
-            "[WATCHER INTERACTIVE LOCKOUT - RULE_SENSITIVE_PATH]: Modification of secret/held-out path prohibited. Execution frozen pending human operator approval.",
+            "[OPENEVAL INTERACTIVE LOCKOUT - RULE_SENSITIVE_PATH]: Modification of secret/held-out path prohibited. Execution frozen pending human operator approval.",
             conversation_id=conversation_id,
         )
         return
@@ -424,14 +424,14 @@ def main() -> None:
     if decision in ("deny", "reject", "block"):
         _emit(
             LOCKOUT_DECISION,
-            f"[WATCHER INTERACTIVE LOCKOUT]: {reason} (Risk: {int(risk_score * 100)}%). Execution frozen pending human operator approval.",
+            f"[OPENEVAL INTERACTIVE LOCKOUT]: {reason} (Risk: {int(risk_score * 100)}%). Execution frozen pending human operator approval.",
             conversation_id=conversation_id,
         )
         return
     if decision in ("escalate", "ask", "warn"):
         _emit(
             "force_ask",
-            f"[WATCHER ESCALATION]: {reason} (Risk: {int(risk_score * 100)}%)",
+            f"[OPENEVAL ESCALATION]: {reason} (Risk: {int(risk_score * 100)}%)",
             conversation_id=conversation_id,
         )
         return

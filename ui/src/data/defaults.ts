@@ -1,7 +1,7 @@
 import { ModelSpec, RunRecord, TaskSummary } from '../types';
 
 export const DEFAULT_MODELS: ModelSpec[] = [
-  // --- GOOGLE GEMINI & GEMMA ACTIVE TEXT-OUT MODELS ---
+  // --- GOOGLE GEMINI ACTIVE TEXT-OUT MODELS (Gemma models commented out) ---
   {
     id: 'gemini-3.1-flash-lite',
     name: 'Gemini 3.1 Flash-Lite',
@@ -111,6 +111,7 @@ export const DEFAULT_MODELS: ModelSpec[] = [
     output_cost_per_m: 8.0,
     capabilities: ['agentic', 'coding', 'sandbox_execution', 'reasoning'],
   },
+  /*
   {
     id: 'gemma-4-26b-a4b-it',
     name: 'Gemma 4 26B',
@@ -135,6 +136,7 @@ export const DEFAULT_MODELS: ModelSpec[] = [
     output_cost_per_m: 0.25,
     capabilities: ['balanced', 'reasoning', 'open_weights', 'thinking'],
   },
+  */
 
   // --- OPENAI FRONTIER ---
   {

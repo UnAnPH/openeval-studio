@@ -109,14 +109,22 @@ class TranscriptFragmentSearchEngine:
             query_terms = [query_clean.lower()]
 
         # Collect candidate sessions from WatcherStore, Global RunStore, and Inspect logs
+        from server.demo_seed import is_demo_seed_enabled
+
         watcher_store = get_watcher_store()
         all_sessions = watcher_store.list_sessions()
-        runs_in_memory = global_run_store.list_runs()
-
-        candidate_records: list[Any] = list(all_sessions) + list(runs_in_memory)
-        if logs_dir and logs_dir.exists():
-            inspect_records = list_inspect_run_records(logs_dir)
-            candidate_records.extend(inspect_records)
+        if is_demo_seed_enabled():
+            candidate_records = [
+                s
+                for s in all_sessions
+                if "demo" in s.session_id or s.session_id.startswith("demo-")
+            ]
+        else:
+            runs_in_memory = global_run_store.list_runs()
+            candidate_records = list(all_sessions) + list(runs_in_memory)
+            if logs_dir and logs_dir.exists():
+                inspect_records = list_inspect_run_records(logs_dir)
+                candidate_records.extend(inspect_records)
 
         embed_svc = TranscriptEmbeddingService.get_instance(
             force_fallback=force_fallback_embeddings

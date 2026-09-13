@@ -191,10 +191,10 @@ export const DEFAULT_WATCHER_COMMAND_RULES: WatcherCommandRule[] = [
   {
     id: 'sec-watcher-ignore',
     category: 'security',
-    name: 'Watcher ignore file',
+    name: 'Runtime gate ignore file',
     pattern: '(\\.watcherignore|\\.watcher/)',
     action: 'deny',
-    description: 'Circumventing or modifying Watcher monitoring configurations',
+    description: 'Circumventing or modifying runtime gate monitoring configurations',
     is_custom: false,
   },
   {
@@ -734,7 +734,7 @@ export const DEFAULT_TOOL_NAMES: string[] = [
   'list_dir',
 ];
 
-/** Agent family grouping for Tool Thresholds UI (Watcher parity). */
+/** Agent family grouping for Tool Thresholds UI. */
 export function toolThresholdAgentGroup(toolName: string): string {
   const n = toolName.toLowerCase();
   if (toolName === '*' || n === 'bash' || n === 'execute_bash' || n === 'run_command' || n === 'shell') {
@@ -769,7 +769,7 @@ export const DEFAULT_WATCHER_TOOL_THRESHOLDS: WatcherToolThreshold[] = DEFAULT_T
 
 export const DEFAULT_FALLBACK_POLICY: WatcherPolicy = {
   policy_id: 'default_policy',
-  name: 'Default Watcher Security Policy',
+  name: 'OpenEval Runtime Security Policy',
   org_id: 'default_org',
   posture: 'blocking',
   command_rules: DEFAULT_WATCHER_COMMAND_RULES,

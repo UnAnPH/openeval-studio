@@ -173,7 +173,7 @@ def main() -> None:
         if cmd and re.search(pattern, cmd, re.IGNORECASE):
             _emit(
                 LOCKOUT_PERMISSION,
-                f"[WATCHER INTERACTIVE LOCKOUT]: {reason}. Execution frozen pending human operator approval.",
+                f"[OPENEVAL INTERACTIVE LOCKOUT]: {reason}. Execution frozen pending human operator approval.",
             )
             return
 
@@ -182,7 +182,7 @@ def main() -> None:
     if path.endswith(".env") or "id_rsa" in path or "/.aws/credentials" in path:
         _emit(
             LOCKOUT_PERMISSION,
-            "[WATCHER INTERACTIVE LOCKOUT]: Sensitive file path. Execution frozen pending human operator approval.",
+            "[OPENEVAL INTERACTIVE LOCKOUT]: Sensitive file path. Execution frozen pending human operator approval.",
         )
         return
 
@@ -227,11 +227,11 @@ def main() -> None:
     if decision in ("deny", "reject", "block"):
         _emit(
             LOCKOUT_PERMISSION,
-            f"[WATCHER INTERACTIVE LOCKOUT]: {reason} (Risk: {int(risk * 100)}%). Execution frozen pending human operator approval.",
+            f"[OPENEVAL INTERACTIVE LOCKOUT]: {reason} (Risk: {int(risk * 100)}%). Execution frozen pending human operator approval.",
         )
         return
     if decision in ("escalate", "ask", "warn"):
-        _emit("ask", f"[WATCHER ESCALATION] {reason}")
+        _emit("ask", f"[OPENEVAL ESCALATION] {reason}")
         return
     _emit("allow")
 

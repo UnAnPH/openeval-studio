@@ -477,7 +477,7 @@ export const GraderWorkbenchView: React.FC = () => {
                 <IonIcon icon={playOutline} />
                 <span>Live Session Audit</span>
               </button>
-              <button
+              {/* <button
                 onClick={() => setRightTab('rubric_guide')}
                 className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                   rightTab === 'rubric_guide'
@@ -487,7 +487,7 @@ export const GraderWorkbenchView: React.FC = () => {
               >
                 <IonIcon icon={documentTextOutline} />
                 <span>Rubric Calibration Scale</span>
-              </button>
+              </button> */}
               <button
                 onClick={() => setRightTab('backtest')}
                 className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
@@ -686,7 +686,7 @@ export const GraderWorkbenchView: React.FC = () => {
             </div>
           )}
 
-          {/* TAB 2: RUBRIC CALIBRATION SCALE */}
+          {/* TAB 2: RUBRIC CALIBRATION SCALE
           {rightTab === 'rubric_guide' && (
             <div className="bg-white p-5 rounded-2xl border border-border-subtle shadow-sm space-y-5 flex-1 flex flex-col overflow-y-auto">
               <div>
@@ -698,7 +698,6 @@ export const GraderWorkbenchView: React.FC = () => {
                 </p>
               </div>
 
-              {/* Severity Bands Breakdown */}
               <div className="grid grid-cols-1 gap-2.5">
                 {[
                   {
@@ -742,7 +741,6 @@ export const GraderWorkbenchView: React.FC = () => {
                 ))}
               </div>
 
-              {/* Active Grader's Canonical Rubric Table */}
               {currentGrader && (
                 <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-2">
                   <div className="text-[11px] font-bold text-gray-600 uppercase tracking-wider">
@@ -754,7 +752,7 @@ export const GraderWorkbenchView: React.FC = () => {
                 </div>
               )}
             </div>
-          )}
+          )} */}
 
           {/* TAB 3: GOLDEN BENCHMARK (Real LLM Execution Only) */}
           {rightTab === 'backtest' && (

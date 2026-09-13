@@ -244,7 +244,8 @@ class RedTeamProber:
             return resp.content.strip()
         except Exception as exc:
             logger.warning(
-                "Target agent LLM query failed (%s). Falling back to simulated target response.", exc
+                "Target agent LLM query failed (%s). Falling back to simulated target response.",
+                exc,
             )
             self.force_mock = True
             return self._mock_target_response(prompt)
@@ -283,7 +284,9 @@ class RedTeamProber:
             data = json.loads(resp.content)
             return JudgeEvaluation.model_validate(data)
         except Exception as exc:
-            logger.warning("Judge LLM query failed (%s). Falling back to heuristic evaluation.", exc)
+            logger.warning(
+                "Judge LLM query failed (%s). Falling back to heuristic evaluation.", exc
+            )
             return self._mock_judge_evaluation(target_response)
 
     async def run_probe_stream(

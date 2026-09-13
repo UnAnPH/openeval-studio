@@ -38,7 +38,7 @@ bash scripts/install_antigravity_watcher_hook.sh
 1. UI → **Safety → Policy** → set Bash / `run_command` Auto-deny ≥ 5 → Save  
 2. UI → **Safety → Control** → mode **Enforce**  
 3. In Antigravity, ask the agent to run: `git push --force origin main`  
-4. Expect hard block with `[WATCHER …]`; check **Sessions** and Control live stream  
+4. Expect hard block with `[OPENEVAL …]`; check **Sessions** and Control live stream  
 5. Control → **Observe**: same command should **allow** with `shadow_decision` (hooks obey `decision`)
 
 Safe control: `echo hello` must still allow.
@@ -84,6 +84,12 @@ Verify:
 
 **Restart API after pulling these fixes** (ingest + interceptions seed are server-side). Reload UI.  
 
+## 5. Deploying to Web (Free Hosting)
+
+To share this live portfolio demo with reviewers without running it locally:
+- **Render:** Connect GitHub repo, select Docker environment, pick the Free tier, set `OPENEVAL_DEMO_SEED=1`. The app builds automatically from `render.yaml` and `Dockerfile` (UI + FastAPI unified).
+- **Koyeb:** Connect GitHub repo, select Dockerfile build, set `OPENEVAL_DEMO_SEED=1` and port `8000`. Free Nano tier runs continuously without sleep.
+
 ## What not to claim
 
 - Not multi-tenant Analyzer SaaS / production SIEM  
@@ -93,4 +99,4 @@ Verify:
 ## Related
 
 - `FINDINGS.md` — FP/FN notes and eval writeup template  
-- `README.md` — architecture honesty  
+- `README.md` — architecture honesty and full deployment guide  

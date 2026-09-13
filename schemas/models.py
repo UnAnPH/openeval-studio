@@ -39,7 +39,7 @@ class ModelSpec(BaseModel):
 # Complete registry of active Gemini 3, Gemini 2.5, OpenAI, Claude, and Local models
 MODEL_CATALOG: list[ModelSpec] = [
     # =========================================================================
-    # GOOGLE GEMINI & GEMMA ACTIVE TEXT-OUT MODELS (RPD > 0)
+    # GOOGLE GEMINI ACTIVE TEXT-OUT MODELS (RPD > 0)  # (Gemma models commented out)
     # =========================================================================
     ModelSpec(
         id="gemini-3.1-flash-lite",
@@ -150,30 +150,30 @@ MODEL_CATALOG: list[ModelSpec] = [
         output_cost_per_m=8.00,
         capabilities=["agentic", "coding", "sandbox_execution", "reasoning"],
     ),
-    ModelSpec(
-        id="gemma-4-26b-a4b-it",
-        name="Gemma 4 26B",
-        provider="google",
-        tier="fast",
-        description="Google open-weight 26B model hosted on AI Studio with high quota 14400 RPD. Supports thinking.",
-        context_window=128000,
-        max_output_tokens=8192,
-        input_cost_per_m=0.05,
-        output_cost_per_m=0.20,
-        capabilities=["fast", "coding", "open_weights", "thinking"],
-    ),
-    ModelSpec(
-        id="gemma-4-31b-it",
-        name="Gemma 4 31B",
-        provider="google",
-        tier="balanced",
-        description="Google open-weight 31B instruction-tuned model with high quota 14400 RPD. Supports thinking.",
-        context_window=128000,
-        max_output_tokens=8192,
-        input_cost_per_m=0.07,
-        output_cost_per_m=0.25,
-        capabilities=["balanced", "reasoning", "open_weights", "thinking"],
-    ),
+    # ModelSpec(
+    #     id="gemma-4-26b-a4b-it",
+    #     name="Gemma 4 26B",
+    #     provider="google",
+    #     tier="fast",
+    #     description="Google open-weight 26B model hosted on AI Studio with high quota 14400 RPD. Supports thinking.",
+    #     context_window=128000,
+    #     max_output_tokens=8192,
+    #     input_cost_per_m=0.05,
+    #     output_cost_per_m=0.20,
+    #     capabilities=["fast", "coding", "open_weights", "thinking"],
+    # ),
+    # ModelSpec(
+    #     id="gemma-4-31b-it",
+    #     name="Gemma 4 31B",
+    #     provider="google",
+    #     tier="balanced",
+    #     description="Google open-weight 31B instruction-tuned model with high quota 14400 RPD. Supports thinking.",
+    #     context_window=128000,
+    #     max_output_tokens=8192,
+    #     input_cost_per_m=0.07,
+    #     output_cost_per_m=0.25,
+    #     capabilities=["balanced", "reasoning", "open_weights", "thinking"],
+    # ),
     # =========================================================================
     # OPENAI FRONTIER MODELS
     # =========================================================================

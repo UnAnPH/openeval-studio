@@ -65,7 +65,7 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
           className="w-full bg-canvas border border-border-subtle rounded-xl px-3.5 py-2.5 text-xs text-text-primary font-medium focus:outline-none focus:border-brand-primary transition-all disabled:opacity-50 appearance-none cursor-pointer"
         >
           {googleModels.length > 0 && (
-            <optgroup label="Google Gemini & Gemma">
+            <optgroup label={"Google Gemini" /* & Gemma */}>
               {googleModels.map((m) => (
                 <option key={m.id} value={m.id} className="bg-white text-text-primary">
                   {m.name}

@@ -184,8 +184,12 @@ def format_stripped_trajectory(trajectory: Any, max_events: int = 15) -> str:
 
     for msg in messages[-max_events:]:
         role = getattr(msg, "role", None) or (msg.get("role") if isinstance(msg, dict) else "")
-        content = getattr(msg, "content", None) or (msg.get("content") if isinstance(msg, dict) else "")
-        thinking = getattr(msg, "thinking", None) or (msg.get("thinking") if isinstance(msg, dict) else None)
+        content = getattr(msg, "content", None) or (
+            msg.get("content") if isinstance(msg, dict) else ""
+        )
+        thinking = getattr(msg, "thinking", None) or (
+            msg.get("thinking") if isinstance(msg, dict) else None
+        )
         if role in ("user", "developer", "system"):
             lines.append(f"[{str(role).upper()}]: {str(content)[:400]}")
         elif role == "assistant":
@@ -195,13 +199,19 @@ def format_stripped_trajectory(trajectory: Any, max_events: int = 15) -> str:
                 lines.append(f"[ASSISTANT]: {str(content)[:300]}")
 
     for call in tool_calls[-max_events:]:
-        name = getattr(call, "tool_name", "") or (call.get("tool_name") if isinstance(call, dict) else "")
+        name = getattr(call, "tool_name", "") or (
+            call.get("tool_name") if isinstance(call, dict) else ""
+        )
         raw = getattr(call, "raw_input", None) or getattr(call, "arguments", None) or ""
         lines.append(f"[ACTION]: {name}({str(raw)[:250]})")
 
     for res in tool_results[-max_events:]:
-        is_err = getattr(res, "is_error", False) or (res.get("is_error") if isinstance(res, dict) else False)
-        t_name = getattr(res, "tool_name", "") or (res.get("tool_name") if isinstance(res, dict) else "")
+        is_err = getattr(res, "is_error", False) or (
+            res.get("is_error") if isinstance(res, dict) else False
+        )
+        t_name = getattr(res, "tool_name", "") or (
+            res.get("tool_name") if isinstance(res, dict) else ""
+        )
         if is_err:
             lines.append(f"[RESULT]: {t_name} ERROR")
         else:
@@ -310,9 +320,51 @@ class PolicyGateway:
         self._last_threat_category = None
 
         # ---------------------------------------------------------------------
-        # STAGE 1: Deterministic 63 Command Rules
+        # STAGE 1: Deterministic Command & Path Rules (AGENTS.md Rule 6)
         # ---------------------------------------------------------------------
-        matched_rule, rule_action, rule_score, rule_exp = self.command_engine.evaluate(tool_input)
+        command_tool_names = {
+            "bash",
+            "shell",
+            "powershell",
+            "terminal",
+            "run_command",
+            "execute_command",
+            "cmd",
+            "exec",
+            "sh",
+            "zsh",
+            "execute_bash",
+        }
+        is_cmd_tool = tool_name.lower() in command_tool_names
+
+        matched_rule = None
+        rule_action = "triage"
+        rule_score = 1
+        rule_exp = "No deterministic rule triggered; forward to triage"
+
+        if is_cmd_tool:
+            matched_rule, rule_action, rule_score, rule_exp = self.command_engine.evaluate(
+                tool_input
+            )
+        else:
+            # File or non-command tool: only apply sensitive file / path rules to the target path
+            for rule in self.command_engine.rules:
+                if (
+                    rule.category == "security"
+                    and rule.rule_id
+                    in (
+                        "sec_sensitive_files",
+                        "sec_watcher_ignore",
+                        "sec_shadow_file",
+                    )
+                    and rule.action != "off"
+                    and rule.matches(tool_input)
+                ):
+                    matched_rule = rule
+                    rule_action = rule.action
+                    rule_score = 9
+                    rule_exp = f"Blocked by sensitive path rule: {rule.name} ({rule.description})"
+                    break
 
         if matched_rule is not None:
             latency_ms = (time.time() - t0) * 1000.0
@@ -511,7 +563,9 @@ class PolicyGateway:
             f"prior_state_exposed: {prior_state_exposed}",
         ]
         if trajectory_context:
-            prompt_parts.append(f"trajectory_context (tool outputs stripped):\n{trajectory_context}")
+            prompt_parts.append(
+                f"trajectory_context (tool outputs stripped):\n{trajectory_context}"
+            )
         user_prompt = "\n".join(prompt_parts)
         llm = self._llm_grade(FAST_TRIAGE_SYSTEM_PROMPT, user_prompt)
         if llm:
@@ -572,7 +626,9 @@ class PolicyGateway:
             f"prior_state_exposed: {prior_state_exposed}",
         ]
         if trajectory_context:
-            prompt_parts.append(f"trajectory_context (tool outputs stripped):\n{trajectory_context}")
+            prompt_parts.append(
+                f"trajectory_context (tool outputs stripped):\n{trajectory_context}"
+            )
         user_prompt = "\n".join(prompt_parts)
         llm = self._llm_grade(DEEP_REVIEW_SYSTEM_PROMPT, user_prompt)
         if llm:

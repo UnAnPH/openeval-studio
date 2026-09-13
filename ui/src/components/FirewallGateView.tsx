@@ -20,6 +20,7 @@ interface FirewallGateViewProps {
   discoveredSessions?: unknown[];
   watcherConfig?: WatcherConfig;
   liveInterceptions?: WatcherVerdict[];
+  isDemoSeed?: boolean;
   onSelectIncident?: (finding: FindingRecord) => void;
   onUpdateWatcherConfig?: (config: Partial<WatcherConfig>) => void;
   onNavigateToSessions?: () => void;
@@ -58,8 +59,8 @@ export function getActionTitle(v: WatcherVerdict): string {
   const candidateJson =
     text.startsWith('{') || text.startsWith('[')
       ? text
-      : v.full_command && (v.full_command.trim().startsWith('{') || v.full_command.trim().startsWith('['))
-      ? v.full_command.trim()
+      : text.includes('{') && text.includes('}')
+      ? text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1)
       : null;
 
   if (candidateJson) {
@@ -67,8 +68,8 @@ export function getActionTitle(v: WatcherVerdict): string {
       const parsed = JSON.parse(candidateJson);
       if (parsed.toolAction) return parsed.toolAction;
       if (parsed.toolSummary) return parsed.toolSummary;
-      if (parsed.CommandLine) return parsed.CommandLine.split('\n')[0].trim();
-      if (parsed.command) return parsed.command.split('\n')[0].trim();
+      if (parsed.CommandLine) return `${toolPrefix}${parsed.CommandLine.split('\n')[0].trim()}`;
+      if (parsed.command) return `${toolPrefix}${parsed.command.split('\n')[0].trim()}`;
       if (parsed.Description) return parsed.Description.split('\n')[0].trim();
       if (parsed.AbsolutePath) {
         const parts = parsed.AbsolutePath.split('/');
@@ -77,6 +78,9 @@ export function getActionTitle(v: WatcherVerdict): string {
       if (parsed.TargetFile) {
         const parts = parsed.TargetFile.split('/');
         return `${toolPrefix || 'edit: '}${parts[parts.length - 1]}`;
+      }
+      if (parsed.path || parsed.FilePath) {
+        return `${toolPrefix}File: ${parsed.path || parsed.FilePath}`;
       }
     } catch {
       // Fall through to plain text
@@ -91,6 +95,7 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
   watcherConfig: propConfig,
   liveInterceptions = [],
   discoveredSessions: _discoveredSessions = [],
+  isDemoSeed,
   onUpdateWatcherConfig,
   onNavigateToSessions,
 }) => {
@@ -99,6 +104,7 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [expandedLiveIdxs, setExpandedLiveIdxs] = useState<Set<number>>(new Set());
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  /*
   const [isResolving, setIsResolving] = useState<boolean>(false);
 
   const handleAllowAll = async () => {
@@ -111,6 +117,7 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
       setIsResolving(false);
     }
   };
+  */
 
   const handleResolveSingle = async (v: WatcherVerdict) => {
     try {
@@ -245,6 +252,19 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-[#fcfcfd] text-[#1e2029] font-sans p-6 space-y-5 overflow-y-auto">
+      {isDemoSeed && (
+        <div className="sticky top-0 z-20 flex items-center justify-between gap-3 px-4 py-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-900 text-xs font-medium shadow-xs shrink-0 backdrop-blur-sm">
+          <div className="flex items-center gap-2.5">
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500 text-white tracking-wide uppercase">
+              DEMO
+            </span>
+            <span>
+              <strong>DEMO-ONLY DATA</strong> — Displaying simulated developer session fixtures for hosted demonstration. Live agent hooks are inactive in this environment.
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* 1. Card Header */}
       <div className="bg-white p-4 sm:p-5 rounded-2xl border border-border-subtle shadow-sm flex items-center justify-between shrink-0">
         <h1 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
@@ -326,7 +346,7 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
             </button>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {totalBlockedCount > 0 && (
+            {/* {totalBlockedCount > 0 && (
               <button
                 type="button"
                 onClick={handleAllowAll}
@@ -336,7 +356,7 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
               >
                 <span>{isResolving ? 'Allowing...' : '👤 Allow All for Clarity'}</span>
               </button>
-            )}
+            )} */}
             {onNavigateToSessions && (
               <button
                 type="button"
@@ -490,7 +510,7 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
                             )}
                           </div>
                           <pre className="p-3.5 rounded-xl bg-[#0b1329] text-emerald-300 font-mono text-xs overflow-x-auto max-h-72 overflow-y-auto whitespace-pre-wrap leading-relaxed border border-border-subtle shadow-inner select-text">
-                            {v.tool_result || (bucket === 'blocked' ? 'Execution blocked by Watcher safety gate.' : 'Awaiting execution output from agent transcript...')}
+                            {v.tool_result || (bucket === 'blocked' ? 'Execution blocked by OpenEval runtime gate.' : 'Awaiting execution output from agent transcript...')}
                           </pre>
                         </div>
 

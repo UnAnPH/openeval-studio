@@ -119,6 +119,11 @@ class AgentWatcherDaemon:
 
     def scan_once(self) -> int:
         """Single polling cycle checking Antigravity, Claude Code, and Cursor logs."""
+        from server.demo_seed import is_demo_seed_enabled
+
+        if is_demo_seed_enabled():
+            return 0
+
         new_events = 0
 
         if self.antigravity_dir.exists():

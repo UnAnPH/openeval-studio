@@ -42,16 +42,21 @@ class RunStore:
         return self._watcher.record_session(session)
 
     def get_run(self, run_id: str) -> Session | None:
-        """Look up a run/session by its ID."""
+        """Look up a run/session by its ID (session_id or run_id field)."""
         if run_id in self._deleted_ids:
             return None
+        # First try by session_id (fastest path)
         session = self._watcher.get_session(run_id)
-        if session and session.agent_type in ("antigravity", "claude_code", "cursor"):
-            return None
-        return session
+        if session and session.agent_type not in ("antigravity", "claude_code", "cursor"):
+            return session
+        # Fall back: linear scan for run_id field (fixture records may differ from session_id)
+        for s in self._watcher.list_sessions():
+            if s.run_id == run_id and s.agent_type not in ("antigravity", "claude_code", "cursor"):
+                return s
+        return None
 
     def is_deleted(self, run_id: str) -> bool:
-        """Check if a run ID has been deleted."""
+        """Check if a run ID (by session_id or run_id field) has been deleted."""
         return run_id in self._deleted_ids
 
     def list_runs(self) -> list[Session]:
@@ -61,6 +66,7 @@ class RunStore:
             s
             for s in sessions
             if s.session_id not in self._deleted_ids
+            and (s.run_id is None or s.run_id not in self._deleted_ids)
             and s.agent_type not in ("antigravity", "claude_code", "cursor")
         ]
 

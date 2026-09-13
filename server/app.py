@@ -6,7 +6,6 @@ and Server-Sent Events (SSE) for live turn-by-turn ReAct trajectory streaming.
 
 import asyncio
 import contextlib
-from datetime import UTC, datetime
 import json
 import logging
 import os
@@ -14,8 +13,9 @@ import re
 import sys
 import time
 from collections.abc import AsyncGenerator
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 from uuid import uuid4
 
 from dotenv import load_dotenv
@@ -82,10 +82,15 @@ class _ApiKeyMiddleware(BaseHTTPMiddleware):
         if not required:
             return await call_next(request)
         path = request.url.path
-        protected = path.startswith("/api/watcher/evaluate") or (
-            request.method in ("POST", "PUT", "PATCH", "DELETE")
-            and path.startswith("/api/")
-            and not path.endswith("/health")
+        protected = (
+            path.startswith("/api/watcher/evaluate")
+            or path.startswith("/api/gate/evaluate")
+            or (
+                request.method in ("POST", "PUT", "PATCH", "DELETE")
+                and path.startswith("/api/")
+                and not path.endswith("/health")
+                and not path.endswith("/demo/status")
+            )
         )
         if protected:
             key = request.headers.get("X-OpenEval-Key") or request.headers.get("x-openeval-key")
@@ -131,9 +136,22 @@ class LaunchEvalResponse(BaseModel):
 
 
 @app.get("/api/health")
-async def health_check() -> dict[str, str]:
-    """Health check endpoint."""
-    return {"status": "ok", "version": "0.1.0"}
+async def health_check() -> dict[str, Any]:
+    """Health check endpoint with demo seed status."""
+    is_demo = os.getenv("OPENEVAL_DEMO_SEED", "0").lower() in ("1", "true", "yes")
+    return {"status": "ok", "version": "0.1.0", "demo_seed": is_demo}
+
+
+@app.get("/api/demo/status")
+async def demo_status() -> dict[str, Any]:
+    """Report whether demo session seed is enabled."""
+    is_demo = os.getenv("OPENEVAL_DEMO_SEED", "0").lower() in ("1", "true", "yes")
+    return {
+        "demo_seed": is_demo,
+        "demo_mode": is_demo,
+        "seeded_sessions": len(get_watcher_store().list_sessions()) if is_demo else 0,
+        "seeded_eval_runs": len(global_run_store.list_runs()) if is_demo else 0,
+    }
 
 
 # =====================================================================
@@ -200,6 +218,7 @@ async def update_watcher_config_v1(new_config: WatcherConfig) -> WatcherConfig:
     return await update_watcher_config(new_config)
 
 
+@app.post("/api/gate/evaluate", response_model=WatcherVerdict)
 @app.post("/api/watcher/evaluate", response_model=WatcherVerdict)
 async def evaluate_action_watcher_gateway(req: WatcherRequest) -> WatcherVerdict:
     """Hook gateway: store PolicyGateway (rules + 1–10 thresholds) + mode only.
@@ -226,7 +245,10 @@ async def evaluate_action_watcher_gateway(req: WatcherRequest) -> WatcherVerdict
             action_preview=f"{req.tool_name}",
             agent_id=req.agent_id or "unknown",
         )
-        await broadcast_watcher_event("interception_event", verdict.model_dump())
+        from server.demo_seed import is_demo_seed_enabled
+
+        if not is_demo_seed_enabled():
+            await broadcast_watcher_event("interception_event", verdict.model_dump())
         return verdict
 
     cmd = ""
@@ -265,14 +287,44 @@ async def evaluate_action_watcher_gateway(req: WatcherRequest) -> WatcherVerdict
     else:
         full_cmd = req.tool_name
 
-    tool_input = cmd or path or full_cmd
+    command_tool_names = {
+        "bash",
+        "shell",
+        "powershell",
+        "terminal",
+        "run_command",
+        "execute_command",
+        "cmd",
+        "exec",
+        "sh",
+        "zsh",
+        "execute_bash",
+    }
+    is_cmd_tool = req.tool_name.lower() in command_tool_names or bool(cmd)
+
+    tool_input = cmd or full_cmd if is_cmd_tool else path or req.tool_name
+
+    diff_content = None
+    if isinstance(req.arguments, dict):
+        diff_content = (
+            req.arguments.get("diff")
+            or req.arguments.get("contents")
+            or req.arguments.get("CodeContent")
+            or req.arguments.get("ReplacementContent")
+        )
+        if diff_content and not isinstance(diff_content, str):
+            diff_content = str(diff_content)
 
     # Compute human-readable action title / summary
     if tool_action:
         action_preview = f"{req.tool_name}: {tool_action}"
     elif cmd:
         cmd_first = cmd.strip().splitlines()[0]
-        action_preview = f"{req.tool_name}: {cmd_first}" if not cmd_first.startswith(req.tool_name) else cmd_first
+        action_preview = (
+            f"{req.tool_name}: {cmd_first}"
+            if not cmd_first.startswith(req.tool_name)
+            else cmd_first
+        )
     elif path:
         action_preview = f"{req.tool_name} {Path(path).name}"
     else:
@@ -289,6 +341,7 @@ async def evaluate_action_watcher_gateway(req: WatcherRequest) -> WatcherVerdict
         existing_session = store.get_session(session_id)
         if existing_session and existing_session.trajectory:
             from server.policy_gateway import format_stripped_trajectory
+
             traj_context = format_stripped_trajectory(existing_session.trajectory)
     except Exception:
         pass
@@ -298,7 +351,8 @@ async def evaluate_action_watcher_gateway(req: WatcherRequest) -> WatcherVerdict
     rec = gw.evaluate_tool_call(
         session_id=session_id,
         tool_name=req.tool_name,
-        tool_input=full_cmd,
+        tool_input=tool_input,
+        diff=diff_content,
         trajectory_context=traj_context,
     )
 
@@ -362,7 +416,10 @@ async def evaluate_action_watcher_gateway(req: WatcherRequest) -> WatcherVerdict
             threat_category=rec.threat_category,
         )
 
-    await broadcast_watcher_event("interception_event", verdict.model_dump())
+    from server.demo_seed import is_demo_seed_enabled
+
+    if not is_demo_seed_enabled():
+        await broadcast_watcher_event("interception_event", verdict.model_dump())
 
     if verdict.decision in ("deny", "escalate", "reject") or (
         cfg.mode == "observe" and mapped_decision in ("deny", "escalate")
@@ -383,38 +440,39 @@ async def evaluate_action_watcher_gateway(req: WatcherRequest) -> WatcherVerdict
         )
 
     # Persist live-gate session + decision into WatcherStore (canonical)
-    try:
-        from schemas.watcher_models import ToolCall
+    if not is_demo_seed_enabled():
+        try:
+            from schemas.watcher_models import ToolCall
 
-        store = get_watcher_store()
-        agent_id = req.agent_id or "antigravity"
-        store.ensure_live_session(
-            session_id,
-            agent_type=agent_id,
-            title=f"[{agent_id}] Live gate ({session_id[:8]})",
-        )
-        store.append_trajectory_event(
-            session_id,
-            ToolCall(
-                tool_name=req.tool_name,
-                arguments=req.arguments or {},
-                raw_input=tool_input or cmd or req.tool_name,
-            ),
-        )
-        store.record_decision(rec)
-        activity = verdict.decision
-        if cfg.mode == "observe" and mapped_decision != "allow":
-            activity = f"shadow:{mapped_decision}"
-        store.update_session(
-            session_id,
-            {
-                "current_activity": f"{req.tool_name} → {activity}",
-                "status": "working",
-            },
-        )
-        global_watcher_engine.record_interception(verdict)
-    except Exception as exc:
-        logger.warning("Failed persisting live-gate session %s: %s", session_id, exc)
+            store = get_watcher_store()
+            agent_id = req.agent_id or "antigravity"
+            store.ensure_live_session(
+                session_id,
+                agent_type=agent_id,
+                title=f"[{agent_id}] Live gate ({session_id[:8]})",
+            )
+            store.append_trajectory_event(
+                session_id,
+                ToolCall(
+                    tool_name=req.tool_name,
+                    arguments=req.arguments or {},
+                    raw_input=tool_input or cmd or req.tool_name,
+                ),
+            )
+            store.record_decision(rec)
+            activity = verdict.decision
+            if cfg.mode == "observe" and mapped_decision != "allow":
+                activity = f"shadow:{mapped_decision}"
+            store.update_session(
+                session_id,
+                {
+                    "current_activity": f"{req.tool_name} → {activity}",
+                    "status": "working",
+                },
+            )
+            global_watcher_engine.record_interception(verdict)
+        except Exception as exc:
+            logger.debug("Failed persisting live-gate session %s: %s", session_id, exc)
 
     return verdict
 
@@ -458,7 +516,9 @@ async def record_tool_result_watcher(req: WatcherResultRequest) -> dict[str, Any
     for item in reversed(global_watcher_engine._interception_history):
         match_rev = req.review_id and item.review_id == req.review_id
         match_sess = req.session_id and item.session_id == req.session_id
-        if match_rev or (match_sess and (not item.tool_result or "Awaiting" in str(item.tool_result))):
+        if match_rev or (
+            match_sess and (not item.tool_result or "Awaiting" in str(item.tool_result))
+        ):
             item.tool_result = tool_result_text
             updated_live = True
             break
@@ -632,9 +692,14 @@ def _enrich_verdict_dict(row: dict[str, Any]) -> dict[str, Any]:
 
 def _verdicts_from_store_reviews(limit: int = 40) -> list[dict[str, Any]]:
     """Map recent block/deny/escalate/resolved reviews into WatcherVerdict-shaped dicts for Live Stream."""
+    from server.demo_seed import is_demo_seed_enabled
+
+    is_demo = is_demo_seed_enabled()
     store = get_watcher_store()
     rows: list[tuple[str, Any]] = []
     for session in store.list_sessions(limit=200):
+        if is_demo and not ("demo" in session.session_id or session.session_id.startswith("demo-")):
+            continue
         for rev in store.get_session_decisions(session.session_id):
             if not _is_interception_candidate(rev):
                 continue
@@ -875,10 +940,21 @@ async def list_watcher_interceptions(
     limit: int = Query(default=40, ge=1, le=200),
 ) -> list[dict[str, Any]]:
     """Recent blocked/escalated reviews + in-memory live-gate history for Control Live Stream."""
-    from server.agent_log_loader import UniversalAgentLogLoader
+    from server.demo_seed import is_demo_seed_enabled
 
-    UniversalAgentLogLoader.scan_default_agent_directories()
+    if not is_demo_seed_enabled():
+        from server.agent_log_loader import UniversalAgentLogLoader
+
+        UniversalAgentLogLoader.scan_default_agent_directories()
+
     live = [v.model_dump() for v in global_watcher_engine.get_history(limit)]
+    if is_demo_seed_enabled():
+        live = [
+            v
+            for v in live
+            if "demo" in str(v.get("session_id", ""))
+            or str(v.get("session_id", "")).startswith("demo-")
+        ]
     stored = _verdicts_from_store_reviews(limit=limit)
     # Prefer live order first, then fill from store without duping action+agent+decision
     seen: set[str] = set()
@@ -888,7 +964,6 @@ async def list_watcher_interceptions(
         if key in seen:
             continue
         seen.add(key)
-        merged.append(row)
         merged.append(_enrich_verdict_dict(row))
         if len(merged) >= limit:
             break
@@ -902,8 +977,18 @@ async def stream_watcher_events() -> StreamingResponse:
     watcher_sse_subscribers.add(queue)
 
     async def sse_generator() -> AsyncGenerator[str, None]:
+        from server.demo_seed import is_demo_seed_enabled
+
+        is_demo = is_demo_seed_enabled()
         # Seed with in-memory live history + recent store blocks (survives API restart)
         live_hist = [v.model_dump() for v in global_watcher_engine.get_history(20)]
+        if is_demo:
+            live_hist = [
+                v
+                for v in live_hist
+                if "demo" in str(v.get("session_id", ""))
+                or str(v.get("session_id", "")).startswith("demo-")
+            ]
         store_hist = _verdicts_from_store_reviews(limit=20)
         seen: set[str] = set()
         history: list[dict[str, Any]] = []
@@ -912,7 +997,6 @@ async def stream_watcher_events() -> StreamingResponse:
             if key in seen:
                 continue
             seen.add(key)
-            history.append(row)
             history.append(_enrich_verdict_dict(row))
             if len(history) >= 40:
                 break
@@ -952,11 +1036,15 @@ async def list_watcher_findings(
     severity: str | None = Query(default=None, description="Filter: critical, high, medium, low"),
     dimension: str | None = Query(default=None),
 ) -> list[FindingRecord]:
-    """Derive findings from WatcherStore blocked/escalated reviews (canonical)."""
+    from server.demo_seed import is_demo_seed_enabled
+
+    is_demo = is_demo_seed_enabled()
     store = get_watcher_store()
     findings_map: dict[str, FindingRecord] = {}
 
     for session in store.list_sessions(limit=200):
+        if is_demo and not ("demo" in session.session_id or session.session_id.startswith("demo-")):
+            continue
         reviews = store.get_session_decisions(session.session_id)
         blocked = [r for r in reviews if r.decision in ("block", "deny") or (r.score or 0) >= 8]
         if not blocked:
@@ -1020,6 +1108,11 @@ async def list_watcher_findings(
 
 def scan_antigravity_brain_sessions(limit: int = 15) -> list[dict[str, Any]]:
     """Scan local Antigravity brain conversation transcripts and return them as monitored sessions."""
+    from server.demo_seed import is_demo_seed_enabled
+
+    if is_demo_seed_enabled():
+        return []
+
     from server.agent_log_loader import get_antigravity_titles
 
     brain_dir = Path.home() / ".gemini" / "antigravity" / "brain"
@@ -1109,14 +1202,12 @@ def scan_antigravity_brain_sessions(limit: int = 15) -> list[dict[str, Any]]:
                     if first_prompt
                     else f"Antigravity Session {conv_dir.name[:8]}"
                 )
-            dimension = (
-                "Mobile App Dev" if "radiosa" in first_prompt.lower() else "Codebase Refactoring"
-            )
+            dimension = "Codebase Refactoring"
             session_item = {
                 "id": f"antigravity-{conv_dir.name[:8]}",
                 "session_id": conv_dir.name,
                 "headline": headline,
-                "developer": "Jayson Andal",
+                "developer": "Operator",
                 "timestamp": created_at or "2026-09-03T12:00:00Z",
                 "severity": "critical" if is_blocked else "cleared",
                 "dimension": dimension,
@@ -1139,7 +1230,7 @@ def scan_antigravity_brain_sessions(limit: int = 15) -> list[dict[str, Any]]:
                         "id": f"finding-{conv_dir.name[:8]}",
                         "session_id": conv_dir.name,
                         "headline": headline,
-                        "developer": "Jayson Andal",
+                        "developer": "Operator",
                         "timestamp": created_at or "2026-09-03T12:00:00Z",
                         "severity": "low",
                         "dimension": dimension,
@@ -1153,7 +1244,7 @@ def scan_antigravity_brain_sessions(limit: int = 15) -> list[dict[str, Any]]:
                     "turns": turns,
                     "total_turns": len(turns),
                     "blocked_turns_count": 0,
-                    "developer": "Jayson Andal",
+                    "developer": "Operator",
                     "agent_source": "antigravity",
                     "working_directory": "/workspace",
                     "duration_sec": 45.0,
@@ -1166,12 +1257,20 @@ def scan_antigravity_brain_sessions(limit: int = 15) -> list[dict[str, Any]]:
 @app.get("/api/watcher/sessions")
 async def list_watcher_sessions() -> list[dict[str, Any]]:
     """Legacy alias → WatcherStore sessions (same source as /api/v1/watcher/sessions)."""
-    from server.agent_log_loader import UniversalAgentLogLoader
+    from server.demo_seed import is_demo_seed_enabled
 
-    UniversalAgentLogLoader.scan_default_agent_directories()
+    if not is_demo_seed_enabled():
+        from server.agent_log_loader import UniversalAgentLogLoader
+
+        UniversalAgentLogLoader.scan_default_agent_directories()
     store = get_watcher_store()
     store.reload_from_disk()
-    return [s.model_dump() for s in store.list_sessions()]
+    sessions = store.list_sessions()
+    if is_demo_seed_enabled():
+        sessions = [
+            s for s in sessions if "demo" in s.session_id or s.session_id.startswith("demo-")
+        ]
+    return [s.model_dump() for s in sessions]
 
 
 STORED_SESSION_DETAILS: dict[str, dict[str, Any]] = {}
@@ -1180,9 +1279,12 @@ STORED_SESSION_DETAILS: dict[str, dict[str, Any]] = {}
 @app.get("/api/watcher/sessions/{session_id}")
 async def get_watcher_session_detail(session_id: str) -> dict[str, Any]:
     """Retrieve session detail — prefers WatcherStore, then legacy STORED_* / brain scan."""
-    brain_dir = Path.home() / ".gemini" / "antigravity" / "brain" / session_id
-    if brain_dir.exists():
-        scan_antigravity_brain_sessions(limit=30)
+    from server.demo_seed import is_demo_seed_enabled
+
+    if not is_demo_seed_enabled():
+        brain_dir = Path.home() / ".gemini" / "antigravity" / "brain" / session_id
+        if brain_dir.exists():
+            scan_antigravity_brain_sessions(limit=30)
 
     # Canonical: WatcherStore
     try:
@@ -1752,10 +1854,10 @@ async def _run_catalog_eval_worker(
             ChatMessage(role="system", content=system_instruction),
             ChatMessage(role="user", content=prompt_input),
         ]
-        # Gemma 4 thinking models consume part of max_tokens for internal reasoning traces.
+        # Thinking models consume part of max_tokens for internal reasoning traces.  # (e.g. Gemma 4)
         # Use thinking_level="minimal" for benchmark tasks (we need code output, not reasoning)
         # and raise the budget so responses are never truncated mid-answer.
-        _is_thinking_model = model.startswith("gemma-4-")
+        _is_thinking_model = False  # model.startswith("gemma-4-")
         cfg = LLMConfig(
             model=model,
             provider=provider,  # type: ignore[arg-type]
@@ -2026,10 +2128,10 @@ async def _run_evaluation_worker(
             task=spec,
             config=LLMConfig(  # type: ignore[arg-type]
                 model=model,
-                provider=provider,
+                provider=cast(Any, provider),
                 temperature=0.0,
-                max_tokens=8192 if model.startswith("gemma-4-") else 4096,
-                thinking_level="minimal" if model.startswith("gemma-4-") else None,
+                max_tokens=4096,  # 8192 if model.startswith("gemma-4-") else 4096,
+                thinking_level=None,  # "minimal" if model.startswith("gemma-4-") else None,
             ),
             on_step_callback=_on_step_complete,
             on_step_start=_on_step_start,
@@ -2283,8 +2385,12 @@ async def record_eval_run(run: RunRecord) -> RunRecord:
 @app.get("/api/eval/runs", response_model=list[RunRecord])
 async def list_runs() -> list[RunRecord]:
     """Retrieve all historical evaluation runs from both local store and Inspect logs."""
+    from server.demo_seed import is_demo_seed_enabled
+
     studio_runs = global_run_store.list_runs()
-    inspect_runs = list_inspect_run_records(LOGS_DIR)
+    # In demo mode, fixture files are the authoritative records; skip raw .eval parsing
+    # to avoid duplicates (each real run is already exported as a fixture with full metadata).
+    inspect_runs = [] if is_demo_seed_enabled() else list_inspect_run_records(LOGS_DIR)
 
     seen_ids = set()
     combined: list[RunRecord] = []
@@ -2640,13 +2746,20 @@ async def list_watcher_v1_sessions(
     min_messages: int = 0,
 ) -> list[dict[str, Any]]:
     """List monitored agent sessions from WatcherStore."""
-    from server.agent_log_loader import UniversalAgentLogLoader
+    from server.demo_seed import is_demo_seed_enabled
 
-    UniversalAgentLogLoader.scan_default_agent_directories()
+    if not is_demo_seed_enabled():
+        from server.agent_log_loader import UniversalAgentLogLoader
+
+        UniversalAgentLogLoader.scan_default_agent_directories()
 
     store = get_watcher_store()
     store.reload_from_disk()
     sessions = store.list_sessions(agent_type=agent_type, status=status)
+    if is_demo_seed_enabled():
+        sessions = [
+            s for s in sessions if "demo" in s.session_id or s.session_id.startswith("demo-")
+        ]
     if min_messages > 0:
         sessions = [
             s
@@ -3096,7 +3209,9 @@ async def run_redteam_probe_endpoint(req: RedTeamProbeRequest) -> StreamingRespo
 
         max_risk = max((t.judge_score for t in turns), default=1)
         compromised = any(t.compromised for t in turns)
+        probe_id = f"redteam-{uuid4().hex[:8]}"
         summary = {
+            "run_id": probe_id,
             "task_id": req.task_id,
             "strategy": req.strategy,
             "target_model": req.target_model,
@@ -3105,6 +3220,62 @@ async def run_redteam_probe_endpoint(req: RedTeamProbeRequest) -> StreamingRespo
             "max_risk_score": max_risk,
             "verdict": "VULNERABLE" if compromised else "RESILIENT",
         }
+
+        # Persist probe run to evaluate runs history with agent_type="red_team"
+        try:
+            from schemas.watcher_models import Session
+
+            provider = req.target_model.split("/")[0] if "/" in req.target_model else "google"
+            probe_steps = [
+                {
+                    "step_number": t.turn,
+                    "thought": f"Attacker Strategy: {t.strategy}\n\nAttacker Prompt: {t.attacker_prompt}",
+                    "action": {
+                        "tool": "adversarial_probe",
+                        "command": None,
+                        "arguments": {
+                            "strategy": t.strategy,
+                            "attacker_prompt": t.attacker_prompt,
+                            "target_response": t.target_response,
+                            "judge_score": t.judge_score,
+                            "judge_reason": t.judge_reason,
+                            "compromised": t.compromised,
+                        },
+                    },
+                    "observation": t.target_response,
+                    "is_blocked": t.compromised,
+                    "rule_violation_tag": "CRITICAL_POLICY_VIOLATION" if t.compromised else None,
+                    "risk_score": round(t.judge_score / 5.0, 2),
+                    "latency_ms": 300.0,
+                    "tokens_used": 300,
+                }
+                for t in turns
+            ]
+            redteam_session = Session(
+                session_id=probe_id,
+                run_id=probe_id,
+                title=f"Red Team · {req.strategy}",
+                project_name=f"Red Team: {req.strategy}",
+                task_id=req.task_id or req.strategy,
+                agent_type="red_team",
+                model=req.target_model,
+                provider=provider,
+                status="completed",
+                steps=probe_steps,
+                total_steps=len(turns),
+                passed=not compromised,
+                reward=0.0 if compromised else 1.0,
+                total_tokens=len(turns) * 300,
+                total_duration_sec=float(len(turns) * 1.5),
+                estimated_cost_usd=round(len(turns) * 0.00015, 6),
+                final_summary=f"Red-team probe ({req.strategy}): {summary['verdict']}, max risk={max_risk}/5, turns={len(turns)}",
+                failure_reason=f"Compromised via {req.strategy}" if compromised else None,
+            )
+            global_run_store.save_run(redteam_session)
+            logger.info("Saved red-team probe run %s (%s)", probe_id, summary["verdict"])
+        except Exception as save_err:
+            logger.warning("Failed to persist red-team probe run: %s", save_err)
+
         yield f"event: complete\ndata: {json.dumps(summary)}\n\n"
 
     return StreamingResponse(
@@ -3182,18 +3353,32 @@ def _scrub_accidental_safe_overrides() -> None:
 
 @app.on_event("startup")
 async def startup_event() -> None:
-    """Initialize active local coding agent watcher daemon."""
+    """Initialize active local coding agent watcher daemon and demo seeder."""
     from server.agent_daemon import AgentWatcherDaemon
+    from server.demo_seed import is_demo_seed_enabled, seed_demo_data
+
+    if is_demo_seed_enabled():
+        seed_demo_data()
 
     _scrub_accidental_safe_overrides()
-    daemon = AgentWatcherDaemon.get_instance()
-    daemon.start()
+    if not is_demo_seed_enabled():
+        daemon = AgentWatcherDaemon.get_instance()
+        daemon.start()
 
 
 @app.on_event("shutdown")
 async def shutdown_event() -> None:
     """Gracefully terminate background daemon."""
     from server.agent_daemon import AgentWatcherDaemon
+    from server.demo_seed import is_demo_seed_enabled
 
-    daemon = AgentWatcherDaemon.get_instance()
-    daemon.stop()
+    if not is_demo_seed_enabled():
+        daemon = AgentWatcherDaemon.get_instance()
+        daemon.stop()
+
+
+_ui_dist = Path(__file__).resolve().parent.parent / "ui" / "dist"
+if _ui_dist.exists():
+    from fastapi.staticfiles import StaticFiles
+
+    app.mount("/", StaticFiles(directory=str(_ui_dist), html=True), name="ui")

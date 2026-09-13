@@ -290,6 +290,11 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
           >
             {isPassed ? 'PASSED' : isFailed ? 'FAILED' : run.status}
           </span>
+          {run.agent_type === 'red_team' && (
+            <span className="text-[10px] uppercase font-mono px-2.5 py-0.5 rounded-full font-bold border inline-flex items-center gap-1 bg-rose-50 text-rose-700 border-rose-200">
+              Red Team Probe
+            </span>
+          )}
           <div className="flex items-center gap-1 text-xs font-mono text-slate-400">
             <button
               type="button"
@@ -381,7 +386,9 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
             )}
           </div>
           <div className="text-[10px] text-slate-500 truncate">
-            {isPassed ? 'Held-out tests passed' : 'Verifier assertions failed'}
+            {run.agent_type === 'red_team'
+              ? (isPassed ? 'Target defended all probe turns' : 'Target breached / compromised')
+              : (isPassed ? 'Held-out tests passed' : 'Verifier assertions failed')}
           </div>
         </div>
 
@@ -442,7 +449,7 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
       {/* 3. Navigation Tabs (Un-squishable, shrink-0, sticky for easy tab switching while scrolling) */}
       <div className="bg-white/95 backdrop-blur-xs p-1.5 rounded-2xl border border-border-subtle shadow-sm flex items-center gap-1.5 text-xs font-semibold overflow-x-auto shrink-0 sticky top-0 z-20">
         {[
-          { id: 'trajectory', label: `Trajectory Trace (${steps.length} Turns)`, icon: Terminal },
+          { id: 'trajectory', label: run.agent_type === 'red_team' ? `Probe Transcript (${steps.length} Turns)` : `Trajectory Trace (${steps.length} Turns)`, icon: Terminal },
           { id: 'judges', label: `Safety & Alignment Audits (${run.audit_verdicts?.length || 0})`, icon: ShieldCheck },
           { id: 'verifier', label: 'Held-Out Verifier Output', icon: CheckCircle2 },
           { id: 'diffs', label: `Code Mutations (${mutatedFiles.length})`, icon: Code2 },
@@ -489,6 +496,9 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
                   const isSelected = selectedStepIdx === idx;
                   const isBlocked = step.firewall_blocked || step.action?.firewall_blocked;
                   const isFinish = step.action.tool === 'finish';
+                  const isProbe = run.agent_type === 'red_team' || step.action.tool === 'adversarial_probe';
+                  const probeArgs = (step.action as any)?.arguments || {};
+                  const isCompromised = isBlocked || probeArgs.compromised;
 
                   return (
                     <div
@@ -503,16 +513,26 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
                       <div className="flex items-center justify-between text-xs">
                         <div className="flex items-center gap-1.5">
                           <span className={`font-mono font-bold px-1.5 py-0.5 rounded text-[10px] ${
-                            isBlocked ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-700'
+                            isCompromised ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-700'
                           }`}>
                             #{step.step_number}
                           </span>
                           <span className="font-mono font-bold text-slate-900 text-[11px]">
-                            {isFinish ? 'Finish' : step.action.tool}
+                            {isProbe
+                              ? (probeArgs.strategy ? `Probe: ${probeArgs.strategy}` : 'Adversarial Probe')
+                              : (isFinish ? 'Finish' : step.action.tool)}
                           </span>
                         </div>
 
-                        {isBlocked ? (
+                        {isProbe ? (
+                          <span className={`text-[9px] uppercase px-1.5 py-0.5 rounded font-bold border ${
+                            isCompromised
+                              ? 'bg-rose-50 text-rose-700 border-rose-200'
+                              : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          }`}>
+                            {isCompromised ? 'Vulnerable' : 'Resilient'}
+                          </span>
+                        ) : isBlocked ? (
                           <span className="text-[9px] uppercase px-1.5 py-0.5 rounded font-bold bg-rose-50 text-rose-700 border border-rose-200">
                             Blocked
                           </span>
@@ -525,7 +545,9 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
                       </div>
 
                       <p className="text-[11px] text-slate-600 line-clamp-2 leading-relaxed font-sans">
-                        {step.thought || (step.action.command ? `$ ${step.action.command}` : 'No reasoning text.')}
+                        {isProbe
+                          ? (probeArgs.attacker_prompt || step.thought || 'Adversarial probe turn.')
+                          : (step.thought || (step.action.command ? `$ ${step.action.command}` : 'No reasoning text.'))}
                       </p>
                     </div>
                   );
@@ -538,143 +560,239 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
           <div className="lg:col-span-8 bg-white p-6 rounded-2xl border border-border-subtle shadow-sm space-y-5">
             {selectedStep ? (
               <>
-                <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-slate-900 font-mono">
-                      Turn #{selectedStep.step_number}: {selectedStep.action.tool}
-                    </span>
-                    {selectedStep.firewall_blocked && (
-                      <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-rose-50 text-rose-700 border border-rose-200">
-                        Safety Intercepted
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 font-mono text-xs text-slate-500">
-                    <span className="inline-flex items-center gap-1 text-[11px] font-mono text-slate-600 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">
-                      <Clock className="w-3 h-3 text-slate-400" />
-                      <span>{selectedStep.latency_ms?.toFixed(0) || 0}ms</span>
-                      <span>•</span>
-                      <Sparkles className="w-3 h-3 text-indigo-500" />
-                      <span>{selectedStep.tokens_used || 0} tok</span>
-                    </span>
-                  </div>
-                </div>
+                {(() => {
+                  const isSelectedProbe = run.agent_type === 'red_team' || selectedStep.action.tool === 'adversarial_probe' || !!(selectedStep.action as any)?.arguments?.attacker_prompt;
+                  const selectedProbeArgs = (selectedStep.action as any)?.arguments || {};
+                  const isCompromised = selectedStep.firewall_blocked || selectedStep.action?.firewall_blocked || selectedProbeArgs.compromised;
 
-                {/* Safety Firewall Interception Banner */}
-                {(selectedStep.firewall_blocked || selectedStep.action?.firewall_blocked) && (
-                  <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-900 space-y-1">
-                    <div className="flex items-center gap-1.5 font-bold font-mono text-rose-700">
-                      <ShieldAlert className="w-4 h-4 text-rose-600" />
-                      <span>BLOCKED BY DETERMINISTIC POLICY GATEWAY</span>
-                    </div>
-                    <p className="text-xs text-rose-800 leading-tight">
-                      {selectedStep.firewall_reason ||
-                        selectedStep.action?.firewall_reason ||
-                        'Unauthorized privilege escalation or test tampering intercepted.'}
-                    </p>
-                  </div>
-                )}
-
-                {/* Agent Reasoning */}
-                <div className="space-y-2">
-                  <div className="text-[10px] font-mono uppercase font-bold tracking-wider text-slate-500 flex items-center gap-1">
-                    <ChevronRight className="w-3.5 h-3.5 text-indigo-600" />
-                    Agent Inner Reasoning & Planning
-                  </div>
-                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 leading-relaxed whitespace-pre-wrap font-sans">
-                    {selectedStep.thought || 'No explicit thought string provided.'}
-                  </div>
-                </div>
-
-                {/* Action Execution */}
-                {selectedStep.action.command && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="text-[10px] font-mono uppercase font-bold tracking-wider text-amber-700 flex items-center gap-1">
-                        <Terminal className="w-3.5 h-3.5 text-amber-600" />
-                        Executed Shell Command (Sandbox)
+                  return (
+                    <>
+                      <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold text-slate-900 font-mono">
+                            Turn #{selectedStep.step_number}: {isSelectedProbe ? `Adversarial Probe (${selectedProbeArgs.strategy || 'Multi-turn'})` : selectedStep.action.tool}
+                          </span>
+                          {selectedStep.firewall_blocked && (
+                            <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                              Safety Intercepted
+                            </span>
+                          )}
+                          {isSelectedProbe && (
+                            <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold border ${
+                              isCompromised
+                                ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            }`}>
+                              {isCompromised ? 'Compromised' : 'Defended'}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 font-mono text-xs text-slate-500">
+                          <span className="inline-flex items-center gap-1 text-[11px] font-mono text-slate-600 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">
+                            <Clock className="w-3 h-3 text-slate-400" />
+                            <span>{selectedStep.latency_ms?.toFixed(0) || 0}ms</span>
+                            <span>•</span>
+                            <Sparkles className="w-3 h-3 text-indigo-500" />
+                            <span>{selectedStep.tokens_used || 0} tok</span>
+                          </span>
+                        </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => copyBlock(selectedStep.action.command || '', 'cmd')}
-                        className="flex items-center gap-1 text-[11px] font-mono text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded transition-colors cursor-pointer"
-                        title="Copy command"
-                      >
-                        {copiedBlockId === 'cmd' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                        <span>{copiedBlockId === 'cmd' ? 'Copied' : 'Copy'}</span>
-                      </button>
-                    </div>
-                    <pre className="p-3.5 rounded-xl bg-slate-950 text-slate-100 font-mono text-xs border border-slate-800 select-text overflow-x-auto">
-                      <span className="text-emerald-400 select-none font-bold">$ </span>
-                      {selectedStep.action.command}
-                    </pre>
-                  </div>
-                )}
 
-                {/* Action: Write File */}
-                {selectedStep.action.tool === 'write_file' && selectedStep.action.path && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="text-[10px] font-mono uppercase font-bold tracking-wider text-indigo-700 flex items-center gap-1">
-                        <Code2 className="w-3.5 h-3.5 text-indigo-600" />
-                        File Written: {selectedStep.action.path}
-                      </div>
-                      {selectedStep.action.content && (
-                        <button
-                          type="button"
-                          onClick={() => copyBlock(selectedStep.action.content || '', 'file-content')}
-                          className="flex items-center gap-1 text-[11px] font-mono text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded transition-colors cursor-pointer"
-                          title="Copy file content"
-                        >
-                          {copiedBlockId === 'file-content' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                          <span>{copiedBlockId === 'file-content' ? 'Copied' : 'Copy'}</span>
-                        </button>
+                      {/* Safety Firewall Interception Banner */}
+                      {(selectedStep.firewall_blocked || selectedStep.action?.firewall_blocked) && (
+                        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-900 space-y-1">
+                          <div className="flex items-center gap-1.5 font-bold font-mono text-rose-700">
+                            <ShieldAlert className="w-4 h-4 text-rose-600" />
+                            <span>BLOCKED BY DETERMINISTIC POLICY GATEWAY</span>
+                          </div>
+                          <p className="text-xs text-rose-800 leading-tight">
+                            {selectedStep.firewall_reason ||
+                              selectedStep.action?.firewall_reason ||
+                              'Unauthorized privilege escalation or test tampering intercepted.'}
+                          </p>
+                        </div>
                       )}
-                    </div>
-                    {selectedStep.action.content && (
-                      <pre className="p-3.5 rounded-xl bg-slate-950 text-slate-200 font-mono text-xs border border-slate-800 select-text overflow-x-auto max-h-64 whitespace-pre-wrap">
-                        {selectedStep.action.content}
-                      </pre>
-                    )}
-                  </div>
-                )}
 
-                {/* Action: Finish Summary */}
-                {selectedStep.action.tool === 'finish' && (
-                  <div className="space-y-2">
-                    <div className="text-[10px] font-mono uppercase font-bold tracking-wider text-emerald-700 flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                      Final Agent Resolution Declaration
-                    </div>
-                    <div className="p-4 rounded-xl bg-emerald-50/60 border border-emerald-200 text-xs text-emerald-900 leading-relaxed whitespace-pre-wrap font-sans">
-                      {selectedStep.action.summary || selectedStep.thought || 'Task reported completed by agent.'}
-                    </div>
-                  </div>
-                )}
+                      {isSelectedProbe ? (
+                        <div className="space-y-4">
+                          {/* 1. Attacker Probe */}
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <div className="text-[10px] font-mono uppercase font-bold tracking-wider text-rose-700 flex items-center gap-1.5">
+                                <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
+                                <span>Attacker Probe (Strategy: {selectedProbeArgs.strategy || 'Adversarial'})</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => copyBlock(selectedProbeArgs.attacker_prompt || selectedStep.thought || '', 'attacker')}
+                                className="flex items-center gap-1 text-[11px] font-mono text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded transition-colors cursor-pointer"
+                                title="Copy attacker prompt"
+                              >
+                                {copiedBlockId === 'attacker' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                                <span>{copiedBlockId === 'attacker' ? 'Copied' : 'Copy'}</span>
+                              </button>
+                            </div>
+                            <div className="p-4 rounded-xl bg-rose-50/50 border border-rose-200 text-xs text-rose-950 font-mono whitespace-pre-wrap leading-relaxed">
+                              {selectedProbeArgs.attacker_prompt || selectedStep.thought || 'No attacker prompt recorded.'}
+                            </div>
+                          </div>
 
-                {/* Sandbox Observation */}
-                {selectedStep.observation && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="text-[10px] font-mono uppercase font-bold tracking-wider text-slate-500 flex items-center gap-1">
-                        <Terminal className="w-3.5 h-3.5 text-slate-500" />
-                        Container Sandbox Stdout / Stderr
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => copyBlock(selectedStep.observation || '', 'obs')}
-                        className="flex items-center gap-1 text-[11px] font-mono text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded transition-colors cursor-pointer"
-                        title="Copy stdout / stderr"
-                      >
-                        {copiedBlockId === 'obs' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                        <span>{copiedBlockId === 'obs' ? 'Copied' : 'Copy'}</span>
-                      </button>
-                    </div>
-                    <pre className="p-3.5 rounded-xl bg-slate-950 text-slate-200 font-mono text-xs border border-slate-800 select-text overflow-x-auto max-h-56 whitespace-pre-wrap leading-relaxed">
-                      {selectedStep.observation}
-                    </pre>
-                  </div>
-                )}
+                          {/* 2. Target Model Response */}
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <div className="text-[10px] font-mono uppercase font-bold tracking-wider text-indigo-700 flex items-center gap-1.5">
+                                <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                                <span>Target Model Output ({run.model})</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => copyBlock(selectedProbeArgs.target_response || selectedStep.observation || '', 'target')}
+                                className="flex items-center gap-1 text-[11px] font-mono text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded transition-colors cursor-pointer"
+                                title="Copy target response"
+                              >
+                                {copiedBlockId === 'target' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                                <span>{copiedBlockId === 'target' ? 'Copied' : 'Copy'}</span>
+                              </button>
+                            </div>
+                            <div className="p-4 rounded-xl bg-slate-900 text-slate-100 font-mono text-xs border border-slate-800 whitespace-pre-wrap leading-relaxed select-text">
+                              {selectedProbeArgs.target_response || selectedStep.observation || 'No model response recorded.'}
+                            </div>
+                          </div>
+
+                          {/* 3. Safety Judge Assessment */}
+                          <div className="space-y-2">
+                            <div className="text-[10px] font-mono uppercase font-bold tracking-wider text-slate-600 flex items-center gap-1.5">
+                              <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
+                              <span>Safety Judge Assessment</span>
+                            </div>
+                            <div className={`p-4 rounded-xl border space-y-2 ${
+                              isCompromised
+                                ? 'bg-rose-50/70 border-rose-300 text-rose-900'
+                                : 'bg-emerald-50/70 border-emerald-300 text-emerald-900'
+                            }`}>
+                              <div className="flex items-center justify-between">
+                                <span className="font-bold text-xs">
+                                  {isCompromised ? '🚨 Turn Compromised (Policy Bypass Detected)' : '🛡️ Defended (Safe Policy Compliance)'}
+                                </span>
+                                <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-white border border-slate-200">
+                                  Risk Score: {selectedProbeArgs.judge_score !== undefined ? `${selectedProbeArgs.judge_score}/5` : '—'}
+                                </span>
+                              </div>
+                              {selectedProbeArgs.judge_reason && (
+                                <p className="text-xs leading-relaxed">
+                                  {selectedProbeArgs.judge_reason}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          {/* Agent Reasoning */}
+                          <div className="space-y-2">
+                            <div className="text-[10px] font-mono uppercase font-bold tracking-wider text-slate-500 flex items-center gap-1">
+                              <ChevronRight className="w-3.5 h-3.5 text-indigo-600" />
+                              Agent Inner Reasoning & Planning
+                            </div>
+                            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 leading-relaxed whitespace-pre-wrap font-sans">
+                              {selectedStep.thought || 'No explicit thought string provided.'}
+                            </div>
+                          </div>
+
+                          {/* Action Execution */}
+                          {selectedStep.action.command && (
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <div className="text-[10px] font-mono uppercase font-bold tracking-wider text-amber-700 flex items-center gap-1">
+                                  <Terminal className="w-3.5 h-3.5 text-amber-600" />
+                                  Executed Shell Command (Sandbox)
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => copyBlock(selectedStep.action.command || '', 'cmd')}
+                                  className="flex items-center gap-1 text-[11px] font-mono text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded transition-colors cursor-pointer"
+                                  title="Copy command"
+                                >
+                                  {copiedBlockId === 'cmd' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                                  <span>{copiedBlockId === 'cmd' ? 'Copied' : 'Copy'}</span>
+                                </button>
+                              </div>
+                              <pre className="p-3.5 rounded-xl bg-slate-950 text-slate-100 font-mono text-xs border border-slate-800 select-text overflow-x-auto">
+                                <span className="text-emerald-400 select-none font-bold">$ </span>
+                                {selectedStep.action.command}
+                              </pre>
+                            </div>
+                          )}
+
+                          {/* Action: Write File */}
+                          {selectedStep.action.tool === 'write_file' && selectedStep.action.path && (
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <div className="text-[10px] font-mono uppercase font-bold tracking-wider text-indigo-700 flex items-center gap-1">
+                                  <Code2 className="w-3.5 h-3.5 text-indigo-600" />
+                                  File Written: {selectedStep.action.path}
+                                </div>
+                                {selectedStep.action.content && (
+                                  <button
+                                    type="button"
+                                    onClick={() => copyBlock(selectedStep.action.content || '', 'file-content')}
+                                    className="flex items-center gap-1 text-[11px] font-mono text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded transition-colors cursor-pointer"
+                                    title="Copy file content"
+                                  >
+                                    {copiedBlockId === 'file-content' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                                    <span>{copiedBlockId === 'file-content' ? 'Copied' : 'Copy'}</span>
+                                  </button>
+                                )}
+                              </div>
+                              {selectedStep.action.content && (
+                                <pre className="p-3.5 rounded-xl bg-slate-950 text-slate-200 font-mono text-xs border border-slate-800 select-text overflow-x-auto max-h-64 whitespace-pre-wrap">
+                                  {selectedStep.action.content}
+                                </pre>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Action: Finish Summary */}
+                          {selectedStep.action.tool === 'finish' && (
+                            <div className="space-y-2">
+                              <div className="text-[10px] font-mono uppercase font-bold tracking-wider text-emerald-700 flex items-center gap-1">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                Final Agent Resolution Declaration
+                              </div>
+                              <div className="p-4 rounded-xl bg-emerald-50/60 border border-emerald-200 text-xs text-emerald-900 leading-relaxed whitespace-pre-wrap font-sans">
+                                {selectedStep.action.summary || selectedStep.thought || 'Task reported completed by agent.'}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Sandbox Observation */}
+                          {selectedStep.observation && (
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <div className="text-[10px] font-mono uppercase font-bold tracking-wider text-slate-500 flex items-center gap-1">
+                                  <Terminal className="w-3.5 h-3.5 text-slate-500" />
+                                  Container Sandbox Stdout / Stderr
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => copyBlock(selectedStep.observation || '', 'obs')}
+                                  className="flex items-center gap-1 text-[11px] font-mono text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded transition-colors cursor-pointer"
+                                  title="Copy stdout / stderr"
+                                >
+                                  {copiedBlockId === 'obs' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                                  <span>{copiedBlockId === 'obs' ? 'Copied' : 'Copy'}</span>
+                                </button>
+                              </div>
+                              <pre className="p-3.5 rounded-xl bg-slate-950 text-slate-200 font-mono text-xs border border-slate-800 select-text overflow-x-auto max-h-56 whitespace-pre-wrap leading-relaxed">
+                                {selectedStep.observation}
+                              </pre>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </>
+                  );
+                })()}
               </>
             ) : (
               <div className="p-12 text-center text-slate-400 text-xs font-mono">Select a step on the left to inspect.</div>

@@ -7,7 +7,7 @@ token tracking, and structured trajectory capture.
 import logging
 import time
 from collections.abc import Awaitable, Callable
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -107,6 +107,7 @@ class ReActAgent:
             Complete AgentTrajectory recording every turn, tool output, and metric.
         """
         cfg = config or LLMConfig(
+            provider=cast(Any, self.runner.provider),
             temperature=task.agent.temperature,
             max_tokens=2048,
         )

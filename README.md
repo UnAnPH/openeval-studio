@@ -1,5 +1,6 @@
 # OpenEval Studio
-> Evaluation workbench + Watcher-style runtime safety firewall for coding agents (portfolio / research tooling).
+
+> Full-stack evaluation workbench + runtime safety gate for AI coding agents (portfolio / research tooling).
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%20%7C%203.13-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
@@ -9,111 +10,161 @@
 
 ---
 
-## About
+## 1. What It Is
 
-**OpenEval Studio** is a local full-stack lab for:
+**OpenEval Studio** is a portfolio and research evaluation lab built to explore frontier AI safety evaluation and autonomous agent governance:
 
-1. **Eval IDE** — sandboxed agent tasks, streaming trajectories, run compare, hybrid transcript search, Inspect AI bridge.
-2. **Watcher-style runtime gate** — PreToolUse hooks for **Antigravity**, **Claude Code**, and **Cursor** calling `/api/watcher/evaluate` with store-backed command rules, tool thresholds (1–10), and optional LLM triage/deep review.
+1. **Eval IDE** — sandboxed agent evaluation harness, streaming trajectories, synchronized run compare, hybrid transcript search, and Inspect AI bridge.
+2. **Runtime Gate** — real-time PreToolUse governance hooks for **Antigravity**, **Claude Code**, and **Cursor** invoking `/api/gate/evaluate` (alias `/api/watcher/evaluate`) with deterministic command rules, tool thresholds (1–10), and optional LLM triage/deep review.
 
-This is a **learning / portfolio** project inspired by Apollo-style eval tooling and Watcher concepts — not a multi-tenant enterprise SaaS.
-
-### Hiring sample map
-
-| Role | Start here | What to look for |
-| --- | --- | --- |
-| **Product FS** | `DEMO.md` §1–2, `bash scripts/record_gate_demo.sh`, Safety → Control/Policy | Real hooks, mode contracts, store-backed decisions, fail-open honesty |
-| **Research FS** | `DEMO.md` §3, `uv run python scripts/hermetic_eval_smoke.py`, Evaluate → Launch/Compare | Hermetic verifier integrity, honest no-key failure, compare/annotate path |
-
-See **[DEMO.md](DEMO.md)** (<10 min) and **[FINDINGS.md](FINDINGS.md)** (smoke + hermetic writeup).
+*Note: This is an independent portfolio and learning lab — not an enterprise multi-tenant SaaS product.*
 
 ---
 
-## Watcher stages (what actually runs)
+## 2. Hosted Demo
 
-1. **Command rules** — deterministic regex (store-backed): allow / triage / human / deny / off  
-2. **Tool thresholds** — per-tool 1–10 gates: auto-approve / escalate≥ / auto-deny≥ / always escalate  
-3. **Fast triage** — heuristic Secret Reading Law, or Gemini XML grade when `OPENEVAL_WATCHER_USE_LLM=1`  
-4. **Deep review** — heuristic adjustments, or Gemini when enabled  
-
-**Interactive Lockout (`force_ask`):** When in `enforce` mode, safety violations trigger an interactive lockout response (`"decision": "force_ask"`, `terminal_reason="lockout"`) in the client hooks. This halts autonomous agents (Antigravity, Cursor, Claude Code) and requires human intervention rather than allowing the agent to bypass the block.
-
-Modes (`GET/POST /api/watcher/config`): `enforce` (real deny / lockout), `observe` (shadow only), `paused` (allow all).  
-Hooks **fail-open** if the API is down *after* local blacklist checks.
-
-**Control vs Policy vs Sessions:**
-- **Control** (`#control`) sets runtime mode (`enforce` / `observe` / `paused`), provides a real-time event stream (`All`, `Blocked`, `Closed`), displays full unclipped commands and execution outputs, and supports operator overrides (`👤 Allow All for Clarity` / single-command approval).
-- **Sessions** (`#sessions`) hosts the deep session browser with status filters (`All`, `Live` with pulsating indicator, `Blocked`, `Closed`), live active agent discovery, hybrid transcript search, and log ingestion.
-- **Policy** (`#policy`) stores command rules + tool thresholds (1–10) and resolution management.
-
-Hooks talk to `/api/watcher/evaluate` and `/api/watcher/config`; prefer `/api/v1/watcher/*` for sessions, resolution, and other Watcher APIs. `WatcherEngine.evaluate_action` is legacy (unit tests).
-
-### UI navigation
-
-Two peer products in the sidebar:
-
-- **Evaluate** — Overview · Catalog · Launch · Runs · Compare · Judges  
-- **Safety**
-  - **Control** (`#control`) — mode switch (Enforce / Observe / Paused) + live telemetry stream with All / Blocked / Closed tabs, unclipped command/output inspector, and operator resolution actions  
-  - **Sessions** (`#sessions`) — trajectory browser with All / Live / Blocked / Closed filters, active session tracking, hybrid transcript search, and log ingest  
-  - **Policy** (`#policy`) — command rules + tool thresholds (1–10) + operator review resolve  
-
-Legacy hashes `#firewall` and `#watcher_live` redirect to Control and Policy. 
-
-### Install agent hooks
-
-```bash
-# Antigravity (Google) — writes ~/.gemini/config/hooks.json with matcher ".*"
-bash scripts/install_antigravity_watcher_hook.sh
-# Restart Antigravity / open a new agent session
-
-# Claude Code + Cursor: see DEMO.md
-
-./scripts/demo_block.sh   # HTTP smoke: expect deny/escalate
-```
+- **Live URL:** [https://openeval-studio.onrender.com](https://openeval-studio.onrender.com) *(or your deployed Render instance)*
+- **Data Scope:**
+  - **Safety → Sessions & Control:** Display **DEMO-ONLY** seeded session fixtures to demonstrate real-time interception, unclipped commands, and hybrid search without exposing private agent logs.
+  - **Evaluate → Launch, Judges & Red Team:** Execute **LIVE** frontier LLM calls when `GEMINI_API_KEY` is provided. When keys are unset, endpoints fail honestly with explicit error messages.
 
 ---
 
-## Quick start
+## 3. Visual Tour
 
+| Safety Control (Interception Deny) | Sessions (Hybrid Transcript Search) |
+|:---:|:---:|
+| ![Safety Control Deny](docs/screenshots/control-deny.png) | ![Sessions Search](docs/screenshots/sessions-search.png) |
+
+| Evaluate Compare (Hermetic Diff) | Runs Registry (Red Team Badge & Filter) |
+|:---:|:---:|
+| ![Compare Diff](docs/screenshots/compare-diff.png) | ![Runs Red Team](docs/screenshots/runs-redteam.png) |
+
+---
+
+## 4. Live Agent Governance Video (Loom Walkthrough)
+
+> **Video Demonstration:** [Watch Live Agent Governance on Loom (5 min)](https://www.loom.com/share/placeholder-openeval-studio)
+
+### Shot List Covered in Demonstration:
+1. **Antigravity PreToolUse Hook:** Agent attempts `git push --force origin main` → intercepted and denied with interactive lockout.
+2. **Claude Code Hook:** Agent attempts `sudo rm -rf /` → blocked by deterministic command rule.
+3. **Cursor Gate:** Agent attempts `curl | bash` pipeline execution → blocked with clear rationale.
+4. **Safety Control Dashboard:** Real-time state transition (`enforce` → `observe` → `paused`) and operator override approval.
+5. **Evaluate → Compare:** Turn-by-turn diff of `regex-log` (nop vs oracle) showing verifier artifact divergence.
+6. **Adversarial Red Team:** Automated multi-turn prober against frontier target model persisting into the unified Runs registry.
+
+---
+
+## 5. Local Quickstart
+
+### Run with Hosted DEMO Seed:
 ```bash
+# Clone and setup environment
+git clone https://github.com/jaysonandal/openeval-studio.git
+cd openeval-studio
+
 make install
 cd ui && npm install && cd ..
-cp .env.example .env   # GEMINI_API_KEY optional (needed for LLM stages)
+cp .env.example .env
 
-make dev   # API :8000
-make ui    # Vite :5173
-make check && make test-all
-cd ui && npm run build
+# Enable DEMO seed for Sessions and Control
+export OPENEVAL_DEMO_SEED=1
+
+# Start the full stack
+make dev   # API on :8000
+make ui    # Vite SPA on :5173
 ```
 
-| Env | Purpose |
-| --- | --- |
-| `OPENEVAL_WATCHER_USE_LLM=1` | Enable Gemini triage/deep review |
-| `OPENEVAL_WATCHER_USE_LLM=0` | Force heuristics (default in tests) |
-| `WATCHER_WEBHOOK_URL` | POST JSON on block/escalate |
-| `OPENEVAL_API_KEY` | Require `X-OpenEval-Key` on write endpoints |
-
-Optional local stack: `docker compose up` (API + Vite UI, DuckDB volume).
-
-Model matrix / pipeline:
-
-```bash
-uv run python cli.py sweep --models gemini-3.1-flash-lite --tasks all --output REPORT.md
-```
-
-See **FINDINGS.md** for FP/FN notes from Watcher demos.
+### Try Sample Hybrid Search Queries:
+In **Safety → Sessions**, use hybrid dense vector + lexical search:
+- `force push` — matches git force push attempts with destructive modification warnings.
+- `sudo` — matches superuser privilege escalation commands.
+- `curl | bash` — matches untrusted code execution and piping.
+- `build` — matches benign compilation and testing steps.
 
 ---
 
-## Stack
+## 6. Runtime Gate Architecture (What Actually Runs)
 
-| Layer | Tech |
-| --- | --- |
-| Backend | Python 3.12+, FastAPI, Pydantic v2, DuckDB |
-| Eval | Inspect AI bridge, Docker sandboxes, ReAct agent |
-| Frontend | React 19, TypeScript, Tailwind, lucide-react |
-| Quality | Ruff, Pyright, Pytest |
+1. **Deterministic Command Rules** — regex matching backed by DuckDB: `allow`, `triage`, `human`, `deny`, `off`.
+2. **Tool Thresholds** — per-tool 1–10 risk limits: auto-approve, escalate, auto-deny.
+3. **Fast Triage** — heuristic Secret Reading analysis, or Gemini XML grading when `OPENEVAL_GATE_USE_LLM=1`.
+4. **Deep Review** — comprehensive context inspection when risk is elevated.
+
+**Interactive Lockout (`force_ask`):** In `enforce` mode, policy violations trigger an interactive lockout response (`"decision": "force_ask"`, `terminal_reason="lockout"`) in client hooks. This halts autonomous agents and requires human operator sign-off before proceeding.
+
+**Modes (`GET/POST /api/watcher/config`):**
+- `enforce`: Active blocking and lockout.
+- `observe`: Shadow mode (logs and displays interceptions without blocking execution).
+- `paused`: Transparent bypass (allows all actions).
+
+Hooks **fail-open** if the backend API is unreachable *after* evaluating local instant-deny rules.
+
+---
+
+## 7. Installing Agent Hooks
+
+```bash
+# Google Antigravity — writes ~/.gemini/config/hooks.json with matcher ".*"
+bash scripts/install_antigravity_watcher_hook.sh
+
+# Cursor & Claude Code
+# See DEMO.md for setup instructions and hook configuration.
+
+# Run local HTTP smoke test
+./scripts/demo_block.sh
+```
+
+---
+
+## 8. Development & Quality Bar
+
+```bash
+make check      # Ruff format & lint + Pyright typechecking
+make test       # Pytest unit tests
+cd ui && npm run build # Production UI build
+```
+
+---
+
+## 9. Free Cloud Deployment Guide
+
+OpenEval Studio can be hosted **100% for free** without paying for compute or managed databases. When deployed with `OPENEVAL_DEMO_SEED=1`, the service operates hermetically: it serves the pre-seeded developer sessions and real Inspect AI evaluation runs without requiring a live Docker daemon or local coding agent on the host.
+
+### Option A: Render (Recommended — Zero Config)
+Render offers a **Free Web Service** tier (512 MB RAM, free SSL, custom domain):
+1. Push your repository to GitHub.
+2. Sign in to [Render.com](https://render.com) and click **New + $\rightarrow$ Web Service**.
+3. Connect your repository. Render will automatically detect `render.yaml` or `Dockerfile`:
+   - **Environment:** `Docker` (uses the multi-stage `Dockerfile` to build Vite UI + FastAPI into one container).
+   - **Plan:** `Free`
+   - **Environment Variables:**
+     - `OPENEVAL_DEMO_SEED`: `1`
+     - `WATCHER_ENFORCE_MODE`: `enforce`
+     - `FAIL_OPEN`: `true`
+4. Click **Deploy Web Service**. Your app will be live at `https://<your-app>.onrender.com` in ~2–3 minutes.
+*Note: Render free services spin down after 15 minutes of inactivity and wake up automatically on the first incoming request.*
+
+### Option B: Koyeb (100% Free — Fast & Continuous)
+[Koyeb](https://www.koyeb.com/) offers a free Nano instance tier (512 MB RAM, 0.1 vCPU):
+1. Sign in to [Koyeb.com](https://www.koyeb.com) and click **Create Service** $\rightarrow$ **GitHub**.
+2. Select your `openeval-studio` repository.
+3. Select **Dockerfile** as the build method.
+4. Set Environment Variables:
+   - `OPENEVAL_DEMO_SEED`: `1`
+5. Set the internal port to `8000` (or leave default auto-detection).
+6. Click **Deploy**. Your app will be live at `https://<your-app>.koyeb.app`.
+
+### Option C: Google Cloud Run (Free Tier: 2 Million Requests / Month)
+If you have a Google Cloud account, Cloud Run provides 2 million free container invocations per month:
+```bash
+gcloud run deploy openeval-studio \
+  --source . \
+  --platform managed \
+  --allow-unauthenticated \
+  --set-env-vars OPENEVAL_DEMO_SEED=1
+```
 
 ---
 

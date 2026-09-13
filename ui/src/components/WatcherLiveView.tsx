@@ -819,7 +819,7 @@ export const WatcherLiveView: React.FC<WatcherLiveViewProps> = ({
                             Score {dec.score}
                           </span>
 
-                          {/* Apollo 13 Threat Taxonomy Badge */}
+                          {/* 13-Point Threat Taxonomy Badge */}
                           {dec.threat_category && THREAT_CATEGORY_META[dec.threat_category] && (
                             <span
                               className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-bold border ${THREAT_CATEGORY_META[dec.threat_category].bg} ${THREAT_CATEGORY_META[dec.threat_category].color} ${THREAT_CATEGORY_META[dec.threat_category].border}`}
@@ -1201,7 +1201,7 @@ export const WatcherLiveView: React.FC<WatcherLiveViewProps> = ({
               </div>
             </div>
 
-            {/* Agent-grouped tool thresholds (Watcher parity) */}
+            {/* Agent-grouped tool thresholds */}
             <div className="space-y-6">
               {orderedGroups.map((group) => (
                 <div key={group}>

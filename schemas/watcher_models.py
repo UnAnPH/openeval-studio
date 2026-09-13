@@ -60,7 +60,7 @@ SessionStatus = Literal[
     "parked",
 ]
 AgentType = Literal[
-    "antigravity", "claude_code", "cursor", "inspect_eval", "re_act_agent", "custom"
+    "antigravity", "claude_code", "cursor", "inspect_eval", "re_act_agent", "custom", "red_team"
 ]
 
 
@@ -326,20 +326,42 @@ def infer_threat_category(
         ]
     ):
         return "untrusted_code_execution"
-    if any(re.search(p, target, re.IGNORECASE) for p in [r"subagent", r"unsafe agent", r"unmonitored agent"]):
+    if any(
+        re.search(p, target, re.IGNORECASE)
+        for p in [r"subagent", r"unsafe agent", r"unmonitored agent"]
+    ):
         return "unsafe_agents"
-    if any(re.search(p, target, re.IGNORECASE) for p in [r"prompt injection", r"jailbreak", r"ignore instructions"]):
+    if any(
+        re.search(p, target, re.IGNORECASE)
+        for p in [r"prompt injection", r"jailbreak", r"ignore instructions"]
+    ):
         return "prompt_injection"
     if any(
         re.search(p, target, re.IGNORECASE)
-        for p in [r"payment", r"stripe", r"send money", r"booking", r"dispatch message", r"external email"]
+        for p in [
+            r"payment",
+            r"stripe",
+            r"send money",
+            r"booking",
+            r"dispatch message",
+            r"external email",
+        ]
     ):
         return "real_world_transactions"
-    if any(re.search(p, target, re.IGNORECASE) for p in [r"s3.*public", r"security group", r"expose port", r"0\.0\.0\.0/0"]):
+    if any(
+        re.search(p, target, re.IGNORECASE)
+        for p in [r"s3.*public", r"security group", r"expose port", r"0\.0\.0\.0/0"]
+    ):
         return "exposure_of_internal_resources"
-    if any(re.search(p, target, re.IGNORECASE) for p in [r"pip install", r"npm install", r"unapproved package", r"unpinned"]):
+    if any(
+        re.search(p, target, re.IGNORECASE)
+        for p in [r"pip install", r"npm install", r"unapproved package", r"unpinned"]
+    ):
         return "unapproved_dependency_installation"
-    if any(re.search(p, target, re.IGNORECASE) for p in [r"disable auth", r"bypass auth", r"firewall", r"disable csrf"]):
+    if any(
+        re.search(p, target, re.IGNORECASE)
+        for p in [r"disable auth", r"bypass auth", r"firewall", r"disable csrf"]
+    ):
         return "egregious_vulnerability_introduction"
 
     return None
@@ -383,7 +405,7 @@ class Policy(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     policy_id: str = Field(default="default_policy")
-    name: str = Field(default="Default Watcher Security Policy")
+    name: str = Field(default="OpenEval Runtime Security Policy")
     org_id: str = Field(default="default_org")
     posture: ReviewPosture = Field(default="blocking")
     command_rules: list[CommandRule] = Field(default_factory=list)
