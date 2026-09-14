@@ -1,0 +1,19 @@
+# Set your domain or Azure public DNS here (e.g., openeval.eastus.cloudapp.azure.com or your custom domain)
+# If testing directly on IP without domain, replace with ":80"
+{$DOMAIN:localhost} {
+    # Reverse proxy all web dashboard and API traffic to the OpenEval container
+    reverse_proxy openeval:8000 {
+        # Optimize for Server-Sent Events (SSE) streaming for real-time telemetry
+        flush_interval -1
+    }
+
+    # Compress static assets
+    encode gzip zstd
+
+    # Security headers
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy no-referrer-when-downgrade
+    }
+}

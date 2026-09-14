@@ -1,0 +1,38 @@
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - openeval
+
+  openeval:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      - PORT=8000
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - OPENEVAL_API_KEY=${OPENEVAL_API_KEY:-}
+      - OPENEVAL_DEMO_SEED=${OPENEVAL_DEMO_SEED:-1}
+      - OPENEVAL_WATCHER_USE_LLM=${OPENEVAL_WATCHER_USE_LLM:-1}
+      - WATCHER_STORAGE_DIR=/data/watcher
+      - WATCHER_WEBHOOK_URL=${WATCHER_WEBHOOK_URL:-}
+    volumes:
+      - openeval-data:/data/watcher
+      # Allows OpenEval backend to spawn real Docker sandbox containers for code evaluations
+      - /var/run/docker.sock:/var/run/docker.sock
+    expose:
+      - "8000"
+
+volumes:
+  caddy-data:
+  caddy-config:
+  openeval-data:
