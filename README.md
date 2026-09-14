@@ -17,6 +17,8 @@
 1. **Eval IDE** — sandboxed agent evaluation harness, streaming trajectories, synchronized run compare, hybrid transcript search, and Inspect AI bridge.
 2. **Runtime Gate** — real-time PreToolUse governance hooks for **Antigravity**, **Claude Code**, and **Cursor** invoking `/api/gate/evaluate` (alias `/api/watcher/evaluate`) with deterministic command rules, tool thresholds (1–10), and optional LLM triage/deep review.
 
+📖 **Read the in-depth research paper:** [AI Safety Research Engineering: Concepts, Methodologies & Architecture](docs/AI_SAFETY_RESEARCH.md) covering dangerous capability evaluations (METR / AISI standards), split-horizon alignment faking, zero-trust container containment, and runtime guardrails.
+
 *Note: This is an independent portfolio and learning lab — not an enterprise multi-tenant SaaS product.*
 
 ---
@@ -164,6 +166,18 @@ gcloud run deploy openeval-studio \
   --platform managed \
   --allow-unauthenticated \
   --set-env-vars OPENEVAL_DEMO_SEED=1
+```
+
+### Option D: Azure Virtual Machine with Terraform & Caddy Auto-HTTPS (Full Docker Sandbox Support)
+Deploy on an Azure Linux VM with full `/var/run/docker.sock` access to run live, isolated evaluation sandboxes:
+```bash
+cd terraform
+terraform init
+terraform apply -var="prefix=openeval" -var="location=italynorth"
+```
+SSH into your provisioned VM and launch the stack:
+```bash
+docker compose -f docker-compose.prod.yml up -d --build
 ```
 
 ---
