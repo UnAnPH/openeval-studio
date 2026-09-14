@@ -94,9 +94,13 @@ class _ApiKeyMiddleware(BaseHTTPMiddleware):
         )
         if protected:
             key = request.headers.get("X-OpenEval-Key") or request.headers.get("x-openeval-key")
+            auth = request.headers.get("Authorization") or request.headers.get("authorization") or ""
+            if not key and auth.startswith("Bearer "):
+                key = auth[7:].strip()
             if key != required:
                 return JSONResponse(
-                    {"detail": "Invalid or missing X-OpenEval-Key"}, status_code=401
+                    {"detail": "Invalid or missing X-OpenEval-Key or Authorization Bearer token"},
+                    status_code=401,
                 )
         return await call_next(request)
 

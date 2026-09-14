@@ -46,10 +46,19 @@ import urllib.request
 from pathlib import Path
 
 WATCHER_URL = os.environ.get("OPENEVAL_WATCHER_URL", "http://127.0.0.1:8000/api/watcher/evaluate")
+OPENEVAL_API_KEY = os.environ.get("OPENEVAL_API_KEY", "").strip()
 TIMEOUT_SEC = float(os.environ.get("OPENEVAL_WATCHER_TIMEOUT", "1.5"))
 # For beforeShellExecution, default to "ask" so Cursor prompts the user
 SHELL_LOCKOUT_PERMISSION = os.environ.get("OPENEVAL_LOCKOUT_PERMISSION", "ask")
 LOG_PATH = Path.home() / ".openeval" / "cursor-watcher-gate.log"
+
+
+def _get_headers() -> dict[str, str]:
+    headers = {"Content-Type": "application/json"}
+    if OPENEVAL_API_KEY:
+        headers["X-OpenEval-Key"] = OPENEVAL_API_KEY
+        headers["Authorization"] = f"Bearer {OPENEVAL_API_KEY}"
+    return headers
 
 LOCAL_BLACKLIST = [
     (r"\brm\s+-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*\b", "Recursive force-delete (rm -rf)"),
@@ -159,7 +168,7 @@ def _report_to_watcher(
                     "thought_context": conversation_id,
                 }
             ).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
+            headers=_get_headers(),
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=TIMEOUT_SEC) as resp:
@@ -211,7 +220,7 @@ def _handle_shell_execution(cmd: str, conversation_id: str) -> None:
                     "thought_context": conversation_id,
                 }
             ).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
+            headers=_get_headers(),
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=TIMEOUT_SEC) as resp:

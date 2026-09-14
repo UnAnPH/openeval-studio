@@ -21,8 +21,18 @@ import urllib.request
 from pathlib import Path
 
 WATCHER_URL = os.environ.get("OPENEVAL_WATCHER_URL", "http://127.0.0.1:8000/api/watcher/evaluate")
+OPENEVAL_API_KEY = os.environ.get("OPENEVAL_API_KEY", "").strip()
 TIMEOUT_SEC = float(os.environ.get("OPENEVAL_WATCHER_TIMEOUT", "1.5"))
 LOCKOUT_DECISION = os.environ.get("OPENEVAL_LOCKOUT_DECISION", "force_ask")
+
+
+def _get_headers() -> dict[str, str]:
+    headers = {"Content-Type": "application/json"}
+    if OPENEVAL_API_KEY:
+        headers["X-OpenEval-Key"] = OPENEVAL_API_KEY
+        headers["Authorization"] = f"Bearer {OPENEVAL_API_KEY}"
+    return headers
+
 LOG_PATH = Path(
     os.environ.get(
         "OPENEVAL_WATCHER_GATE_LOG",
@@ -145,7 +155,7 @@ def _report_to_watcher(
         req = urllib.request.Request(
             WATCHER_URL,
             data=json.dumps(req_body).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
+            headers=_get_headers(),
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=TIMEOUT_SEC) as resp:
@@ -217,7 +227,7 @@ def _resolve_post_tool(conversation_id: str, error: str | None = None) -> None:
         req = urllib.request.Request(
             resolve_url,
             data=json.dumps(req_body).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
+            headers=_get_headers(),
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=TIMEOUT_SEC):
@@ -286,7 +296,7 @@ def _report_tool_result_to_watcher(
         req = urllib.request.Request(
             result_url,
             data=json.dumps(req_body).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
+            headers=_get_headers(),
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=TIMEOUT_SEC):
@@ -393,7 +403,7 @@ def main() -> None:
                     "session_id": f"antigravity-{conversation_id[:8]}" if conversation_id else None,
                 }
             ).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
+            headers=_get_headers(),
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=TIMEOUT_SEC) as resp:

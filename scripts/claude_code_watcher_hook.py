@@ -32,9 +32,19 @@ import urllib.request
 from pathlib import Path
 
 WATCHER_URL = os.environ.get("OPENEVAL_WATCHER_URL", "http://127.0.0.1:8000/api/watcher/evaluate")
+OPENEVAL_API_KEY = os.environ.get("OPENEVAL_API_KEY", "").strip()
 TIMEOUT_SEC = float(os.environ.get("OPENEVAL_WATCHER_TIMEOUT", "1.5"))
 LOCKOUT_PERMISSION = os.environ.get("OPENEVAL_LOCKOUT_PERMISSION", "ask")
 LOG_PATH = Path.home() / ".openeval" / "claude-watcher-gate.log"
+
+
+def _get_headers() -> dict[str, str]:
+    headers = {"Content-Type": "application/json"}
+    if OPENEVAL_API_KEY:
+        headers["X-OpenEval-Key"] = OPENEVAL_API_KEY
+        headers["Authorization"] = f"Bearer {OPENEVAL_API_KEY}"
+    return headers
+
 
 LOCAL_BLACKLIST = [
     (r"\brm\s+-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*\b", "Recursive force-delete"),
@@ -128,7 +138,7 @@ def _report_tool_result(payload: dict) -> None:
         req = urllib.request.Request(
             result_url,
             data=json.dumps(req_body).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
+            headers=_get_headers(),
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=TIMEOUT_SEC):
@@ -202,7 +212,7 @@ def main() -> None:
                     "thought_context": session_id,
                 }
             ).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
+            headers=_get_headers(),
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=TIMEOUT_SEC) as resp:
