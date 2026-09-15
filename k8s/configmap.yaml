@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openeval-config
+  labels:
+    app: openeval-studio
+data:
+  PORT: "8000"
+  OPENEVAL_DEMO_SEED: "1"
+  OPENEVAL_WATCHER_USE_LLM: "1"
+  WATCHER_STORAGE_DIR: "/data/watcher"
