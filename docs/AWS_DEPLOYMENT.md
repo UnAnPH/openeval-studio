@@ -1,6 +1,6 @@
 # Enterprise AWS Deployment Guide (London `eu-west-2`)
 
-Complete guide to deploying OpenEval Studio to AWS using **Terraform (IaC)**, **Amazon RDS for PostgreSQL**, and **Docker Compose**, operating within the AWS Free Tier and your $100–$200 credits.
+Complete guide to deploying OpenEval Studio to AWS using **Terraform (IaC)**, **AWS Application Load Balancer (ALB)**, **Amazon RDS for PostgreSQL**, and **Docker Compose**, operating within the AWS Free Tier and your $100–$200 credits.
 
 ---
 
@@ -9,38 +9,42 @@ Complete guide to deploying OpenEval Studio to AWS using **Terraform (IaC)**, **
 ```mermaid
 flowchart TD
     subgraph Clients["Clients"]
-        PublicUser["Public Recruiter / Visitor"]
-        Jayson["Your Browser (Jayson)"]
-        MacIDE["Your Local Mac (Cursor / Claude Code / Antigravity)"]
+        Visitor["Public Recruiter / Visitor"]
+        Jayson["Your Local Mac / Browser"]
     end
 
-    subgraph AWS["AWS London Region (eu-west-2)"]
+    subgraph AWSCloud["AWS London Region (eu-west-2)"]
+        subgraph Ingress["AWS Application Load Balancer (Free Tier: 750 hrs/mo)"]
+            ALB["Multi-AZ ALB (eu-west-2a & eu-west-2b)"]
+            Rules{"Host-Header Listener Rules"}
+            ALB --> Rules
+        end
+
         subgraph VPC["Custom VPC (10.20.0.0/16)"]
-            subgraph PublicSubnet["Public Web Subnet (10.20.1.0/24)"]
-                EIP["Elastic IP (Static IPv4)"]
-                EC2["EC2 Server (t3.micro - Free Tier)<br/>30GB gp3 SSD + 3GB Swapfile"]
+            subgraph PublicSubnet["Public Subnet (eu-west-2a)"]
+                EC2["Amazon EC2 (t3.micro - Free Tier)<br/>30GB gp3 SSD + 3GB Swapfile"]
                 
-                subgraph DockerStack["Docker Compose Stack"]
-                    Caddy["Caddy 2 Reverse Proxy<br/>Ports 80 & 443 (Auto-TLS)"]
-                    LiveApp["openeval-live (Port 8000)<br/>OPENEVAL_DEMO_SEED=0<br/>Real Trajectories & Gemini Evals"]
-                    DemoApp["openeval-demo (Port 8001)<br/>OPENEVAL_DEMO_SEED=1<br/>Sanitized Curated Fixtures"]
+                subgraph DockerStack["Docker Containers (No Proxy Needed!)"]
+                    LiveApp["openeval-live (Port 8000)<br/>OPENEVAL_DEMO_SEED=0<br/>Auth: jayson | Real Trajectories"]
+                    DemoApp["openeval-demo (Port 8001)<br/>OPENEVAL_DEMO_SEED=1<br/>Zero Auth | Sanitized Fixtures"]
                 end
+                EC2 --- LiveApp
+                EC2 --- DemoApp
             end
 
-            subgraph PrivateSubnets["Private DB Subnets across AZs (10.20.10.0/24 & 10.20.11.0/24)"]
-                RDS[("Amazon RDS PostgreSQL<br/>db.t4g.micro (750h/mo Free Tier)<br/>Private Endpoint Port 5432")]
+            subgraph PrivateSubnets["Private DB Subnets (eu-west-2a & eu-west-2b)"]
+                RDS[("Amazon RDS PostgreSQL<br/>db.t4g.micro (750h/mo Free Tier)<br/>Port 5432")]
             end
         end
     end
 
-    PublicUser -->|HTTPS: demo.openeval.studio| Caddy
-    Caddy --> DemoApp
+    Visitor -->|demo.openeval.studio| ALB
+    Jayson -->|openeval.studio| ALB
 
-    Jayson -->|HTTPS: openeval.studio (Auth: jayson)| Caddy
-    MacIDE -->|POST /api/watcher/evaluate (Bearer Token)| Caddy
-    Caddy --> LiveApp
+    Rules -->|Host: demo.openeval.studio| DemoApp
+    Rules -->|Host: openeval.studio or Default| LiveApp
 
-    LiveApp -->|VPC Internal Port 5432| RDS
+    LiveApp -->|Internal VPC 5432| RDS
 ```
 
 ---
@@ -52,30 +56,31 @@ From your local terminal:
 ```bash
 cd terraform/aws
 
-# 1. Initialize Terraform
+# 1. Initialize Terraform provider
 terraform init
 
 # 2. Preview the plan
 terraform plan
 
-# 3. Apply infrastructure (creates VPC, Subnets, SG, RDS, EC2, Elastic IP)
+# 3. Apply infrastructure (creates VPC, Subnets, ALB, RDS, EC2, Elastic IP)
 terraform apply
 ```
-*Note: Amazon RDS typically takes 5–8 minutes to initialize.*
+*Note: Amazon RDS and ALB typically take 5–8 minutes to initialize.*
 
 When `terraform apply` finishes, note the outputs:
-- `elastic_ip`: Your static public IPv4 address.
-- `rds_endpoint`: Your internal database host.
-- `rds_database_url`: Full PostgreSQL connection string.
+- `alb_dns_name`: Public DNS of the AWS Application Load Balancer.
+- `alb_preview_url`: Direct HTTP preview URL to test right away.
+- `ec2_ssh_command`: SSH command to connect to your instance.
+- `rds_database_url`: PostgreSQL connection string for the backend.
 
 ---
 
 ### Step 2: SSH into the Provisioned EC2 Instance
 ```bash
-ssh -i ~/.ssh/id_ed25519 ubuntu@<ELASTIC_IP>
+ssh -i ~/.ssh/id_ed25519 ubuntu@<EC2_PUBLIC_IP>
 ```
 
-Verify Docker and swap are ready:
+Verify Docker and swap:
 ```bash
 docker --version
 free -h   # Should show 1GB RAM + 3GB Swap!
@@ -87,24 +92,16 @@ free -h   # Should show 1GB RAM + 3GB Swap!
 ```bash
 git clone https://github.com/UnAnPH/openeval-studio.git
 cd openeval-studio
-
-# Generate a secure password hash for Caddy Basic Auth:
-docker run --rm caddy:2-alpine caddy hash-password --plaintext "YourPasswordHere"
-# Copy the generated $2a$... hash string
 ```
 
 Create your production `.env` file:
 ```bash
 cat << 'EOF' > .env
-# Domains
-DOMAIN_LIVE=openeval.studio
-DOMAIN_DEMO=demo.openeval.studio
-
-# Admin Authentication for openeval.studio
+# Authentication for openeval.studio
 ADMIN_USER=jayson
-ADMIN_PASSWORD_HASH=$2a$14$PasteYourBcryptHashHere
+ADMIN_PASSWORD=your_secure_password_here
 
-# Security & Watcher
+# Security & Watcher Webhooks
 OPENEVAL_API_KEY=your_secret_watcher_token_12345
 GEMINI_API_KEY=your_google_gemini_api_key
 OPENEVAL_WATCHER_USE_LLM=1
@@ -116,48 +113,42 @@ EOF
 
 ---
 
-### Step 4: Launch OpenEval Studio
+### Step 4: Launch OpenEval Containers
 ```bash
 docker compose -f docker-compose.aws.yml up -d --build
 ```
 
-Verify all three containers are healthy:
+Verify both containers are running:
 ```bash
 docker compose -f docker-compose.aws.yml ps
 ```
 
 ---
 
-### Step 5: Configure Domain DNS on Name.com
-In your Name.com account:
-1. Go to **DNS Management** for `openeval.studio`.
-2. Add the following records:
-   - **Type:** `A` | **Host:** `@` | **Answer:** `<ELASTIC_IP>`
-   - **Type:** `A` | **Host:** `demo` | **Answer:** `<ELASTIC_IP>`
-3. Set TTL to `300` (5 minutes).
-
-> **Before DNS is active:** You can immediately test the ports directly over HTTP:
-> - Public Demo: `http://<ELASTIC_IP>:8001`
-> - Private Live Studio: `http://<ELASTIC_IP>:8000`
+### Step 5: Test the Deployment Immediately
+Even before you claim your domain on Name.com, you can test directly via the **ALB DNS Name** or **EC2 Public IP**:
+- **Direct Live Studio:** `http://<ALB_DNS_NAME>` (prompts for user `jayson` and password)
+- **Direct Public Demo:** `http://<EC2_PUBLIC_IP>:8001` (zero login, demo fixtures)
 
 ---
 
-### Step 6: Connect Your Local Mac IDE to the Cloud
+### Step 6: Configure Domain DNS on Name.com (Once Claimed)
+In your Name.com DNS Management console:
+1. Add a **CNAME** record:
+   - **Type:** `CNAME` | **Host:** `@` | **Answer:** `<ALB_DNS_NAME>`
+2. Add a **CNAME** record:
+   - **Type:** `CNAME` | **Host:** `demo` | **Answer:** `<ALB_DNS_NAME>`
+3. Set TTL to `300` (5 minutes).
+
+---
+
+### Step 7: Connect Your Local Mac IDE to the Cloud
 On your local machine, add these lines to your `~/.zshrc`:
 ```bash
-export OPENEVAL_WATCHER_URL="https://openeval.studio/api/watcher/evaluate"
+export OPENEVAL_WATCHER_URL="http://<ALB_DNS_NAME>/api/watcher/evaluate"
 export OPENEVAL_API_KEY="your_secret_watcher_token_12345"
 ```
 Test the connection:
 ```bash
-python3 scripts/test_cloud_watcher.py https://openeval.studio your_secret_watcher_token_12345
-```
-
----
-
-## 3. Teardown / Destroy
-If you ever want to completely tear down all cloud resources to ensure zero ongoing charges:
-```bash
-cd terraform/aws
-terraform destroy
+python3 scripts/test_cloud_watcher.py http://<ALB_DNS_NAME> your_secret_watcher_token_12345
 ```

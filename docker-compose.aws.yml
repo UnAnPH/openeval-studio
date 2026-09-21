@@ -1,23 +1,4 @@
 services:
-  caddy:
-    image: caddy:2-alpine
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    environment:
-      - DOMAIN_LIVE=${DOMAIN_LIVE:-openeval.studio}
-      - DOMAIN_DEMO=${DOMAIN_DEMO:-demo.openeval.studio}
-      - ADMIN_USER=${ADMIN_USER:-jayson}
-      - ADMIN_PASSWORD_HASH=${ADMIN_PASSWORD_HASH:-}
-    volumes:
-      - ./Caddyfile.aws:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data
-      - caddy-config:/config
-    depends_on:
-      - openeval-live
-      - openeval-demo
-
   openeval-live:
     build:
       context: .
@@ -31,6 +12,8 @@ services:
       - OPENEVAL_WATCHER_USE_LLM=${OPENEVAL_WATCHER_USE_LLM:-1}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - OPENEVAL_API_KEY=${OPENEVAL_API_KEY:-}
+      - ADMIN_USER=${ADMIN_USER:-jayson}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
       - DATABASE_URL=${DATABASE_URL:-}
       - WATCHER_STORAGE_DIR=/data/watcher
     volumes:
@@ -54,7 +37,5 @@ services:
       - demo-watcher-data:/data/watcher
 
 volumes:
-  caddy-data:
-  caddy-config:
   live-watcher-data:
   demo-watcher-data:

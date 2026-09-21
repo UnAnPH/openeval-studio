@@ -82,7 +82,7 @@ class _ApiKeyMiddleware(BaseHTTPMiddleware):
         if not required:
             return await call_next(request)
         path = request.url.path
-        protected = (
+        protected_api = (
             path.startswith("/api/watcher/evaluate")
             or path.startswith("/api/gate/evaluate")
             or (
@@ -92,7 +92,7 @@ class _ApiKeyMiddleware(BaseHTTPMiddleware):
                 and not path.endswith("/demo/status")
             )
         )
-        if protected:
+        if protected_api and required:
             key = request.headers.get("X-OpenEval-Key") or request.headers.get("x-openeval-key")
             auth = request.headers.get("Authorization") or request.headers.get("authorization") or ""
             if not key and auth.startswith("Bearer "):
@@ -102,6 +102,34 @@ class _ApiKeyMiddleware(BaseHTTPMiddleware):
                     {"detail": "Invalid or missing X-OpenEval-Key or Authorization Bearer token"},
                     status_code=401,
                 )
+
+        # Basic Auth protection for live studio UI (disabled in demo mode)
+        admin_pass = os.environ.get("ADMIN_PASSWORD", "").strip()
+        admin_user = os.environ.get("ADMIN_USER", "jayson").strip()
+        is_demo = os.environ.get("OPENEVAL_DEMO_SEED", "0").lower() in ("1", "true", "yes")
+
+        if admin_pass and not is_demo and not path.startswith("/api/"):
+            auth_header = request.headers.get("Authorization") or ""
+            if not auth_header.startswith("Basic "):
+                return Response(
+                    status_code=401,
+                    headers={"WWW-Authenticate": 'Basic realm="OpenEval Private Studio"'},
+                    content="Authentication required\n",
+                )
+            import base64
+
+            try:
+                decoded = base64.b64decode(auth_header[6:]).decode("utf-8")
+                user, _, password = decoded.partition(":")
+                if user != admin_user or password != admin_pass:
+                    return Response(
+                        status_code=401,
+                        headers={"WWW-Authenticate": 'Basic realm="OpenEval Private Studio"'},
+                        content="Invalid credentials\n",
+                    )
+            except Exception:
+                return Response(status_code=401, content="Invalid authorization header\n")
+
         return await call_next(request)
 
 
