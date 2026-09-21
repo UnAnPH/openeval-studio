@@ -199,6 +199,30 @@ def test_watcher_analyzer_lite(client: TestClient) -> None:
     assert "fleet" in data
 
 
+def test_analyzer_summary_endpoint(client: TestClient) -> None:
+    """Verify organization-wide DuckDB Analyzer summary endpoint."""
+    store = get_watcher_store()
+    sess = Session(
+        session_id="analyzer-test-sess",
+        project_name="openeval-studio",
+        agent_type="cursor",
+        status="completed",
+    )
+    store.create_session(sess)
+
+    res = client.get("/api/v1/analyzer/summary")
+    assert res.status_code == 200
+    data = res.json()
+    assert "total_reviews" in data
+    assert "total_blocked" in data
+    assert "block_rate_pct" in data
+    assert "top_threats" in data
+    assert "agent_distribution" in data
+    assert "recent_interventions" in data
+    assert "p50_latency_ms" in data
+    assert "p95_latency_ms" in data
+
+
 def test_watcher_tool_result_endpoint(client: TestClient) -> None:
     """Verify tool execution result reporting endpoint."""
     store = get_watcher_store()

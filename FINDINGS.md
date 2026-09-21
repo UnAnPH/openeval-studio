@@ -138,6 +138,25 @@ Shows: real `antigravity_watcher_gate.py` local deny on destructive cmd; fail-op
        observe→allow+shadow deny (hooks must obey decision only)
 ```
 
+## Gate Latency & Performance Budget (p50 / p95 Empirical Profile)
+
+To keep PreToolUse gates invisible to software engineers during normal workflows, OpenEval Studio operates under a **sub-50ms blocking latency budget**:
+
+```text
+Repro: uv run python scripts/benchmark_gate_latency.py
+Artifact: scripts/benchmark_gate_latency.py
+```
+
+| Path | p50 (Median) | p90 | p95 (Budget: <50ms) | p99 | Max | Fail-Open Cutoff |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Local Regex (Client Offline)** | **0.001 ms** | 0.002 ms | **0.002 ms** | 0.002 ms | 0.011 ms | N/A (local zero network) |
+| **Gateway HTTP API (FastAPI)** | **3.89 ms** | 4.79 ms | **5.02 ms** | 9.92 ms | 13.82 ms | **1.5s hard timeout** |
+
+- **Zero Lag on Benign Traffic:** 99% of ordinary developer shell commands and file mutations clear local checks in under $3\mu\text{s}$.
+- **Fast Policy Round-Trip:** Inbound tool inspections to `/api/watcher/evaluate` evaluate store rules and DuckDB session tables within 5.02ms at the 95th percentile.
+- **Fail-Open Resilience:** When the gateway backend is unreachable or exceeds the 1.5s timeout, client hooks fail-open (`allow`), ensuring the agent runtime never hangs or blocks development.
+
 ## Scope
 
 Portfolio lab for Product (runtime gate) and Research FS (eval workbench). Not multi-tenant Analyzer SaaS, full SIEM, or production on-prem packaging.
+

@@ -47,3 +47,12 @@ ci-smoke:
 	uv run pytest tests/ -m "not slow" -q --tb=short
 	uv run python scripts/hermetic_eval_smoke.py
 	bash scripts/record_gate_demo.sh
+
+.PHONY: portfolio-demo
+portfolio-demo:
+	bash scripts/record_gate_demo.sh
+
+.PHONY: benchmark
+benchmark:
+	uv run python scripts/benchmark_gate_latency.py
+

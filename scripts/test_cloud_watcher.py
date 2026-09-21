@@ -6,7 +6,7 @@ Antigravity) and your deployed cloud backend (e.g. https://demo.openeval.studio)
 
 Usage:
   python scripts/test_cloud_watcher.py [URL] [API_KEY]
-  
+
 Example:
   python scripts/test_cloud_watcher.py https://demo.openeval.studio my_secret_key
   python scripts/test_cloud_watcher.py http://127.0.0.1:8000
@@ -47,7 +47,9 @@ def probe_cloud(base_url: str, api_key: str = "") -> bool:
             data = json.loads(resp.read().decode())
             rtt_ms = (time.perf_counter() - t0) * 1000
             print(f"✅ OK ({rtt_ms:.1f}ms)")
-            print(f"      Backend Version: {data.get('version', 'unknown')}, Demo Seed: {data.get('demo_seed')}")
+            print(
+                f"      Backend Version: {data.get('version', 'unknown')}, Demo Seed: {data.get('demo_seed')}"
+            )
     except Exception as exc:
         print(f"❌ FAILED\n      Error: {exc}")
         return False
@@ -126,7 +128,11 @@ def probe_cloud(base_url: str, api_key: str = "") -> bool:
 
 
 if __name__ == "__main__":
-    target = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("OPENEVAL_WATCHER_URL", "http://127.0.0.1:8000")
+    target = (
+        sys.argv[1]
+        if len(sys.argv) > 1
+        else os.environ.get("OPENEVAL_WATCHER_URL", "http://127.0.0.1:8000")
+    )
     key = sys.argv[2] if len(sys.argv) > 2 else os.environ.get("OPENEVAL_API_KEY", "")
     success = probe_cloud(target, key)
     sys.exit(0 if success else 1)

@@ -60,6 +60,7 @@ def _get_headers() -> dict[str, str]:
         headers["Authorization"] = f"Bearer {OPENEVAL_API_KEY}"
     return headers
 
+
 LOCAL_BLACKLIST = [
     (r"\brm\s+-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*\b", "Recursive force-delete (rm -rf)"),
     (r"\bsudo\b", "sudo privilege escalation"),

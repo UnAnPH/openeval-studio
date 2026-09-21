@@ -1,4 +1,4 @@
-"""Optional outbound webhook for Watcher block/escalate events (SIEM-lite)."""
+"""Optional outbound webhook for Watcher block/escalate events (incident notification)."""
 
 from __future__ import annotations
 

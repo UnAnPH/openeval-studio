@@ -1,20 +1,26 @@
 import React, { useEffect, useState } from 'react';
 import {
+  Activity,
   AlertTriangle,
+  BarChart3,
   Check,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
+  Clock,
   Code,
   Copy,
+  Cpu,
   Info,
   Maximize2,
   Minimize2,
+  RefreshCw,
   Search,
   Shield,
   ShieldAlert,
   Terminal,
   XCircle,
+  Zap,
 } from 'lucide-react';
 import {
   WatcherCommandRule,
@@ -30,10 +36,48 @@ import {
   toolThresholdAgentGroup,
 } from '../data/defaultWatcherData';
 
+interface AnalyzerThreatItem {
+  threat: string;
+  count: number;
+  avg_severity: number;
+}
+
+interface AnalyzerAgentItem {
+  agent: string;
+  total_events: number;
+  lockouts: number;
+}
+
+interface AnalyzerRecentItem {
+  id: string;
+  session_id: string;
+  agent_type: string;
+  threat: string;
+  tool_name: string;
+  decision: string;
+  score: number;
+  timestamp: string;
+  explanation: string;
+}
+
+interface AnalyzerSummary {
+  total_reviews: number;
+  total_blocked: number;
+  total_allowed: number;
+  block_rate_pct: number;
+  total_sessions: number;
+  avg_latency_ms: number;
+  p50_latency_ms: number;
+  p95_latency_ms: number;
+  top_threats: AnalyzerThreatItem[];
+  agent_distribution: AnalyzerAgentItem[];
+  recent_interventions: AnalyzerRecentItem[];
+}
+
 interface WatcherLiveViewProps {
   onSelectSession?: (sessionId: string) => void;
   /** Preferred landing tab when opened as Safety → Policy */
-  initialTab?: 'rules' | 'thresholds';
+  initialTab?: 'rules' | 'thresholds' | 'analyzer';
 }
 
 export const WatcherLiveView: React.FC<WatcherLiveViewProps> = ({
@@ -41,8 +85,8 @@ export const WatcherLiveView: React.FC<WatcherLiveViewProps> = ({
   initialTab = 'rules',
 }) => {
   // Flight Control (live session matrix) is hidden — Sessions + Control own that job.
-  const [activeTab, setActiveTab] = useState<'rules' | 'thresholds'>(
-    initialTab === 'thresholds' ? 'thresholds' : 'rules'
+  const [activeTab, setActiveTab] = useState<'rules' | 'thresholds' | 'analyzer'>(
+    initialTab === 'thresholds' ? 'thresholds' : initialTab === 'analyzer' ? 'analyzer' : 'rules'
   );
   const [sessionFilter, setSessionFilter] = useState<'active' | 'closed' | 'parked'>('active');
   const [searchQuery, setSearchQuery] = useState('');
@@ -75,6 +119,23 @@ export const WatcherLiveView: React.FC<WatcherLiveViewProps> = ({
   const [resolveNotes, setResolveNotes] = useState('');
   const [isResolving, setIsResolving] = useState(false);
   const [rulesCategory, setRulesCategory] = useState<'all' | 'git' | 'security' | 'fs'>('all');
+  const [analyzerSummary, setAnalyzerSummary] = useState<AnalyzerSummary | null>(null);
+  const [isLoadingAnalyzer, setIsLoadingAnalyzer] = useState(false);
+
+  const fetchAnalyzerSummary = async () => {
+    try {
+      setIsLoadingAnalyzer(true);
+      const res = await fetch('/api/v1/analyzer/summary').catch(() => null);
+      if (res && res.ok) {
+        const data = await res.json();
+        setAnalyzerSummary(data);
+      }
+    } catch {
+      // Offline fallback
+    } finally {
+      setIsLoadingAnalyzer(false);
+    }
+  };
 
   // Fetch all sessions & active policy on mount
   const fetchSessions = async () => {
@@ -116,11 +177,18 @@ export const WatcherLiveView: React.FC<WatcherLiveViewProps> = ({
   useEffect(() => {
     fetchSessions();
     fetchPolicy();
+    fetchAnalyzerSummary();
     const interval = setInterval(() => {
       fetchSessions();
     }, 4000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'analyzer') {
+      fetchAnalyzerSummary();
+    }
+  }, [activeTab]);
 
   // Fetch decisions whenever selectedSessionId changes
   useEffect(() => {
@@ -464,6 +532,17 @@ export const WatcherLiveView: React.FC<WatcherLiveViewProps> = ({
               }`}
             >
               Tool Thresholds
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('analyzer')}
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                activeTab === 'analyzer'
+                  ? 'bg-white text-slate-900 shadow-xs font-semibold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Analyzer
             </button>
           </div>
         </div>
@@ -1315,6 +1394,230 @@ export const WatcherLiveView: React.FC<WatcherLiveViewProps> = ({
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Analyzer (Organization-Wide Risk & Latency Analytics via DuckDB) */}
+      {activeTab === 'analyzer' && (
+        <div className="flex-1 overflow-y-auto bg-[#fcfcfd] font-mono text-[#1e2029] p-6">
+          <div className="max-w-6xl mx-auto w-full space-y-6">
+            {/* Header with Refresh */}
+            <div className="bg-white rounded-2xl border border-[#e5e7eb] shadow-xs p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <div className="font-mono text-base font-bold text-[#111827] flex items-center gap-2">
+                  <BarChart3 className="w-5 h-5 text-indigo-600" />
+                  <span>Analyzer: Organization-Wide Agent Risk & Telemetry</span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                    DuckDB Analytics Engine
+                  </span>
+                </div>
+                <p className="text-xs text-[#6b7280] mt-1 font-sans">
+                  Cross-session policy enforcement metrics, threat taxonomy distributions, and gate latency telemetry.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={fetchAnalyzerSummary}
+                  disabled={isLoadingAnalyzer}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-xs font-mono font-medium text-slate-700 hover:bg-white hover:text-slate-900 transition-all cursor-pointer shadow-2xs"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isLoadingAnalyzer ? 'animate-spin' : ''}`} />
+                  <span>{isLoadingAnalyzer ? 'Refreshing...' : 'Refresh Metrics'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 4 Stat Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Total Monitored Actions */}
+              <div className="bg-white rounded-2xl border border-[#e5e7eb] shadow-xs p-5">
+                <div className="flex items-center justify-between text-slate-500 mb-2">
+                  <span className="text-xs font-mono font-bold uppercase tracking-wider">Monitored Actions</span>
+                  <Activity className="w-4 h-4 text-slate-400" />
+                </div>
+                <div className="text-2xl font-bold font-mono text-slate-900">
+                  {analyzerSummary ? analyzerSummary.total_reviews.toLocaleString() : '—'}
+                </div>
+                <div className="mt-2 text-[11px] text-slate-500 font-sans">
+                  Across {analyzerSummary?.total_sessions || 0} active agent sessions
+                </div>
+              </div>
+
+              {/* Policy Lockouts */}
+              <div className="bg-white rounded-2xl border border-rose-100 shadow-xs p-5">
+                <div className="flex items-center justify-between text-rose-600 mb-2">
+                  <span className="text-xs font-mono font-bold uppercase tracking-wider">Threat Lockouts</span>
+                  <ShieldAlert className="w-4 h-4 text-rose-500" />
+                </div>
+                <div className="text-2xl font-bold font-mono text-rose-700">
+                  {analyzerSummary ? analyzerSummary.total_blocked.toLocaleString() : '—'}
+                </div>
+                <div className="mt-2 text-[11px] text-rose-600 font-sans font-medium">
+                  {analyzerSummary?.block_rate_pct ?? 0}% overall interception rate
+                </div>
+              </div>
+
+              {/* Gate Latency Budget (p95) */}
+              <div className="bg-white rounded-2xl border border-teal-100 shadow-xs p-5">
+                <div className="flex items-center justify-between text-teal-600 mb-2">
+                  <span className="text-xs font-mono font-bold uppercase tracking-wider">Gate Latency (p95)</span>
+                  <Zap className="w-4 h-4 text-teal-500" />
+                </div>
+                <div className="text-2xl font-bold font-mono text-teal-700 flex items-baseline gap-1.5">
+                  <span>{analyzerSummary ? `${analyzerSummary.p95_latency_ms}ms` : '—'}</span>
+                  <span className="text-xs font-normal text-teal-600 font-mono">p50: {analyzerSummary?.p50_latency_ms ?? 0}ms</span>
+                </div>
+                <div className="mt-2 text-[11px] text-teal-700 font-sans">
+                  Sub-50ms blocking path budget
+                </div>
+              </div>
+
+              {/* Fail-Open Integrity */}
+              <div className="bg-white rounded-2xl border border-[#e5e7eb] shadow-xs p-5">
+                <div className="flex items-center justify-between text-slate-500 mb-2">
+                  <span className="text-xs font-mono font-bold uppercase tracking-wider">Fail-Open Cutoff</span>
+                  <Clock className="w-4 h-4 text-slate-400" />
+                </div>
+                <div className="text-2xl font-bold font-mono text-slate-900">
+                  1.5s
+                </div>
+                <div className="mt-2 text-[11px] text-slate-500 font-sans">
+                  Hard timeout prevents agent hanging
+                </div>
+              </div>
+            </div>
+
+            {/* Middle Grid: Top Threats & Agent Breakdown */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Top Blocked Threats */}
+              <div className="bg-white rounded-2xl border border-[#e5e7eb] shadow-xs p-6">
+                <div className="flex items-center justify-between border-b border-[#e5e7eb] pb-3 mb-4">
+                  <h2 className="text-sm font-bold font-mono text-[#111827] flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-indigo-600" />
+                    <span>Top Threat Categories Blocked</span>
+                  </h2>
+                  <span className="text-[11px] text-slate-400 font-mono">13-Point Rubric</span>
+                </div>
+
+                {analyzerSummary?.top_threats && analyzerSummary.top_threats.length > 0 ? (
+                  <div className="space-y-3">
+                    {analyzerSummary.top_threats.map((t, idx) => (
+                      <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200/70">
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs font-bold font-mono text-slate-800 truncate">
+                            {t.threat.replace(/_/g, ' ')}
+                          </div>
+                          <div className="text-[11px] text-slate-500 mt-0.5">
+                            Avg Severity: <span className="font-mono font-bold text-slate-700">{t.avg_severity} / 10</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                            {t.count} blocked
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="py-8 text-center text-xs text-slate-400 font-mono">
+                    No policy lockout events recorded yet.
+                  </div>
+                )}
+              </div>
+
+              {/* Agent Fleet Distribution */}
+              <div className="bg-white rounded-2xl border border-[#e5e7eb] shadow-xs p-6">
+                <div className="flex items-center justify-between border-b border-[#e5e7eb] pb-3 mb-4">
+                  <h2 className="text-sm font-bold font-mono text-[#111827] flex items-center gap-2">
+                    <Cpu className="w-4 h-4 text-teal-600" />
+                    <span>Monitored Agent Fleets</span>
+                  </h2>
+                  <span className="text-[11px] text-slate-400 font-mono">Runtime Gates</span>
+                </div>
+
+                {analyzerSummary?.agent_distribution && analyzerSummary.agent_distribution.length > 0 ? (
+                  <div className="space-y-3">
+                    {analyzerSummary.agent_distribution.map((a, idx) => (
+                      <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200/70">
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs font-bold font-mono text-slate-800 uppercase">
+                            {a.agent}
+                          </div>
+                          <div className="text-[11px] text-slate-500 mt-0.5 font-sans">
+                            {a.total_events} total evaluated actions
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold ${
+                            a.lockouts > 0
+                              ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                              : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                          }`}>
+                            {a.lockouts} lockouts
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="py-8 text-center text-xs text-slate-400 font-mono">
+                    No agent fleet telemetry available.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Bottom Section: Recent High-Risk Interventions */}
+            <div className="bg-white rounded-2xl border border-[#e5e7eb] shadow-xs p-6">
+              <div className="flex items-center justify-between border-b border-[#e5e7eb] pb-3 mb-4">
+                <h2 className="text-sm font-bold font-mono text-[#111827] flex items-center gap-2">
+                  <Terminal className="w-4 h-4 text-slate-700" />
+                  <span>Recent Intercepted Agent Actions</span>
+                </h2>
+                <span className="text-[11px] text-slate-400 font-mono">Real-Time Audit Trail</span>
+              </div>
+
+              {analyzerSummary?.recent_interventions && analyzerSummary.recent_interventions.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs font-mono">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-slate-500 uppercase text-[10px] tracking-wider">
+                        <th className="pb-2 font-bold">Agent</th>
+                        <th className="pb-2 font-bold">Threat</th>
+                        <th className="pb-2 font-bold">Tool</th>
+                        <th className="pb-2 font-bold">Decision</th>
+                        <th className="pb-2 font-bold">Severity</th>
+                        <th className="pb-2 font-bold">Reason</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {analyzerSummary.recent_interventions.map((row) => (
+                        <tr key={row.id} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="py-2.5 pr-3 font-bold text-slate-800 uppercase">{row.agent_type}</td>
+                          <td className="py-2.5 pr-3 text-slate-700 truncate max-w-[150px]">{row.threat.replace(/_/g, ' ')}</td>
+                          <td className="py-2.5 pr-3 text-slate-500">{row.tool_name}</td>
+                          <td className="py-2.5 pr-3">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-700 border border-rose-200">
+                              {row.decision}
+                            </span>
+                          </td>
+                          <td className="py-2.5 pr-3 font-bold text-slate-800">{row.score}/10</td>
+                          <td className="py-2.5 text-slate-600 truncate max-w-[280px]" title={row.explanation}>
+                            {row.explanation || '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="py-8 text-center text-xs text-slate-400 font-mono">
+                  No recent intercepted tool calls recorded.
+                </div>
+              )}
             </div>
           </div>
         </div>

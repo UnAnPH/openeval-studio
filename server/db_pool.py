@@ -29,7 +29,9 @@ class DatabaseManager:
             "engine": self.engine_type,
             "connected": bool(self.database_url) or self.engine_type == "duckdb",
             "has_external_db": bool(self.database_url),
-            "target": "Amazon RDS PostgreSQL" if "rds.amazonaws.com" in self.database_url else self.engine_type.upper(),
+            "target": "Amazon RDS PostgreSQL"
+            if "rds.amazonaws.com" in self.database_url
+            else self.engine_type.upper(),
         }
 
 

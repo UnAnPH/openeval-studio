@@ -141,7 +141,7 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({
             </div>
             <div className="min-w-0 flex-1">
               <h3 className="text-xs sm:text-sm font-bold text-text-primary truncate">Human Auditor Sign-Off & Review</h3>
-              <p className="text-[11px] text-text-secondary truncate">Clinical safety sign-off for enterprise deployment</p>
+              <p className="text-[11px] text-text-secondary truncate">Safety sign-off and risk review for agent deployment</p>
             </div>
           </div>
 

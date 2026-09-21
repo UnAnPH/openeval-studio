@@ -3,13 +3,13 @@
   "hooks": {
     "beforeShellExecution": [
       {
-        "command": "python3 \"/Users/jaysonandal/Documents/AI safety/openeval-studio/scripts/cursor_watcher_gate.py\"",
+        "command": "python3 scripts/cursor_watcher_gate.py",
         "timeout": 5
       }
     ],
     "preToolUse": [
       {
-        "command": "python3 \"/Users/jaysonandal/Documents/AI safety/openeval-studio/scripts/cursor_watcher_gate.py\"",
+        "command": "python3 scripts/cursor_watcher_gate.py",
         "timeout": 5
       }
     ]

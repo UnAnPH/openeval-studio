@@ -1,4 +1,4 @@
-# Enterprise AWS Deployment Guide (London `eu-west-2`)
+# AWS Production Deployment Guide (London `eu-west-2`)
 
 Complete guide to deploying OpenEval Studio to AWS using **Terraform (IaC)**, **AWS Application Load Balancer (ALB)**, **Amazon RDS for PostgreSQL**, and **Docker Compose**, operating within the AWS Free Tier and your $100–$200 credits.
 
@@ -106,8 +106,8 @@ OPENEVAL_API_KEY=your_secret_watcher_token_12345
 GEMINI_API_KEY=your_google_gemini_api_key
 OPENEVAL_WATCHER_USE_LLM=1
 
-# Amazon RDS PostgreSQL Database URL (from terraform output)
-DATABASE_URL=postgresql://openeval:OpenEval2026SecurePass!@openeval-postgres.cxxxx.eu-west-2.rds.amazonaws.com:5432/openeval
+# Amazon RDS PostgreSQL Database URL (retrieve via: terraform output -raw rds_database_url)
+DATABASE_URL=postgresql://openeval:<generated-password>@openeval-postgres.cxxxx.eu-west-2.rds.amazonaws.com:5432/openeval
 EOF
 ```
 

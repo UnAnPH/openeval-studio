@@ -15,19 +15,20 @@ import json
 from pathlib import Path
 
 gate = ${GATE@Q}
-payload = {
-    "version": 1,
-    "hooks": {
-        "beforeShellExecution": [
-            {"command": f'python3 "{gate}"', "timeout": 5}
-        ],
-        "preToolUse": [
-            {"command": f'python3 "{gate}"', "timeout": 5}
-        ],
-    },
-}
+def build_payload(cmd: str) -> dict:
+    return {
+        "version": 1,
+        "hooks": {
+            "beforeShellExecution": [
+                {"command": cmd, "timeout": 5}
+            ],
+            "preToolUse": [
+                {"command": cmd, "timeout": 5}
+            ],
+        },
+    }
 
-def merge_hooks(path: Path) -> None:
+def merge_hooks(path: Path, cmd: str) -> None:
     existing = {}
     if path.exists():
         try:
@@ -36,6 +37,7 @@ def merge_hooks(path: Path) -> None:
                 existing = {}
         except Exception:
             existing = {}
+    payload = build_payload(cmd)
     existing["version"] = payload["version"]
     hooks = existing.get("hooks")
     if not isinstance(hooks, dict):
@@ -45,10 +47,11 @@ def merge_hooks(path: Path) -> None:
     existing["hooks"] = hooks
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(existing, indent=2) + "\n")
-    print(f"Updated {path}")
+    print(f"Updated {path} -> {cmd}")
 
-merge_hooks(Path(${PROJECT_HOOKS@Q}))
-merge_hooks(Path(${USER_HOOKS@Q}))
+# Project hooks use portable relative invocation; user-level hooks use absolute path
+merge_hooks(Path(${PROJECT_HOOKS@Q}), "python3 scripts/cursor_watcher_gate.py")
+merge_hooks(Path(${USER_HOOKS@Q}), f'python3 "{gate}"')
 print(f"Gate: {gate}")
 PY
 

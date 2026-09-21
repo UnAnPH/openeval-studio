@@ -33,6 +33,7 @@ def _get_headers() -> dict[str, str]:
         headers["Authorization"] = f"Bearer {OPENEVAL_API_KEY}"
     return headers
 
+
 LOG_PATH = Path(
     os.environ.get(
         "OPENEVAL_WATCHER_GATE_LOG",

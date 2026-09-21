@@ -10,7 +10,6 @@ import json
 import logging
 import os
 import re
-import sys
 import time
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
@@ -89,7 +88,9 @@ class _ApiKeyMiddleware(BaseHTTPMiddleware):
         )
         if protected_api and required:
             key = request.headers.get("X-OpenEval-Key") or request.headers.get("x-openeval-key")
-            auth = request.headers.get("Authorization") or request.headers.get("authorization") or ""
+            auth = (
+                request.headers.get("Authorization") or request.headers.get("authorization") or ""
+            )
             if not key and auth.startswith("Bearer "):
                 key = auth[7:].strip()
             if key != required:
@@ -2771,6 +2772,14 @@ class ThresholdUpdatePayload(BaseModel):
     auto_deny_ge: int | None = None
     always_escalate: bool = False
     auto_approve_le: int = 3
+
+
+@app.get("/api/v1/analyzer/summary")
+@app.get("/api/analyzer/summary")
+async def get_analyzer_summary() -> dict[str, Any]:
+    """Retrieve organization-wide risk analytics, threat distributions, and latency metrics from DuckDB."""
+    store = get_watcher_store()
+    return store.get_analyzer_summary()
 
 
 @app.get("/api/v1/watcher/sessions")

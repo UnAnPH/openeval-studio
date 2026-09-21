@@ -36,9 +36,15 @@ variable "db_username" {
 
 variable "db_password" {
   type        = string
-  default     = "OpenEval2026SecurePass!"
-  description = "Master password for Amazon RDS PostgreSQL."
+  default     = null
+  description = "Master password for Amazon RDS PostgreSQL. If left null, a high-entropy random password is automatically generated."
   sensitive   = true
+}
+
+variable "admin_cidr" {
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+  description = "CIDR blocks allowed for SSH access to EC2 (recommend setting to your personal IP, e.g. ['203.0.113.50/32'])."
 }
 
 variable "budget_notification_email" {

@@ -1,5 +1,5 @@
-{"ts": "2026-09-10T05:58:11.215163+00:00", "event": "evaluate", "mode": "enforce", "decision": "deny", "session_id": "gate-demo-enforce"}
-{"ts": "2026-09-10T05:58:11.226423+00:00", "event": "evaluate", "mode": "observe", "decision": "allow", "shadow_decision": "deny", "session_id": "gate-demo-observe"}
-{"ts": "2026-09-10T05:58:11.228347+00:00", "event": "evaluate", "mode": "paused", "decision": "allow", "session_id": "gate-demo-paused"}
-{"ts": "2026-09-10T05:58:11.458961+00:00", "event": "evaluate", "mode": "enforce", "decision": "allow", "session_id": "gate-demo-allow"}
-{"ts": "2026-09-10T05:58:11.459113+00:00", "event": "sessions", "ids": ["gate-demo-allow", "gate-demo-enforce", "gate-demo-observe"]}
+{"ts": "2026-09-21T19:49:01.985393+00:00", "event": "evaluate", "mode": "enforce", "decision": "deny", "session_id": "gate-demo-enforce"}
+{"ts": "2026-09-21T19:49:01.991654+00:00", "event": "evaluate", "mode": "observe", "decision": "allow", "shadow_decision": "deny", "session_id": "gate-demo-observe"}
+{"ts": "2026-09-21T19:49:01.993316+00:00", "event": "evaluate", "mode": "paused", "decision": "allow", "session_id": "gate-demo-paused"}
+{"ts": "2026-09-21T19:49:03.107662+00:00", "event": "evaluate", "mode": "enforce", "decision": "allow", "session_id": "gate-demo-allow"}
+{"ts": "2026-09-21T19:49:08.856555+00:00", "event": "sessions", "ids": ["gate-demo-allow", "gate-demo-enforce", "gate-demo-observe"]}

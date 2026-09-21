@@ -49,4 +49,4 @@ To expose your local Kubernetes cluster to the public internet at `https://demo.
 brew install cloudflare/cloudflare/cloudflared
 cloudflared tunnel --url http://localhost:8000
 ```
-Point your domain CNAME on Cloudflare or Name.com to the tunnel URL. You now have a live, public, enterprise Kubernetes portfolio!
+Point your domain CNAME on Cloudflare or Name.com to the tunnel URL. You now have a live, public Kubernetes portfolio deployment!

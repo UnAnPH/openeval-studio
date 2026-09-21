@@ -24,7 +24,7 @@ output "rds_endpoint" {
 }
 
 output "rds_database_url" {
-  value       = "postgresql://${var.db_username}:${var.db_password}@${aws_db_instance.postgres.endpoint}/${var.db_name}"
+  value       = "postgresql://${var.db_username}:${local.rds_password}@${aws_db_instance.postgres.endpoint}/${var.db_name}"
   description = "PostgreSQL connection string for the backend."
   sensitive   = true
 }

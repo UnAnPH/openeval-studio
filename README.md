@@ -17,8 +17,6 @@
 1. **Eval IDE** — sandboxed agent evaluation harness, streaming trajectories, synchronized run compare, hybrid transcript search, and Inspect AI bridge.
 2. **Runtime Gate** — real-time PreToolUse governance hooks for **Antigravity**, **Claude Code**, and **Cursor** invoking `/api/gate/evaluate` (alias `/api/watcher/evaluate`) with deterministic command rules, tool thresholds (1–10), and optional LLM triage/deep review.
 
-📖 **Read the in-depth research paper:** [AI Safety Research Engineering: Concepts, Methodologies & Architecture](docs/AI_SAFETY_RESEARCH.md) covering dangerous capability evaluations (METR / AISI standards), split-horizon alignment faking, zero-trust container containment, and runtime guardrails.
-
 *Note: This is an independent portfolio and learning lab — not an enterprise multi-tenant SaaS product.*
 
 ---
@@ -44,21 +42,7 @@
 
 ---
 
-## 4. Live Agent Governance Video (Loom Walkthrough)
-
-> **Video Demonstration:** [Watch Live Agent Governance on Loom (5 min)](https://www.loom.com/share/placeholder-openeval-studio)
-
-### Shot List Covered in Demonstration:
-1. **Antigravity PreToolUse Hook:** Agent attempts `git push --force origin main` → intercepted and denied with interactive lockout.
-2. **Claude Code Hook:** Agent attempts `sudo rm -rf /` → blocked by deterministic command rule.
-3. **Cursor Gate:** Agent attempts `curl | bash` pipeline execution → blocked with clear rationale.
-4. **Safety Control Dashboard:** Real-time state transition (`enforce` → `observe` → `paused`) and operator override approval.
-5. **Evaluate → Compare:** Turn-by-turn diff of `regex-log` (nop vs oracle) showing verifier artifact divergence.
-6. **Adversarial Red Team:** Automated multi-turn prober against frontier target model persisting into the unified Runs registry.
-
----
-
-## 5. Local Quickstart
+## 4. Local Quickstart
 
 ### Run with Hosted DEMO Seed:
 ```bash
@@ -87,7 +71,7 @@ In **Safety → Sessions**, use hybrid dense vector + lexical search:
 
 ---
 
-## 6. Runtime Gate Architecture (What Actually Runs)
+## 5. Runtime Gate Architecture (What Actually Runs)
 
 1. **Deterministic Command Rules** — regex matching backed by DuckDB: `allow`, `triage`, `human`, `deny`, `off`.
 2. **Tool Thresholds** — per-tool 1–10 risk limits: auto-approve, escalate, auto-deny.
@@ -105,7 +89,7 @@ Hooks **fail-open** if the backend API is unreachable *after* evaluating local i
 
 ---
 
-## 7. Installing Agent Hooks
+## 6. Installing Agent Hooks
 
 ```bash
 # Google Antigravity — writes ~/.gemini/config/hooks.json with matcher ".*"
@@ -120,7 +104,7 @@ bash scripts/install_antigravity_watcher_hook.sh
 
 ---
 
-## 8. Development & Quality Bar
+## 7. Development & Quality Bar
 
 ```bash
 make check      # Ruff format & lint + Pyright typechecking
@@ -130,7 +114,7 @@ cd ui && npm run build # Production UI build
 
 ---
 
-## 9. Free Cloud Deployment Guide
+## 8. Free Cloud Deployment Guide
 
 OpenEval Studio can be hosted **100% for free** without paying for compute or managed databases. When deployed with `OPENEVAL_DEMO_SEED=1`, the service operates hermetically: it serves the pre-seeded developer sessions and real Inspect AI evaluation runs without requiring a live Docker daemon or local coding agent on the host.
 
@@ -169,7 +153,7 @@ gcloud run deploy openeval-studio \
 ```
 
 ### Option D: AWS (London eu-west-2) with Application Load Balancer & RDS PostgreSQL
-Deploy an enterprise architecture with an **AWS Application Load Balancer (ALB)**, **Amazon RDS for PostgreSQL**, and an **EC2 instance** with automated 3GB swap memory (Free Tier eligible):
+Deploy with an **AWS Application Load Balancer (ALB)**, **Amazon RDS for PostgreSQL**, and an **EC2 instance** with automated 3GB swap memory (Free Tier eligible):
 ```bash
 cd terraform/aws
 terraform init

@@ -18,7 +18,7 @@ services:
       - WATCHER_STORAGE_DIR=/data/watcher
     volumes:
       - live-watcher-data:/data/watcher
-      # Zero-trust container evaluation socket
+      # Sandbox container evaluation socket
       - /var/run/docker.sock:/var/run/docker.sock
 
   openeval-demo:
