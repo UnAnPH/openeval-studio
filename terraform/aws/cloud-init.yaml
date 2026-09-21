@@ -1,0 +1,32 @@
+#cloud-config
+package_upgrade: true
+packages:
+  - git
+  - curl
+  - ufw
+  - docker.io
+  - docker-compose-plugin
+
+groups:
+  - docker
+
+users:
+  - default
+  - name: ubuntu
+    groups: docker
+
+runcmd:
+  # 1. Configure 3GB swap on 30GB gp3 SSD to guarantee memory safety for t3.micro
+  - fallocate -l 3G /swapfile
+  - chmod 600 /swapfile
+  - mkswap /swapfile
+  - swapon /swapfile
+  - echo '/swapfile none swap sw 0 0' >> /etc/fstab
+  # 2. Enable & start Docker
+  - systemctl enable --now docker
+  - usermod -aG docker ubuntu
+  # 3. Configure firewall (allow SSH, HTTP, HTTPS)
+  - ufw allow 22/tcp
+  - ufw allow 80/tcp
+  - ufw allow 443/tcp
+  - ufw --force enable

@@ -141,9 +141,16 @@ class LaunchEvalResponse(BaseModel):
 
 @app.get("/api/health")
 async def health_check() -> dict[str, Any]:
-    """Health check endpoint with demo seed status."""
+    """Health check endpoint with demo seed status and database engine info."""
+    from server.db_pool import get_db_manager
+
     is_demo = os.getenv("OPENEVAL_DEMO_SEED", "0").lower() in ("1", "true", "yes")
-    return {"status": "ok", "version": "0.1.0", "demo_seed": is_demo}
+    return {
+        "status": "ok",
+        "version": "0.1.0",
+        "demo_seed": is_demo,
+        "database": get_db_manager().get_status(),
+    }
 
 
 @app.get("/api/demo/status")

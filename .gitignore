@@ -38,3 +38,9 @@ artifacts/eval-venv/
 artifacts/true-evals/hf-cache/
 artifacts/true-evals/home/
 artifacts/true-evals/traces/
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl

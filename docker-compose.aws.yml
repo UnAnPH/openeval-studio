@@ -1,0 +1,60 @@
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN_LIVE=${DOMAIN_LIVE:-openeval.studio}
+      - DOMAIN_DEMO=${DOMAIN_DEMO:-demo.openeval.studio}
+      - ADMIN_USER=${ADMIN_USER:-jayson}
+      - ADMIN_PASSWORD_HASH=${ADMIN_PASSWORD_HASH:-}
+    volumes:
+      - ./Caddyfile.aws:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - openeval-live
+      - openeval-demo
+
+  openeval-live:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - OPENEVAL_DEMO_SEED=0
+      - OPENEVAL_WATCHER_USE_LLM=${OPENEVAL_WATCHER_USE_LLM:-1}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - OPENEVAL_API_KEY=${OPENEVAL_API_KEY:-}
+      - DATABASE_URL=${DATABASE_URL:-}
+      - WATCHER_STORAGE_DIR=/data/watcher
+    volumes:
+      - live-watcher-data:/data/watcher
+      # Zero-trust container evaluation socket
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  openeval-demo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      - PORT=8001
+      - OPENEVAL_DEMO_SEED=1
+      - OPENEVAL_WATCHER_USE_LLM=0
+      - WATCHER_STORAGE_DIR=/data/watcher
+    volumes:
+      - demo-watcher-data:/data/watcher
+
+volumes:
+  caddy-data:
+  caddy-config:
+  live-watcher-data:
+  demo-watcher-data:
