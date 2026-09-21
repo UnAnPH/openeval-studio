@@ -155,15 +155,17 @@ gcloud run deploy openeval-studio \
 ### Option D: AWS (London eu-west-2) with Application Load Balancer & RDS PostgreSQL
 Deploy with an **AWS Application Load Balancer (ALB)**, **Amazon RDS for PostgreSQL**, and an **EC2 instance** with automated 3GB swap memory (Free Tier eligible):
 ```bash
-cd terraform/aws
-terraform init
-terraform apply
-```
-SSH into the EC2 instance and launch the containers:
-```bash
-docker compose -f docker-compose.prod.yml up -d --build
+# Spin up infrastructure (~3-4 min)
+make cloud-on      # or: ./cloud.sh on
+
+# Inspect live status and burn rate ($/hr)
+make cloud-status  # or: ./cloud.sh status
+
+# Tear down all resources ($0.00/hr guaranteed clean slate)
+make cloud-off     # or: ./cloud.sh off
 ```
 *Read the full [AWS Deployment Guide](docs/AWS_DEPLOYMENT.md) for details.*
+
 
 ### Option E: Azure Virtual Machine with Terraform
 Deploy on an Azure Linux VM (`Standard_B2s`) with automated credit-saving shutdown schedules:

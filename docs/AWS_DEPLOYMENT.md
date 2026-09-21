@@ -152,3 +152,41 @@ Test the connection:
 ```bash
 python3 scripts/test_cloud_watcher.py http://<ALB_DNS_NAME> your_secret_watcher_token_12345
 ```
+
+---
+
+## 3. Managing Cloud Costs & Turning On / Off
+
+To ensure your AWS credits and Free Tier allowance are strictly preserved, OpenEval Studio includes a dedicated **Cloud Power Switch**:
+
+```bash
+# Check live AWS resources and current hourly burn rate in London (eu-west-2)
+make cloud-status
+# or: ./cloud.sh status
+
+# Turn ON everything (ALB, EC2, RDS, VPC) (~3-4 min)
+make cloud-on
+# or: ./cloud.sh on
+
+# Turn OFF everything completely ($0.00 / hour guaranteed clean slate)
+make cloud-off
+# or: ./cloud.sh off
+```
+
+### Why `make cloud-off` is required for $0 cost
+> [!WARNING]
+> **The AWS Load Balancer Trap**: If you only "stop" EC2 and RDS, AWS continues to bill:
+> - **Application Load Balancer (ALB)**: ~$0.0225/hr (~$16.40/month) simply for existing.
+> - **Public IPv4 Address**: ~$0.0050/hr (~$3.60/month).
+> - **EBS Storage (30GB gp3)**: ~$0.08/GB-mo (~$2.40/month).
+> 
+> Therefore, stopping compute instances still drains ~$22.40/month in credits!  
+> Running **`make cloud-off`** destroys the provisioned resources via Terraform, returning your hourly burn rate to **$0.00 / hour ($0.00 / month)**.
+
+### Quick Sleep (`pause` / `resume`)
+For short intervals (e.g. lunch breaks) where you don't want to recreate infrastructure:
+```bash
+make cloud-pause   # Stops EC2 & RDS compute (ALB still incurs ~$0.0225/hr)
+make cloud-resume  # Resumes EC2 & RDS
+```
+

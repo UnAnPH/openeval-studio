@@ -56,3 +56,25 @@ portfolio-demo:
 benchmark:
 	uv run python scripts/benchmark_gate_latency.py
 
+.PHONY: cloud-on cloud-up
+cloud-on: cloud-up
+cloud-up:
+	python3 scripts/cloud_switch.py on
+
+.PHONY: cloud-off cloud-down
+cloud-off: cloud-down
+cloud-down:
+	python3 scripts/cloud_switch.py off
+
+.PHONY: cloud-status
+cloud-status:
+	python3 scripts/cloud_switch.py status
+
+.PHONY: cloud-pause
+cloud-pause:
+	python3 scripts/cloud_switch.py pause
+
+.PHONY: cloud-resume
+cloud-resume:
+	python3 scripts/cloud_switch.py resume
+
