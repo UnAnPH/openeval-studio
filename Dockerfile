@@ -20,7 +20,7 @@ COPY cli.py inspect_tasks.py ./
 COPY --from=ui-builder /app/ui/dist /app/ui/dist
 RUN uv sync --no-dev || uv pip install --system -e .
 
-ENV OPENEVAL_DEMO_SEED=1
+ENV OPENEVAL_DEMO_SEED=0
 ENV PORT=8000
 EXPOSE 8000
 

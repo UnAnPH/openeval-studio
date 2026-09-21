@@ -1,7 +1,7 @@
 # AGENTS.md — Operating manual for coding agents working on OpenEval Studio
 
 > **Audience:** Autonomous coding agents and humans.  
-> **Stack:** Python 3.12+ (FastAPI, DuckDB, Pydantic v2), React 19 + TypeScript + Tailwind, Docker.  
+> **Stack:** Python 3.12+ (FastAPI, DuckDB, Pydantic v2), React 18.3 + TypeScript + Tailwind, Docker.  
 > **Tone:** Portfolio / research lab — prefer honest claims over marketing language.
 
 ---

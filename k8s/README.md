@@ -1,6 +1,6 @@
 # Kubernetes Deployment Guide for OpenEval Studio
 
-Production-ready Kubernetes manifests for deploying OpenEval Studio across local clusters (Kind/Minikube) or lightweight cloud clusters (K3s, AKS, EKS).
+Kubernetes manifests for deploying OpenEval Studio across local clusters (Kind/Minikube) or lightweight cloud clusters (K3s, AKS, EKS).
 
 ---
 

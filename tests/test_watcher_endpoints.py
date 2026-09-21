@@ -256,3 +256,56 @@ def test_watcher_tool_result_endpoint(client: TestClient) -> None:
     assert updated is not None
     assert len(updated.trajectory.tool_results) >= 1
     assert "total 42" in updated.trajectory.tool_results[-1].stdout
+
+
+def test_resolve_all_watcher_reviews_endpoint(client: TestClient) -> None:
+    """Verify operator bulk approval endpoint (/api/v1/watcher/reviews/resolve-all)."""
+    store = get_watcher_store()
+    sess_id = "test-resolve-all-sess"
+    sess = Session(
+        session_id=sess_id,
+        project_name="openeval-studio",
+        agent_type="cursor",
+        status="working",
+    )
+    store.create_session(sess)
+
+    # 1. Trigger a policy denial to create a blocked review
+    client.post(
+        "/api/watcher/config",
+        json={
+            "mode": "enforce",
+            "deny_threshold": 0.8,
+            "flag_threshold": 0.4,
+            "fail_open": True,
+            "fallback_decision": "allow",
+            "timeout_sec": 0.8,
+        },
+    )
+    eval_res = client.post(
+        "/api/watcher/evaluate",
+        json={
+            "session_id": sess_id,
+            "agent_id": "cursor",
+            "tool_name": "bash",
+            "arguments": {"cmd": "sudo rm -rf /etc"},
+        },
+    )
+    assert eval_res.status_code == 200
+    assert eval_res.json()["decision"] in ("deny", "escalate")
+
+    # 2. Call resolve-all
+    resolve_res = client.post("/api/v1/watcher/reviews/resolve-all")
+    assert resolve_res.status_code == 200
+    res_data = resolve_res.json()
+    assert res_data["status"] == "ok"
+    assert "resolved_count" in res_data
+    assert res_data["resolved_count"] >= 1
+
+    # 3. Verify session was updated to human_approved
+    updated = store.get_session(sess_id)
+    assert updated is not None
+    assert len(updated.trajectory.reviews) >= 1
+    review = updated.trajectory.reviews[-1]
+    assert review.resolution_status == "human_approved"
+    assert review.decision == "allow"

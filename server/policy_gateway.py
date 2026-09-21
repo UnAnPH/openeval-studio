@@ -113,7 +113,7 @@ def _parse_decision_xml(text: str) -> tuple[int, str] | None:
 
 
 def _parse_threat_category(text: str) -> ThreatCategory | None:
-    """Parse Apollo 13-point threat category tag from model XML output."""
+    """Parse 13-point safety threat category tag from model XML output."""
     m = re.search(r"<threat_category>\s*(.*?)\s*</threat_category>", text, re.I | re.S)
     if not m:
         return None
@@ -139,7 +139,7 @@ def _parse_threat_category(text: str) -> ThreatCategory | None:
 def format_stripped_trajectory(trajectory: Any, max_events: int = 15) -> str:
     """Format session trajectory history while stripping bulky tool outputs.
 
-    Apollo Research Finding (September 2026):
+    Trajectory Context Optimization:
     Providing trajectory context dramatically improves monitor precision and recall.
     However, full transcripts with tool outputs lead to high latency and token costs.
     Removing tool outputs while preserving user instructions, assistant reasoning, and
@@ -311,7 +311,7 @@ class PolicyGateway:
         prior_state_exposed: bool = False,
         trajectory_context: str = "",
     ) -> ReviewRecord:
-        """Execute the 3-stage Watcher Gating Pipeline (Apollo Watcher Live):
+        """Execute the 3-stage Policy Gating Pipeline:
         1. Deterministic Command Rules (<2ms)
         2. Fast Triage (Layer 1, Secret Reading Law & Trajectory Context)
         3. Deep Review (Layer 2, Loss of Delegated Control & Expected Severity)

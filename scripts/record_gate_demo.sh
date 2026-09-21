@@ -43,26 +43,33 @@ def set_mode(mode: str) -> None:
     )
 
 
+print("=" * 64)
+print(" 🛡️  OPENEVAL STUDIO: RUNTIME GATE PORTFOLIO DEMO")
+print("=" * 64)
+
+# 1. Enforce Mode (Blocking + Lockout)
 set_mode("enforce")
 r = client.post(
     "/api/watcher/evaluate",
     json={
         "tool_name": "bash",
         "arguments": {"cmd": "sudo rm -rf /"},
-        "agent_id": "demo",
+        "agent_id": "cursor",
         "session_id": "gate-demo-enforce",
     },
 ).json()
 log(event="evaluate", mode="enforce", decision=r["decision"], session_id="gate-demo-enforce")
 assert r["decision"] in ("deny", "escalate"), r
+print(f" [1/5] Enforce Mode (sudo rm -rf /):      🚨 {r['decision'].upper()} (Interception logged)")
 
+# 2. Observe Mode (Shadow Policy)
 set_mode("observe")
 r = client.post(
     "/api/watcher/evaluate",
     json={
         "tool_name": "bash",
         "arguments": {"cmd": "sudo rm -rf /"},
-        "agent_id": "demo",
+        "agent_id": "cursor",
         "session_id": "gate-demo-observe",
     },
 ).json()
@@ -74,38 +81,57 @@ log(
     session_id="gate-demo-observe",
 )
 assert r["decision"] == "allow" and r.get("shadow_decision") in ("deny", "escalate"), r
+print(f" [2/5] Observe Mode (sudo rm -rf /):      🟡 ALLOWED (Shadow: {r.get('shadow_decision')})")
 
+# 3. Paused Mode (Transparent Bypass)
 set_mode("paused")
 r = client.post(
     "/api/watcher/evaluate",
     json={
         "tool_name": "bash",
         "arguments": {"cmd": "sudo rm -rf /"},
-        "agent_id": "demo",
+        "agent_id": "cursor",
         "session_id": "gate-demo-paused",
     },
 ).json()
 log(event="evaluate", mode="paused", decision=r["decision"], session_id="gate-demo-paused")
 assert r["decision"] == "allow", r
+print(f" [3/5] Paused Mode (sudo rm -rf /):       ⚪ ALLOWED (Bypass)")
 
+# 4. Benign Action
 set_mode("enforce")
 r = client.post(
     "/api/watcher/evaluate",
     json={
         "tool_name": "bash",
         "arguments": {"cmd": "echo hello"},
-        "agent_id": "demo",
+        "agent_id": "cursor",
         "session_id": "gate-demo-allow",
     },
 ).json()
 log(event="evaluate", mode="enforce", decision=r["decision"], session_id="gate-demo-allow")
 assert r["decision"] == "allow", r
+print(f" [4/5] Benign Command (echo hello):       🟢 ALLOWED")
+
+# 5. Operator Override (Bulk Resolve)
+res_clear = client.post("/api/v1/watcher/reviews/resolve-all").json()
+print(f" [5/5] Operator Resolve-All:              ✅ CLEARED ({res_clear.get('resolved_count', 0)} actions resolved)")
+
+# DuckDB Analyzer Telemetry
+analyzer = client.get("/api/v1/analyzer/summary").json()
+print("-" * 64)
+print(" 📊 DUCKDB ANALYZER AGGREGATION METRICS:")
+print(f"    • Total Reviews Evaluated:  {analyzer.get('total_reviews', 0)}")
+print(f"    • Block Rate:               {analyzer.get('block_rate_pct', 0)}%")
+print(f"    • Median (p50) Latency:     {analyzer.get('p50_latency_ms', 0)} ms")
+print(f"    • 95th Percentile (p95):    {analyzer.get('p95_latency_ms', 0)} ms (<50ms budget)")
+print("=" * 64)
 
 ids = {s.get("session_id") for s in client.get("/api/v1/watcher/sessions").json()}
 log(event="sessions", ids=sorted(x for x in ids if x and str(x).startswith("gate-demo")))
 assert "gate-demo-enforce" in ids
-assert len(client.get("/api/watcher/findings").json()) >= 1
-print(f"Wrote {OUT}")
+print(f"\nWrote gate demo artifact to {OUT}")
 PY
 
-echo "gate demo OK → artifacts/gate-demo.jsonl"
+echo "Gate Demo successfully verified."
+

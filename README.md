@@ -4,7 +4,7 @@
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%20%7C%203.13-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![React 19](https://img.shields.io/badge/React-19.0-61DAFB.svg?logo=react&logoColor=black)](https://react.dev/)
+[![React 18](https://img.shields.io/badge/React-18.3-61DAFB.svg?logo=react&logoColor=black)](https://react.dev/)
 [![Inspect AI](https://img.shields.io/badge/UK%20AISI-Inspect%20AI-purple.svg)](https://inspect.ai-safety-institute.org.uk/)
 [![Code Quality](https://img.shields.io/badge/quality-ruff%20%7C%20pyright-success.svg)]()
 
@@ -12,42 +12,33 @@
 
 ## 1. What It Is
 
-**OpenEval Studio** is a portfolio and research evaluation lab built to explore frontier AI safety evaluation and autonomous agent governance:
+**OpenEval Studio** is a portfolio evaluation workbench and autonomous coding agent safety runtime:
 
 1. **Eval IDE** — sandboxed agent evaluation harness, streaming trajectories, synchronized run compare, hybrid transcript search, and Inspect AI bridge.
 2. **Runtime Gate** — real-time PreToolUse governance hooks for **Antigravity**, **Claude Code**, and **Cursor** invoking `/api/gate/evaluate` (alias `/api/watcher/evaluate`) with deterministic command rules, tool thresholds (1–10), and optional LLM triage/deep review.
+3. **Org-Wide Analyzer** — DuckDB-backed analytical telemetry tracking cross-session block rates, latency percentiles, and top blocked threat categories.
 
-*Note: This is an independent portfolio and learning lab — not an enterprise multi-tenant SaaS product.*
-
----
-
-## 2. Hosted Demo
-
-- **Live URL:** [https://openeval-studio.onrender.com](https://openeval-studio.onrender.com) *(or your deployed Render instance)*
-- **Data Scope:**
-  - **Safety → Sessions & Control:** Display **DEMO-ONLY** seeded session fixtures to demonstrate real-time interception, unclipped commands, and hybrid search without exposing private agent logs.
-  - **Evaluate → Launch, Judges & Red Team:** Execute **LIVE** frontier LLM calls when `GEMINI_API_KEY` is provided. When keys are unset, endpoints fail honestly with explicit error messages.
+*Engineering notes: See [PORTFOLIO.md](PORTFOLIO.md) for what this work sample proves, and [SELF_HOST.md](SELF_HOST.md) for self-hosting instructions.*
 
 ---
 
-## 3. Visual Tour
+## 2. Capabilities Tour
 
-| Safety Control (Interception Deny) | Sessions (Hybrid Transcript Search) |
-|:---:|:---:|
-| ![Safety Control Deny](docs/screenshots/control-deny.png) | ![Sessions Search](docs/screenshots/sessions-search.png) |
-
-| Evaluate Compare (Hermetic Diff) | Runs Registry (Red Team Badge & Filter) |
-|:---:|:---:|
-| ![Compare Diff](docs/screenshots/compare-diff.png) | ![Runs Red Team](docs/screenshots/runs-redteam.png) |
+| Surface | Core Capability | Under the Hood |
+| :--- | :--- | :--- |
+| **Safety → Control** | Interactive intervention (`deny` / `force_ask`) | PreToolUse hooks intercept unsafe commands (`sudo rm -rf`, credential dumps) before dispatch. |
+| **Safety → Sessions** | Full agent trajectory audit & hybrid search | Dense semantic embeddings + lexical keyword search over unclipped agent transcripts. |
+| **Safety → Analyzer** | Organization-wide threat & latency metrics | In-process DuckDB SQL queries over session reviews computing $p50/p95$ gate latencies & threat distributions. |
+| **Evaluate → Runs** | Inspect AI benchmark execution & compare | Synchronized step-by-step diffs across agent trajectories with 4-pillar safety audit verdicts. |
 
 ---
 
-## 4. Local Quickstart
+## 3. Local Quickstart
 
-### Run with Hosted DEMO Seed:
+### Run with DEMO Seed (Instant Sandbox):
 ```bash
 # Clone and setup environment
-git clone https://github.com/jaysonandal/openeval-studio.git
+git clone https://github.com/UnAnPH/openeval-studio.git
 cd openeval-studio
 
 make install
@@ -62,6 +53,7 @@ make dev   # API on :8000
 make ui    # Vite SPA on :5173
 ```
 
+
 ### Try Sample Hybrid Search Queries:
 In **Safety → Sessions**, use hybrid dense vector + lexical search:
 - `force push` — matches git force push attempts with destructive modification warnings.
@@ -71,7 +63,7 @@ In **Safety → Sessions**, use hybrid dense vector + lexical search:
 
 ---
 
-## 5. Runtime Gate Architecture (What Actually Runs)
+## 4. Runtime Gate Architecture (What Actually Runs)
 
 1. **Deterministic Command Rules** — regex matching backed by DuckDB: `allow`, `triage`, `human`, `deny`, `off`.
 2. **Tool Thresholds** — per-tool 1–10 risk limits: auto-approve, escalate, auto-deny.
@@ -89,7 +81,7 @@ Hooks **fail-open** if the backend API is unreachable *after* evaluating local i
 
 ---
 
-## 6. Installing Agent Hooks
+## 5. Installing Agent Hooks
 
 ```bash
 # Google Antigravity — writes ~/.gemini/config/hooks.json with matcher ".*"
@@ -104,7 +96,7 @@ bash scripts/install_antigravity_watcher_hook.sh
 
 ---
 
-## 7. Development & Quality Bar
+## 6. Development & Quality Bar
 
 ```bash
 make check      # Ruff format & lint + Pyright typechecking
@@ -114,66 +106,21 @@ cd ui && npm run build # Production UI build
 
 ---
 
-## 8. Free Cloud Deployment Guide
+## 7. Self-Hosting & Deployment
 
-OpenEval Studio can be hosted **100% for free** without paying for compute or managed databases. When deployed with `OPENEVAL_DEMO_SEED=1`, the service operates hermetically: it serves the pre-seeded developer sessions and real Inspect AI evaluation runs without requiring a live Docker daemon or local coding agent on the host.
+OpenEval Studio runs self-contained locally or in containers without external SaaS dependencies:
 
-### Option A: Render (Recommended — Zero Config)
-Render offers a **Free Web Service** tier (512 MB RAM, free SSL, custom domain):
-1. Push your repository to GitHub.
-2. Sign in to [Render.com](https://render.com) and click **New + $\rightarrow$ Web Service**.
-3. Connect your repository. Render will automatically detect `Dockerfile`:
-   - **Environment:** `Docker` (uses the multi-stage `Dockerfile` to build Vite UI + FastAPI into one container).
-   - **Plan:** `Free`
-   - **Environment Variables:**
-     - `OPENEVAL_DEMO_SEED`: `1`
-     - `WATCHER_ENFORCE_MODE`: `enforce`
-     - `FAIL_OPEN`: `true`
-4. Click **Deploy Web Service**. Your app will be live at `https://<your-app>.onrender.com` in ~2–3 minutes.
-*Note: Render free services spin down after 15 minutes of inactivity and wake up automatically on the first incoming request.*
-
-### Option B: Koyeb (100% Free — Fast & Continuous)
-[Koyeb](https://www.koyeb.com/) offers a free Nano instance tier (512 MB RAM, 0.1 vCPU):
-1. Sign in to [Koyeb.com](https://www.koyeb.com) and click **Create Service** $\rightarrow$ **GitHub**.
-2. Select your `openeval-studio` repository.
-3. Select **Dockerfile** as the build method.
-4. Set Environment Variables:
-   - `OPENEVAL_DEMO_SEED`: `1`
-5. Set the internal port to `8000` (or leave default auto-detection).
-6. Click **Deploy**. Your app will be live at `https://<your-app>.koyeb.app`.
-
-### Option C: Google Cloud Run (Free Tier: 2 Million Requests / Month)
-If you have a Google Cloud account, Cloud Run provides 2 million free container invocations per month:
+### Production Docker Compose Stack
+Launch the dual-surface environment (port `8000` live evaluation + port `8001` seeded demo):
 ```bash
-gcloud run deploy openeval-studio \
-  --source . \
-  --platform managed \
-  --allow-unauthenticated \
-  --set-env-vars OPENEVAL_DEMO_SEED=1
+docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-### Option D: AWS (London eu-west-2) with Application Load Balancer & RDS PostgreSQL
-Deploy with an **AWS Application Load Balancer (ALB)**, **Amazon RDS for PostgreSQL**, and an **EC2 instance** with automated 3GB swap memory (Free Tier eligible):
-```bash
-# Spin up infrastructure (~3-4 min)
-make cloud-on      # or: ./cloud.sh on
+### Reference Documentation
+- **[PORTFOLIO.md](PORTFOLIO.md)** — Architectural design memo, latency benchmarks, and mapping to Apollo Watcher challenges.
+- **[SELF_HOST.md](SELF_HOST.md)** — Complete self-hosting manual, environment variables, and authentication configuration.
+- **[AWS Deployment Guide](docs/AWS_DEPLOYMENT.md)** — London (`eu-west-2`) Terraform deployment with the Cloud Power Switch (`make cloud-on` / `make cloud-off` / `make cloud-status`).
 
-# Inspect live status and burn rate ($/hr)
-make cloud-status  # or: ./cloud.sh status
-
-# Tear down all resources ($0.00/hr guaranteed clean slate)
-make cloud-off     # or: ./cloud.sh off
-```
-*Read the full [AWS Deployment Guide](docs/AWS_DEPLOYMENT.md) for details.*
-
-
-### Option E: Azure Virtual Machine with Terraform
-Deploy on an Azure Linux VM (`Standard_B2s`) with automated credit-saving shutdown schedules:
-```bash
-cd terraform/azure
-terraform init
-terraform apply -var="prefix=openeval" -var="location=italynorth"
-```
 
 ---
 

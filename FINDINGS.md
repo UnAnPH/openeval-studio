@@ -156,7 +156,24 @@ Artifact: scripts/benchmark_gate_latency.py
 - **Fast Policy Round-Trip:** Inbound tool inspections to `/api/watcher/evaluate` evaluate store rules and DuckDB session tables within 5.02ms at the 95th percentile.
 - **Fail-Open Resilience:** When the gateway backend is unreachable or exceeds the 1.5s timeout, client hooks fail-open (`allow`), ensuring the agent runtime never hangs or blocks development.
 
+### Three-Tier Latency Architecture & Full-Path Trade-Offs
+
+It is critical to distinguish microbenchmark latency from full-path asynchronous analysis:
+
+1. **Tier 1: Synchronous In-Process Regex (Client Hook)**
+   - **p50: 0.001 ms | p95: 0.002 ms** ($\approx 1.1\mu\text{s}$)
+   - Runs directly within the client hook process (Cursor, Claude Code, Antigravity) before dispatching any network request. Instant rejection of obvious destructive patterns (`rm -rf /`, credential harvesting) with zero human-perceptible lag.
+
+2. **Tier 2: Synchronous Local Gateway Evaluation (FastAPI + DuckDB)**
+   - **p50: 3.89 ms | p95: 5.02 ms**
+   - Evaluates dynamic command rules, tool thresholds, and session state. Confirmed well within the $<50\text{ms}$ interactive blocking budget.
+
+3. **Tier 3: Asynchronous LLM Deep Review (Frontier Model Calling)**
+   - **Typical RTT: 800 ms – 1500 ms**
+   - Deep review and trajectory evaluation involve external LLM inference. To prevent blocking developer flow, client hooks enforce a **1.5s hard client-side timeout with configurable fail-open semantics** (`FAIL_OPEN=true`). If deep review does not complete within budget, the gate fails open to allow benign workflows to continue while logging an asynchronous audit event.
+
 ## Scope
 
 Portfolio lab for Product (runtime gate) and Research FS (eval workbench). Not multi-tenant Analyzer SaaS, full SIEM, or production on-prem packaging.
+
 

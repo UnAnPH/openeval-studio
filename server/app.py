@@ -368,7 +368,7 @@ async def evaluate_action_watcher_gateway(req: WatcherRequest) -> WatcherVerdict
     # Resolve session before policy eval so reviews attach to a real session id
     session_id = req.session_id or f"session-live-{int(time.time() * 1000) % 100000000:08d}"
 
-    # Context Stripping Optimization (Apollo Watcher Live September 2026):
+    # Context Stripping Optimization:
     # Trajectory context boosts monitor fidelity, but tool outputs are stripped to minimize token overhead and latency.
     traj_context = ""
     try:
