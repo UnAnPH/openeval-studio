@@ -53,11 +53,6 @@ PROJECT_ROOT = Path(__file__).parent.parent
 TASKS_DIR = PROJECT_ROOT / "tasks"
 LOGS_DIR = PROJECT_ROOT / "logs"
 
-# Ensure inspect_evals package path from eval-venv is available to server runtime
-_eval_venv_site = PROJECT_ROOT / "artifacts" / "eval-venv" / "lib" / "python3.12" / "site-packages"
-if _eval_venv_site.exists() and str(_eval_venv_site) not in sys.path:
-    sys.path.insert(0, str(_eval_venv_site))
-
 app = FastAPI(
     title="OpenEval Studio API",
     version="0.1.0",

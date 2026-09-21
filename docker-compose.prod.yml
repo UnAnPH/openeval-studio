@@ -1,38 +1,41 @@
 services:
-  caddy:
-    image: caddy:2-alpine
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data
-      - caddy-config:/config
-    depends_on:
-      - openeval
-
-  openeval:
+  openeval-live:
     build:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
+    ports:
+      - "8000:8000"
     environment:
       - PORT=8000
+      - OPENEVAL_DEMO_SEED=0
+      - OPENEVAL_WATCHER_USE_LLM=${OPENEVAL_WATCHER_USE_LLM:-1}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - OPENEVAL_API_KEY=${OPENEVAL_API_KEY:-}
-      - OPENEVAL_DEMO_SEED=${OPENEVAL_DEMO_SEED:-1}
-      - OPENEVAL_WATCHER_USE_LLM=${OPENEVAL_WATCHER_USE_LLM:-1}
+      - ADMIN_USER=${ADMIN_USER:-jayson}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - DATABASE_URL=${DATABASE_URL:-}
       - WATCHER_STORAGE_DIR=/data/watcher
-      - WATCHER_WEBHOOK_URL=${WATCHER_WEBHOOK_URL:-}
     volumes:
-      - openeval-data:/data/watcher
-      # Allows OpenEval backend to spawn real Docker sandbox containers for code evaluations
+      - live-watcher-data:/data/watcher
+      # Zero-trust container evaluation socket
       - /var/run/docker.sock:/var/run/docker.sock
-    expose:
-      - "8000"
+
+  openeval-demo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      - PORT=8001
+      - OPENEVAL_DEMO_SEED=1
+      - OPENEVAL_WATCHER_USE_LLM=0
+      - WATCHER_STORAGE_DIR=/data/watcher
+    volumes:
+      - demo-watcher-data:/data/watcher
 
 volumes:
-  caddy-data:
-  caddy-config:
-  openeval-data:
+  live-watcher-data:
+  demo-watcher-data:

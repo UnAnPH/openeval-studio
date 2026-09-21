@@ -138,7 +138,7 @@ OpenEval Studio can be hosted **100% for free** without paying for compute or ma
 Render offers a **Free Web Service** tier (512 MB RAM, free SSL, custom domain):
 1. Push your repository to GitHub.
 2. Sign in to [Render.com](https://render.com) and click **New + $\rightarrow$ Web Service**.
-3. Connect your repository. Render will automatically detect `render.yaml` or `Dockerfile`:
+3. Connect your repository. Render will automatically detect `Dockerfile`:
    - **Environment:** `Docker` (uses the multi-stage `Dockerfile` to build Vite UI + FastAPI into one container).
    - **Plan:** `Free`
    - **Environment Variables:**
@@ -168,16 +168,25 @@ gcloud run deploy openeval-studio \
   --set-env-vars OPENEVAL_DEMO_SEED=1
 ```
 
-### Option D: Azure Virtual Machine with Terraform & Caddy Auto-HTTPS (Full Docker Sandbox Support)
-Deploy on an Azure Linux VM with full `/var/run/docker.sock` access to run live, isolated evaluation sandboxes:
+### Option D: AWS (London eu-west-2) with Application Load Balancer & RDS PostgreSQL
+Deploy an enterprise architecture with an **AWS Application Load Balancer (ALB)**, **Amazon RDS for PostgreSQL**, and an **EC2 instance** with automated 3GB swap memory (Free Tier eligible):
 ```bash
-cd terraform
+cd terraform/aws
 terraform init
-terraform apply -var="prefix=openeval" -var="location=italynorth"
+terraform apply
 ```
-SSH into your provisioned VM and launch the stack:
+SSH into the EC2 instance and launch the containers:
 ```bash
 docker compose -f docker-compose.prod.yml up -d --build
+```
+*Read the full [AWS Deployment Guide](docs/AWS_DEPLOYMENT.md) for details.*
+
+### Option E: Azure Virtual Machine with Terraform
+Deploy on an Azure Linux VM (`Standard_B2s`) with automated credit-saving shutdown schedules:
+```bash
+cd terraform/azure
+terraform init
+terraform apply -var="prefix=openeval" -var="location=italynorth"
 ```
 
 ---

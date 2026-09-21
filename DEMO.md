@@ -87,7 +87,7 @@ Verify:
 ## 5. Deploying to Web (Free Hosting)
 
 To share this live portfolio demo with reviewers without running it locally:
-- **Render:** Connect GitHub repo, select Docker environment, pick the Free tier, set `OPENEVAL_DEMO_SEED=1`. The app builds automatically from `render.yaml` and `Dockerfile` (UI + FastAPI unified).
+- **Render:** Connect GitHub repo, select Docker environment, pick the Free tier, set `OPENEVAL_DEMO_SEED=1`. The app builds automatically from `Dockerfile` (UI + FastAPI unified).
 - **Koyeb:** Connect GitHub repo, select Dockerfile build, set `OPENEVAL_DEMO_SEED=1` and port `8000`. Free Nano tier runs continuously without sleep.
 
 ## What not to claim

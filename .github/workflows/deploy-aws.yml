@@ -30,6 +30,6 @@ jobs:
             set -e
             cd /home/ubuntu/openeval-studio || (git clone https://github.com/UnAnPH/openeval-studio.git /home/ubuntu/openeval-studio && cd /home/ubuntu/openeval-studio)
             git pull origin main
-            docker compose -f docker-compose.aws.yml pull || true
-            docker compose -f docker-compose.aws.yml up -d --build
+            docker compose -f docker-compose.prod.yml pull || true
+            docker compose -f docker-compose.prod.yml up -d --build
             echo "Deployment to AWS completed successfully."

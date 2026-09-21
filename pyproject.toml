@@ -23,6 +23,7 @@ dependencies = [
     "docker>=7.1.0",
     "uv>=0.1.0",
     "inspect-ai>=0.3.260",
+    "inspect-evals>=0.21.0",
     "litellm>=1.97.0",
     "duckdb>=1.0.0",
 ]

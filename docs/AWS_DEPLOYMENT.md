@@ -115,12 +115,12 @@ EOF
 
 ### Step 4: Launch OpenEval Containers
 ```bash
-docker compose -f docker-compose.aws.yml up -d --build
+docker compose -f docker-compose.prod.yml up -d --build
 ```
 
 Verify both containers are running:
 ```bash
-docker compose -f docker-compose.aws.yml ps
+docker compose -f docker-compose.prod.yml ps
 ```
 
 ---
