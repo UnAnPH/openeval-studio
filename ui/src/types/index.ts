@@ -95,6 +95,7 @@ export type MainNavTab =
   | 'sessions'
   | 'control'
   | 'policy'
+  | 'hooks'
   /** @deprecated use control */
   | 'firewall'
   /** @deprecated use policy */
@@ -109,6 +110,7 @@ export type MainNavTab =
   | 'studio'
   | 'compare'
   | 'inspect';
+
 
 export interface WatcherConfig {
   mode: 'enforce' | 'observe' | 'paused';

@@ -1087,10 +1087,14 @@ async def list_watcher_interceptions(
     """Recent blocked/escalated reviews + in-memory live-gate history for Control Live Stream."""
     from server.demo_seed import is_demo_seed_enabled
 
-    if not is_demo_seed_enabled():
+    if (
+        not is_demo_seed_enabled()
+        and os.getenv("OPENEVAL_AUTO_SCAN_LOCAL_LOGS", "0").lower() in ("1", "true", "yes")
+    ):
         from server.agent_log_loader import UniversalAgentLogLoader
 
         UniversalAgentLogLoader.scan_default_agent_directories()
+
 
     live = [v.model_dump() for v in global_watcher_engine.get_history(limit)]
     if is_demo_seed_enabled():
@@ -1404,10 +1408,14 @@ async def list_watcher_sessions() -> list[dict[str, Any]]:
     """Legacy alias → WatcherStore sessions (same source as /api/v1/watcher/sessions)."""
     from server.demo_seed import is_demo_seed_enabled
 
-    if not is_demo_seed_enabled():
+    if (
+        not is_demo_seed_enabled()
+        and os.getenv("OPENEVAL_AUTO_SCAN_LOCAL_LOGS", "0").lower() in ("1", "true", "yes")
+    ):
         from server.agent_log_loader import UniversalAgentLogLoader
 
         UniversalAgentLogLoader.scan_default_agent_directories()
+
     store = get_watcher_store()
     store.reload_from_disk()
     sessions = store.list_sessions()
@@ -2901,10 +2909,14 @@ async def list_watcher_v1_sessions(
     """List monitored agent sessions from WatcherStore."""
     from server.demo_seed import is_demo_seed_enabled
 
-    if not is_demo_seed_enabled():
+    if (
+        not is_demo_seed_enabled()
+        and os.getenv("OPENEVAL_AUTO_SCAN_LOCAL_LOGS", "0").lower() in ("1", "true", "yes")
+    ):
         from server.agent_log_loader import UniversalAgentLogLoader
 
         UniversalAgentLogLoader.scan_default_agent_directories()
+
 
     store = get_watcher_store()
     store.reload_from_disk()

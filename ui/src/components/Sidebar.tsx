@@ -14,7 +14,9 @@ import {
   fileTrayFullOutline,
   shieldCheckmarkOutline,
   optionsOutline,
+  terminalOutline,
 } from 'ionicons/icons';
+
 import { MainNavTab } from '../types';
 
 interface NavItem {
@@ -38,7 +40,10 @@ interface SidebarProps {
   totalRuns: number;
   totalBlocked?: number;
   onExportSFT?: () => void;
+  currentUser?: { user_id: number; username: string } | null;
+  onLogout?: () => void;
 }
+
 
 export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
@@ -47,7 +52,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   totalTasks: _totalTasks,
   totalRuns: _totalRuns,
   totalBlocked: _totalBlocked,
+  currentUser,
+  onLogout,
 }) => {
+
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     try {
       return localStorage.getItem('openeval_sidebar_collapsed') === 'true';
@@ -137,9 +145,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
           icon: optionsOutline,
           isActive: isPolicyActive,
         },
+        {
+          id: 'hooks',
+          label: 'Hooks',
+          icon: terminalOutline,
+          isActive: activeTab === 'hooks',
+        },
       ],
     },
   ];
+
 
   return (
     <aside
@@ -239,7 +254,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
             />
           </div>
         )}
+
+        {!collapsed && currentUser && (
+          <div className="mt-2.5 pt-2 border-t border-[#221F33] flex items-center justify-between text-xs">
+            <span className="text-slate-300 font-mono text-[11px] truncate">@{currentUser.username}</span>
+            {onLogout && (
+              <button
+                type="button"
+                onClick={onLogout}
+                className="text-[11px] text-purple-400 hover:text-purple-300 hover:underline cursor-pointer"
+              >
+                Sign out
+              </button>
+            )}
+          </div>
+        )}
       </div>
+
     </aside>
   );
 };

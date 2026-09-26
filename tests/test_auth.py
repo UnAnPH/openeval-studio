@@ -309,3 +309,72 @@ def test_openeval_api_key_env_writes_as_owner(client, monkeypatch):
     )
     assert resp.status_code == 200
     assert resp.json()["username"] == "owner"
+
+
+def test_per_user_session_isolation_and_demo_fixtures(client):
+    """Smoke test: Register user1 and user2, submit evaluate calls with their keys,
+    and verify user1 sees only user1's sessions, user2 sees only user2's sessions,
+    and demo surface sees only demo fixtures.
+    """
+    from server.demo_seed import seed_demo_data
+
+    seed_demo_data()
+
+    # 1. Register user1 & submit evaluate call
+    u1 = client.post(
+        "/api/auth/register", json={"username": "user1_iso", "password": "passuser1"}
+    ).json()
+    client.post(
+        "/api/watcher/evaluate",
+        headers={"Authorization": f"Bearer {u1['api_key']}"},
+        json={
+            "tool_name": "bash",
+            "tool_input": "echo user1_unique_token",
+            "agent_id": "agent-user1",
+        },
+    )
+
+    # 2. Register user2 & submit evaluate call
+    u2 = client.post(
+        "/api/auth/register", json={"username": "user2_iso", "password": "passuser2"}
+    ).json()
+    client.post(
+        "/api/watcher/evaluate",
+        headers={"Authorization": f"Bearer {u2['api_key']}"},
+        json={
+            "tool_name": "bash",
+            "tool_input": "echo user2_unique_token",
+            "agent_id": "agent-user2",
+        },
+    )
+
+    # 3. User1 queries sessions
+    s1_resp = client.get(
+        "/api/v1/watcher/sessions", headers={"Authorization": f"Bearer {u1['api_key']}"}
+    )
+    assert s1_resp.status_code == 200
+    s1_sessions = s1_resp.json()
+    assert len(s1_sessions) == 1
+    assert "agent-user1" in str(s1_sessions[0])
+    assert "user2_unique_token" not in str(s1_sessions[0])
+
+    # 4. User2 queries sessions
+    s2_resp = client.get(
+        "/api/v1/watcher/sessions", headers={"Authorization": f"Bearer {u2['api_key']}"}
+    )
+    assert s2_resp.status_code == 200
+    s2_sessions = s2_resp.json()
+    assert len(s2_sessions) == 1
+    assert "agent-user2" in str(s2_sessions[0])
+    assert "user1_unique_token" not in str(s2_sessions[0])
+
+    # 5. Demo surface queries sessions (unauthenticated read)
+    demo_resp = client.get(
+        "/api/v1/watcher/sessions", headers={"X-OpenEval-Surface": "demo"}
+    )
+    assert demo_resp.status_code == 200
+    demo_sessions = demo_resp.json()
+    assert len(demo_sessions) > 0
+    assert not any("agent-user1" in str(s) for s in demo_sessions)
+    assert not any("agent-user2" in str(s) for s in demo_sessions)
+

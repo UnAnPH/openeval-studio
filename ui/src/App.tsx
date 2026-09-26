@@ -37,8 +37,32 @@ import {
   WatcherConfig,
   WatcherVerdict,
 } from './types';
+import { HookSetupView } from './components/HookSetupView';
+import { AuthModal } from './components/AuthModal';
+
+const isDemoSurface = () => {
+  if (typeof window === 'undefined') return false;
+  return window.location.pathname.startsWith('/demo') || window.location.hash.startsWith('#/demo');
+};
+
+if (typeof window !== 'undefined' && !(window as any)._openevalFetchInstalled) {
+  (window as any)._openevalFetchInstalled = true;
+  const originalFetch = window.fetch.bind(window);
+  window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (isDemoSurface()) {
+      init = init || {};
+      const headers = new Headers(init.headers || {});
+      if (!headers.has('X-OpenEval-Surface')) {
+        headers.set('X-OpenEval-Surface', 'demo');
+      }
+      init.headers = headers;
+    }
+    return originalFetch(input, init);
+  };
+}
 
 const getInitialUrlRoute = () => {
+
   try {
     const rawHash = window.location.hash.replace(/^#\/?/, '').trim();
     let basePath = rawHash;
@@ -85,8 +109,10 @@ const getInitialUrlRoute = () => {
     } else if (basePath === 'benchmarks' || basePath === 'test_cases') tab = 'benchmarks';
     else if (basePath.startsWith('compare')) tab = 'compare';
     else if (basePath === 'inspect') tab = 'inspect';
+    else if (basePath === 'hooks' || basePath === 'hook_setup') tab = 'hooks';
 
     return { tab, task, model, runId, incidentId };
+
   } catch {
     return { tab: 'overview' as MainNavTab, task: undefined, model: undefined, runId: undefined, incidentId: undefined };
   }
@@ -125,6 +151,12 @@ export function App() {
   const [serverConnected, setServerConnected] = useState<boolean>(false);
   const [isDemoSeed, setIsDemoSeed] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const [currentUser, setCurrentUser] = useState<{ user_id: number; username: string } | null>(null);
+  const [latestApiKey, setLatestApiKey] = useState<string | null>(null);
+  const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
+  const isDemo = typeof window !== 'undefined' && isDemoSurface();
+
 
   // Persistent client-side tombstone set for deleted runs
   const deletedRunIdsRef = useRef<Set<string>>(new Set());
@@ -234,11 +266,13 @@ export function App() {
         fetch('/api/watcher/interceptions?limit=40').catch(() => null),
       ]);
 
-      let isDemo = false;
+      let isDemo = isDemoSurface();
       if (healthRes && healthRes.ok) {
         setServerConnected(true);
         const healthData = await healthRes.json().catch(() => ({}));
-        isDemo = Boolean(healthData?.demo_seed);
+        if (Boolean(healthData?.demo_seed)) {
+          isDemo = true;
+        }
         setIsDemoSeed(isDemo);
       } else {
         // Appwrite Sites static demo mode (seamless fallback when no backend is running)
@@ -246,6 +280,21 @@ export function App() {
         setIsDemoSeed(true);
         isDemo = true;
       }
+
+      if (!isDemo) {
+        const meRes = await fetch('/api/auth/me').catch(() => null);
+        if (meRes && meRes.ok) {
+          const user = await meRes.json().catch(() => null);
+          if (user) {
+            setCurrentUser(user);
+            setShowAuthModal(false);
+          }
+        } else if (meRes && meRes.status === 401) {
+          setCurrentUser(null);
+          setShowAuthModal(true);
+        }
+      }
+
 
       if (sessionsRes && sessionsRes.ok) {
         const sessData = await sessionsRes.json();
@@ -343,8 +392,49 @@ export function App() {
     }
   };
 
+  const handleRotateKey = async (): Promise<string | null> => {
+    try {
+      const res = await fetch('/api/auth/rotate-key', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        setLatestApiKey(data.api_key);
+        return data.api_key;
+      }
+    } catch (e) {
+      console.error('Failed to rotate key', e);
+    }
+    return null;
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch {}
+    setCurrentUser(null);
+    setLatestApiKey(null);
+    if (!isDemo) {
+      setShowAuthModal(true);
+    }
+  };
+
+  const handleLoginSuccess = (user: { user_id: number; username: string }) => {
+    setCurrentUser(user);
+    setShowAuthModal(false);
+    fetchInitialData();
+  };
+
+  const handleRegisterSuccess = (user: { user_id: number; username: string; api_key: string }) => {
+    setCurrentUser({ user_id: user.user_id, username: user.username });
+    setLatestApiKey(user.api_key);
+    setShowAuthModal(false);
+    setNavTab('hooks');
+    setRoute('hooks');
+    fetchInitialData();
+  };
+
   // Helper to sync route into URL hash with browser history push
   const setRoute = (hashPath: string, replace: boolean = false) => {
+
     const clean = hashPath.replace(/^#\/?/, '').trim();
     const formatted = `#${clean}`;
     if (window.location.hash !== formatted) {
@@ -389,6 +479,10 @@ export function App() {
       } else if (basePath === 'policy' || basePath === 'watcher_live') {
         setNavTab('policy');
         setSelectedDetailRunId(null);
+      } else if (basePath === 'hooks' || basePath === 'hook_setup') {
+        setNavTab('hooks');
+        setSelectedDetailRunId(null);
+
       } else if (basePath === 'transcripts' || basePath === 'transcript_explorer') {
         setNavTab('sessions');
         setSelectedDetailRunId(null);
@@ -903,6 +997,8 @@ export function App() {
               setRoute('control');
             } else if (tab === 'policy' || tab === 'watcher_live') {
               setRoute('policy');
+            } else if (tab === 'hooks') {
+              setRoute('hooks');
             } else if (tab === 'transcripts') {
               setRoute('sessions');
             } else if (tab === 'graders') {
@@ -925,11 +1021,34 @@ export function App() {
           totalRuns={runsHistory.length}
           totalBlocked={findings.length}
           onExportSFT={() => handleExportSFTData()}
+          currentUser={currentUser}
+          onLogout={handleLogout}
         />
 
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden bg-[#fcfcfd]">
+          {isDemo && (
+            <div className="bg-gradient-to-r from-purple-900 via-indigo-900 to-purple-950 text-white px-4 py-2 flex items-center justify-between shadow-md border-b border-purple-700/50 text-xs sm:text-sm font-medium z-50 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <span className="bg-amber-400 text-purple-950 text-[10px] font-extrabold uppercase px-2 py-0.5 rounded tracking-wider shadow-xs">
+                  DEMO-ONLY
+                </span>
+                <span>
+                  Demo Mode: Viewing sanitized agent evaluation fixtures. Switch to Live Studio (/)
+                </span>
+              </div>
+              <a
+                href="/"
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-white/10 hover:bg-white/20 text-white transition-colors border border-white/20 hover:border-white/40 text-xs font-semibold"
+              >
+                <span>Live Studio (/)</span>
+                <span aria-hidden="true">&rarr;</span>
+              </a>
+            </div>
+          )}
+
           {!serverConnected && (
+
             <div className="mx-6 mt-3 p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-center justify-between shadow-xs shrink-0">
               <div className="flex items-center gap-2">
                 <IonIcon icon={alertCircleOutline} className="text-amber-600 text-base flex-shrink-0" />
@@ -988,6 +1107,17 @@ export function App() {
 
             {/* EVALUATE → Judges */}
             {navTab === 'graders' && <GraderWorkbenchView />}
+
+            {/* SAFETY → Hooks — Setup instructions & key rotation */}
+            {navTab === 'hooks' && (
+              <HookSetupView
+                apiKey={latestApiKey}
+                username={currentUser?.username}
+                onRotateKey={handleRotateKey}
+                isDemo={isDemo}
+              />
+            )}
+
 
             {/* SAFETY → Control — enforce / observe / paused + live feed */}
             {(navTab === 'control' || navTab === 'firewall') && (
@@ -1336,7 +1466,15 @@ export function App() {
           onDidDismiss={() => setErrorMsg(null)}
           buttons={[{ text: 'Dismiss', role: 'cancel' }]}
         />
+
+        {/* Auth Modal (Sign In / Register) */}
+        <AuthModal
+          isOpen={showAuthModal && !isDemo}
+          onLoginSuccess={handleLoginSuccess}
+          onRegisterSuccess={handleRegisterSuccess}
+        />
       </IonPage>
+
     </IonApp>
   );
 }

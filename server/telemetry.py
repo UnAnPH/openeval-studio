@@ -7,7 +7,11 @@ Computes:
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from sqlalchemy import text
+
+from server.db import SessionLocal, get_current_user_id
 from server.watcher_store import WatcherStore, get_watcher_store
+
 
 
 class LatencyPercentiles(BaseModel):
@@ -87,11 +91,13 @@ class TelemetryService:
 
     def get_telemetry_report(self) -> TelemetryReport:
         """Aggregate review latencies and calculate precision/recall metrics."""
-        with self.store._lock:
-            # Query all review latencies and stages
-            rows = self.store.con.execute(
-                "SELECT stage, latency_ms, decision, score FROM reviews"
+        with SessionLocal() as db:
+            user_id = get_current_user_id(db)
+            rows = db.execute(
+                text("SELECT stage, latency_ms, decision, score FROM reviews WHERE user_id = :uid"),
+                {"uid": user_id},
             ).fetchall()
+
 
         all_latencies: list[float] = []
         triage_latencies: list[float] = []
