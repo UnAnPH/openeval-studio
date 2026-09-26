@@ -1,14 +1,53 @@
 services:
-  openeval:
+  postgres:
+    image: postgres:16-alpine
+    container_name: openeval-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: openeval
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_password
+      POSTGRES_DB: openeval
+    secrets:
+      - pg_password
+    volumes:
+      - /var/lib/openeval/pg:/var/lib/postgresql/data
+    networks:
+      - openeval-net
+
+  app:
     image: ghcr.io/unanph/openeval-studio:${IMAGE_TAG:-latest}
     container_name: openeval-studio
     restart: unless-stopped
+    depends_on:
+      - postgres
+    env_file:
+      - path: /etc/openeval.env
+        required: false
+      - path: .release-env
+        required: false
+    command: >
+      sh -c "uv run alembic upgrade head && uv run uvicorn server.app:app --host 0.0.0.0 --port 8000"
+    networks:
+      - openeval-net
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: openeval-caddy
+    restart: unless-stopped
     ports:
-      - "80:8000"
-    environment:
-      - PORT=8000
-      - OPENEVAL_DEMO_SEED=1
-      - OPENEVAL_WATCHER_USE_LLM=0
-      - WATCHER_STORAGE_DIR=/var/lib/openeval
+      - "80:80"
+      - "443:443"
     volumes:
-      - /var/lib/openeval:/var/lib/openeval
+      - /var/lib/openeval/Caddyfile:/etc/caddy/Caddyfile:ro
+      - /var/lib/openeval/caddy_data:/data
+      - /var/lib/openeval/caddy_config:/config
+    networks:
+      - openeval-net
+
+networks:
+  openeval-net:
+    driver: bridge
+
+secrets:
+  pg_password:
+    file: ${POSTGRES_PASSWORD_FILE:-/var/lib/openeval/pg_password}
