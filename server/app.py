@@ -52,10 +52,52 @@ PROJECT_ROOT = Path(__file__).parent.parent
 TASKS_DIR = PROJECT_ROOT / "tasks"
 LOGS_DIR = PROJECT_ROOT / "logs"
 
+
+@contextlib.asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """Application lifespan manager for startup checks, migrations, and graceful shutdown."""
+    from alembic.config import Config
+    from sqlalchemy import text
+
+    from alembic import command
+    from server.agent_daemon import AgentWatcherDaemon
+    from server.db import SessionLocal, engine
+    from server.demo_seed import is_demo_seed_enabled, seed_demo_data
+
+    # Startup:
+    try:
+        with SessionLocal() as db:
+            db.execute(text("SELECT 1"))
+        alembic_ini = PROJECT_ROOT / "alembic.ini"
+        if alembic_ini.exists():
+            alembic_cfg = Config(str(alembic_ini))
+            command.upgrade(alembic_cfg, "head")
+    except Exception as exc:
+        logger.error("Database connection or migration failed during startup: %s", exc)
+
+    if is_demo_seed_enabled():
+        seed_demo_data()
+
+    _scrub_accidental_safe_overrides()
+
+    daemon: AgentWatcherDaemon | None = None
+    if not is_demo_seed_enabled():
+        daemon = AgentWatcherDaemon.get_instance()
+        daemon.start()
+
+    yield
+
+    # Shutdown:
+    if daemon is not None:
+        daemon.stop()
+    engine.dispose()
+
+
 app = FastAPI(
     title="OpenEval Studio API",
     version="0.1.0",
     description="Real-time Evaluation Engine & Sandbox Platform for Frontier AI Agents",
+    lifespan=lifespan,
 )
 
 # Enable CORS for local development and Vite frontend
@@ -164,16 +206,36 @@ class LaunchEvalResponse(BaseModel):
 
 
 @app.get("/api/health")
-async def health_check() -> dict[str, Any]:
-    """Health check endpoint with demo seed status and database engine info."""
-    from server.db_pool import get_db_manager
+async def health_check(response: Response) -> dict[str, Any]:
+    """Health check endpoint testing PostgreSQL connection."""
+    from sqlalchemy import text
+
+    from server.db import SessionLocal
 
     is_demo = os.getenv("OPENEVAL_DEMO_SEED", "0").lower() in ("1", "true", "yes")
+    db_connected = False
+    try:
+        with SessionLocal() as db:
+            res = db.execute(text("SELECT 1")).scalar()
+            db_connected = res == 1
+    except Exception as exc:
+        logger.warning("Database health probe failed: %s", exc)
+        db_connected = False
+
+    if not db_connected:
+        response.status_code = 503
+        return {
+            "status": "degraded",
+            "db": "disconnected",
+            "version": "0.1.0",
+            "demo_seed": is_demo,
+        }
+
     return {
         "status": "ok",
+        "db": "connected",
         "version": "0.1.0",
         "demo_seed": is_demo,
-        "database": get_db_manager().get_status(),
     }
 
 
@@ -3392,32 +3454,6 @@ def _scrub_accidental_safe_overrides() -> None:
                     item.reason = re.sub(r"\s*\[Operator[^\]]*\]", "", item.reason).strip()
     except Exception as err:
         logger.warning("Failed scrubbing accidental safe overrides: %s", err)
-
-
-@app.on_event("startup")
-async def startup_event() -> None:
-    """Initialize active local coding agent watcher daemon and demo seeder."""
-    from server.agent_daemon import AgentWatcherDaemon
-    from server.demo_seed import is_demo_seed_enabled, seed_demo_data
-
-    if is_demo_seed_enabled():
-        seed_demo_data()
-
-    _scrub_accidental_safe_overrides()
-    if not is_demo_seed_enabled():
-        daemon = AgentWatcherDaemon.get_instance()
-        daemon.start()
-
-
-@app.on_event("shutdown")
-async def shutdown_event() -> None:
-    """Gracefully terminate background daemon."""
-    from server.agent_daemon import AgentWatcherDaemon
-    from server.demo_seed import is_demo_seed_enabled
-
-    if not is_demo_seed_enabled():
-        daemon = AgentWatcherDaemon.get_instance()
-        daemon.stop()
 
 
 _ui_dist = Path(__file__).resolve().parent.parent / "ui" / "dist"

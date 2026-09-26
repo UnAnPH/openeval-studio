@@ -33,9 +33,27 @@ def seed_demo_data(
     fixtures_dir: Path | None = None,
     store: "WatcherStore | None" = None,
 ) -> dict[str, int]:
-    """Seed demo sessions, interception verdicts, and evaluation runs into stores."""
+    """Seed demo sessions, interception verdicts, and evaluation runs into stores under slug 'demo'."""
+    from sqlalchemy import text
+
+    from server.db import SessionLocal, current_user_id, current_user_slug
     from server.store import global_run_store
     from server.watcher_store import get_watcher_store
+
+    # 1. Idempotently ensure 'demo' and 'owner' users exist in the database
+    with SessionLocal() as db:
+        db.execute(
+            text(
+                "INSERT INTO users (slug) VALUES ('demo'), ('owner') ON CONFLICT (slug) DO NOTHING;"
+            )
+        )
+        db.commit()
+        demo_uid_row = db.execute(text("SELECT id FROM users WHERE slug = 'demo'")).fetchone()
+        demo_user_id = int(demo_uid_row[0]) if demo_uid_row else 1
+
+    # Scope all subsequent fixture writes exclusively to the 'demo' tenant
+    current_user_slug.set("demo")
+    current_user_id.set(demo_user_id)
 
     root_dir = fixtures_dir or DEMO_FIXTURES_DIR
     ws = watcher_store or store or get_watcher_store()
@@ -48,12 +66,10 @@ def seed_demo_data(
     seeded_interceptions = 0
     seeded_evals = 0
 
-    # Ensure isolated clean state when demo seed is enabled
     if is_demo_seed_enabled():
-        ws.clear_all_sessions()
         global_watcher_engine._interception_history.clear()
 
-    # 1. Seed sessions into WatcherStore
+    # 1. Seed sessions into WatcherStore under demo user
     if sessions_dir.exists():
         for f in sorted(sessions_dir.glob("*.json")):
             try:
