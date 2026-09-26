@@ -1,6 +1,6 @@
 services:
   openeval:
-    image: ghcr.io/unanph/openeval-studio:latest
+    image: ghcr.io/unanph/openeval-studio:${IMAGE_TAG:-latest}
     container_name: openeval-studio
     restart: unless-stopped
     ports:

@@ -48,6 +48,12 @@ flowchart TD
 3. **Zero Local Builds:** The instance pulls `ghcr.io/unanph/openeval-studio:latest` built by GitHub Actions CI. Building React bundles or compiling dependencies on a 1GB `t3.micro` instance is strictly avoided to prevent out-of-memory crashes.
 4. **Hardened Perimeter:** Port 80 is open to the public; Port 22 is only open if `admin_cidr` is explicitly passed (defaults to `[]` so SSH is closed by default).
 
+> [!IMPORTANT]
+> **One-Time GHCR Package Visibility Requirement:**
+> On the first push to GitHub Container Registry (`ghcr.io/unanph/openeval-studio`), GitHub defaults new package visibility to **Private**.
+> To allow the EC2 instance to pull images without authentication, navigate to your GitHub Profile/Org -> **Packages** -> `openeval-studio` -> **Package settings** -> **Change visibility** -> set to **Public**.
+> Alternatively, configure a Personal Access Token (`GHCR_PULL_TOKEN` with `read:packages` scope) on the EC2 host via `echo $GHCR_PULL_TOKEN | docker login ghcr.io -u <username> --password-stdin`.
+
 ---
 
 ## 2. Cost Analysis (London `eu-west-2`)
