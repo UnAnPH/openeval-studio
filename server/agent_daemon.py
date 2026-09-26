@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import glob
 import logging
+import os
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -119,9 +120,7 @@ class AgentWatcherDaemon:
 
     def scan_once(self) -> int:
         """Single polling cycle checking Antigravity, Claude Code, and Cursor logs."""
-        from server.demo_seed import is_demo_seed_enabled
-
-        if is_demo_seed_enabled():
+        if os.getenv("OPENEVAL_AUTO_SCAN_LOCAL_LOGS", "0").lower() not in ("1", "true", "yes"):
             return 0
 
         new_events = 0

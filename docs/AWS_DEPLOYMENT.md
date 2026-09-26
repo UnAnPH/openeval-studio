@@ -68,14 +68,14 @@ flowchart TD
 
 ## 2. Cost Analysis (London `eu-west-2`)
 
-| Resource | Configuration | Monthly Cost (Post-Free Tier) | AWS Free Tier (First 12 Mo) |
+| Resource | Configuration | Monthly Cost (Always-On) | Notes |
 | :--- | :--- | :--- | :--- |
-| **Compute** | EC2 `t3.micro` (amd64, 2 vCPU, 1GB RAM) | ~$8.60 | **$0.00** (750 hrs/mo free) |
-| **Public IPv4** | 1 In-use auto-assigned Public IPv4 | ~$3.65 | **$0.00** (covered under free tier allowance) |
-| **Storage** | 10 GB gp3 Root SSD volume | ~$0.96 | **$0.00** (up to 30GB free) |
-| **Backups** | Amazon S3 Standard (~100MB gzipped dumps) | ~$0.05 | **$0.00** (up to 5GB free) |
-| **Total Always-On** | | **~$13 – $15 / mo** | **~$0.00 – $1.00 / mo** |
-| **Teardown (`make cloud-off`)** | All resources destroyed | **$0.00 / mo** | **$0.00 / mo** |
+| **Compute** | EC2 `t3.micro` (amd64, 2 vCPU, 1GB RAM) | ~$8.60 | May be covered by older 12-month free-tier accounts (750 hrs/mo) |
+| **Public IPv4** | 1 In-use auto-assigned Public IPv4 | ~$3.65 | Charged on credit-era accounts (post-2025-07-15); not free by default |
+| **Storage** | 10 GB gp3 Root SSD volume | ~$0.96 | Up to 30GB may be free on classic free-tier accounts |
+| **Backups** | Amazon S3 Standard (~100MB gzipped dumps) | ~$0.05 | Negligible |
+| **Total Always-On** | | **~$13 – $15 / mo** | Expect this on a credit account; older free-tier may be lower |
+| **Teardown (`make cloud-off`)** | All resources destroyed | **$0.00 / mo** | Guaranteed zero burn |
 
 *Eliminated from prior architecture:* Application Load Balancer (~$16.40/mo + ~$7.30 for 2 public IPs), Amazon RDS db.t4g.micro (~$11.60/mo + storage), secondary public and private subnets, 30GB disk.
 

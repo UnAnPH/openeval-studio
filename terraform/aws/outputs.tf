@@ -24,8 +24,8 @@ output "backup_bucket" {
 }
 
 output "monthly_cost_estimate" {
-  value       = "~$12 - $16 / month (or $0 - $1 in AWS 12-month free tier); $0.00 / hour when destroyed via 'make cloud-off'"
-  description = "Estimated monthly run cost in eu-west-2 (London)."
+  value       = "~$13 - $15 / month always-on (t3.micro + public IPv4 + 10GB gp3); $0.00 / hour when destroyed via 'make cloud-off'"
+  description = "Estimated monthly run cost in eu-west-2 (London). Credit-era accounts pay for public IPv4."
 }
 
 output "demo_instructions" {

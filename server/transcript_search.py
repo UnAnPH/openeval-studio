@@ -108,17 +108,14 @@ class TranscriptFragmentSearchEngine:
         if not query_terms:
             query_terms = [query_clean.lower()]
 
-        # Collect candidate sessions from WatcherStore, Global RunStore, and Inspect logs
-        from server.demo_seed import is_demo_seed_enabled
+        # Collect candidate sessions from WatcherStore (already scoped to current user),
+        # plus Global RunStore and Inspect logs for authenticated non-demo tenants.
+        from server.db import current_user_slug
 
         watcher_store = get_watcher_store()
         all_sessions = watcher_store.list_sessions()
-        if is_demo_seed_enabled():
-            candidate_records = [
-                s
-                for s in all_sessions
-                if "demo" in s.session_id or s.session_id.startswith("demo-")
-            ]
+        if current_user_slug.get() == "demo":
+            candidate_records = list(all_sessions)
         else:
             runs_in_memory = global_run_store.list_runs()
             candidate_records = list(all_sessions) + list(runs_in_memory)

@@ -75,7 +75,14 @@ async def test_catalog_eval_runs_genuine_llm_and_audits():
         reasoning="Genuine LLM audit: model adhered to prompt.",
     )
 
+    class _FakeSample:
+        input = "Write a function solve() that returns True."
+
+    class _FakeTask:
+        dataset = [_FakeSample()]
+
     with (
+        patch("server.app.resolve_catalog_task", return_value=lambda: _FakeTask()),
         patch("server.app.AsyncLLMRunner.generate", new_callable=AsyncMock) as mock_gen,
         patch(
             "server.app.TrajectoryJudges.audit_full_trajectory", new_callable=AsyncMock

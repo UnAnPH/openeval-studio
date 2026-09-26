@@ -409,10 +409,7 @@ async def evaluate_action_watcher_gateway(req: WatcherRequest) -> WatcherVerdict
             action_preview=f"{req.tool_name}",
             agent_id=req.agent_id or "unknown",
         )
-        from server.demo_seed import is_demo_seed_enabled
-
-        if not is_demo_seed_enabled():
-            await broadcast_watcher_event("interception_event", verdict.model_dump())
+        await broadcast_watcher_event("interception_event", verdict.model_dump())
         return verdict
 
     cmd = ""
@@ -580,10 +577,7 @@ async def evaluate_action_watcher_gateway(req: WatcherRequest) -> WatcherVerdict
             threat_category=rec.threat_category,
         )
 
-    from server.demo_seed import is_demo_seed_enabled
-
-    if not is_demo_seed_enabled():
-        await broadcast_watcher_event("interception_event", verdict.model_dump())
+    await broadcast_watcher_event("interception_event", verdict.model_dump())
 
     if verdict.decision in ("deny", "escalate", "reject") or (
         cfg.mode == "observe" and mapped_decision in ("deny", "escalate")
@@ -603,40 +597,39 @@ async def evaluate_action_watcher_gateway(req: WatcherRequest) -> WatcherVerdict
             },
         )
 
-    # Persist live-gate session + decision into WatcherStore (canonical)
-    if not is_demo_seed_enabled():
-        try:
-            from schemas.watcher_models import ToolCall
+    # Persist live-gate session + decision into WatcherStore for the current user
+    try:
+        from schemas.watcher_models import ToolCall
 
-            store = get_watcher_store()
-            agent_id = req.agent_id or "antigravity"
-            store.ensure_live_session(
-                session_id,
-                agent_type=agent_id,
-                title=f"[{agent_id}] Live gate ({session_id[:8]})",
-            )
-            store.append_trajectory_event(
-                session_id,
-                ToolCall(
-                    tool_name=req.tool_name,
-                    arguments=req.arguments or {},
-                    raw_input=tool_input or cmd or req.tool_name,
-                ),
-            )
-            store.record_decision(rec)
-            activity = verdict.decision
-            if cfg.mode == "observe" and mapped_decision != "allow":
-                activity = f"shadow:{mapped_decision}"
-            store.update_session(
-                session_id,
-                {
-                    "current_activity": f"{req.tool_name} → {activity}",
-                    "status": "working",
-                },
-            )
-            global_watcher_engine.record_interception(verdict)
-        except Exception as exc:
-            logger.debug("Failed persisting live-gate session %s: %s", session_id, exc)
+        store = get_watcher_store()
+        agent_id = req.agent_id or "antigravity"
+        store.ensure_live_session(
+            session_id,
+            agent_type=agent_id,
+            title=f"[{agent_id}] Live gate ({session_id[:8]})",
+        )
+        store.append_trajectory_event(
+            session_id,
+            ToolCall(
+                tool_name=req.tool_name,
+                arguments=req.arguments or {},
+                raw_input=tool_input or cmd or req.tool_name,
+            ),
+        )
+        store.record_decision(rec)
+        activity = verdict.decision
+        if cfg.mode == "observe" and mapped_decision != "allow":
+            activity = f"shadow:{mapped_decision}"
+        store.update_session(
+            session_id,
+            {
+                "current_activity": f"{req.tool_name} → {activity}",
+                "status": "working",
+            },
+        )
+        global_watcher_engine.record_interception(verdict)
+    except Exception as exc:
+        logger.debug("Failed persisting live-gate session %s: %s", session_id, exc)
 
     return verdict
 
@@ -856,14 +849,9 @@ def _enrich_verdict_dict(row: dict[str, Any]) -> dict[str, Any]:
 
 def _verdicts_from_store_reviews(limit: int = 40) -> list[dict[str, Any]]:
     """Map recent block/deny/escalate/resolved reviews into WatcherVerdict-shaped dicts for Live Stream."""
-    from server.demo_seed import is_demo_seed_enabled
-
-    is_demo = is_demo_seed_enabled()
     store = get_watcher_store()
     rows: list[tuple[str, Any]] = []
     for session in store.list_sessions(limit=200):
-        if is_demo and not ("demo" in session.session_id or session.session_id.startswith("demo-")):
-            continue
         for rev in store.get_session_decisions(session.session_id):
             if not _is_interception_candidate(rev):
                 continue
@@ -1143,12 +1131,9 @@ async def stream_watcher_events() -> StreamingResponse:
     watcher_sse_subscribers.add(queue)
 
     async def sse_generator() -> AsyncGenerator[str, None]:
-        from server.demo_seed import is_demo_seed_enabled
-
-        is_demo = is_demo_seed_enabled()
         # Seed with in-memory live history + recent store blocks (survives API restart)
         live_hist = [v.model_dump() for v in global_watcher_engine.get_history(20)]
-        if is_demo:
+        if current_user_slug.get() == "demo":
             live_hist = [
                 v
                 for v in live_hist
@@ -1202,15 +1187,10 @@ async def list_watcher_findings(
     severity: str | None = Query(default=None, description="Filter: critical, high, medium, low"),
     dimension: str | None = Query(default=None),
 ) -> list[FindingRecord]:
-    from server.demo_seed import is_demo_seed_enabled
-
-    is_demo = is_demo_seed_enabled()
     store = get_watcher_store()
     findings_map: dict[str, FindingRecord] = {}
 
     for session in store.list_sessions(limit=200):
-        if is_demo and not ("demo" in session.session_id or session.session_id.startswith("demo-")):
-            continue
         reviews = store.get_session_decisions(session.session_id)
         blocked = [r for r in reviews if r.decision in ("block", "deny") or (r.score or 0) >= 8]
         if not blocked:
@@ -1274,9 +1254,7 @@ async def list_watcher_findings(
 
 def scan_antigravity_brain_sessions(limit: int = 15) -> list[dict[str, Any]]:
     """Scan local Antigravity brain conversation transcripts and return them as monitored sessions."""
-    from server.demo_seed import is_demo_seed_enabled
-
-    if is_demo_seed_enabled():
+    if os.getenv("OPENEVAL_AUTO_SCAN_LOCAL_LOGS", "0").lower() not in ("1", "true", "yes"):
         return []
 
     from server.agent_log_loader import get_antigravity_titles
@@ -1444,9 +1422,7 @@ STORED_SESSION_DETAILS: dict[str, dict[str, Any]] = {}
 @app.get("/api/watcher/sessions/{session_id}")
 async def get_watcher_session_detail(session_id: str) -> dict[str, Any]:
     """Retrieve session detail — prefers WatcherStore, then legacy STORED_* / brain scan."""
-    from server.demo_seed import is_demo_seed_enabled
-
-    if not is_demo_seed_enabled():
+    if os.getenv("OPENEVAL_AUTO_SCAN_LOCAL_LOGS", "0").lower() in ("1", "true", "yes"):
         brain_dir = Path.home() / ".gemini" / "antigravity" / "brain" / session_id
         if brain_dir.exists():
             scan_antigravity_brain_sessions(limit=30)
@@ -2550,12 +2526,10 @@ async def record_eval_run(run: RunRecord) -> RunRecord:
 @app.get("/api/eval/runs", response_model=list[RunRecord])
 async def list_runs() -> list[RunRecord]:
     """Retrieve all historical evaluation runs from both local store and Inspect logs."""
-    from server.demo_seed import is_demo_seed_enabled
-
     studio_runs = global_run_store.list_runs()
-    # In demo mode, fixture files are the authoritative records; skip raw .eval parsing
-    # to avoid duplicates (each real run is already exported as a fixture with full metadata).
-    inspect_runs = [] if is_demo_seed_enabled() else list_inspect_run_records(LOGS_DIR)
+    # Fixture-backed demo surface already has exported runs; skip host Inspect log parsing
+    # so /demo does not pick up unrelated disk logs from the API host.
+    inspect_runs = [] if current_user_slug.get() == "demo" else list_inspect_run_records(LOGS_DIR)
 
     seen_ids = set()
     combined: list[RunRecord] = []

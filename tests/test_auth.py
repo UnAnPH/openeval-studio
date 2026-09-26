@@ -372,6 +372,56 @@ def test_per_user_session_isolation_and_demo_fixtures(client):
     assert not any("agent-user2" in str(s) for s in demo_sessions)
 
 
+def test_evaluate_persists_while_demo_seed_enabled(client, monkeypatch):
+    """OPENEVAL_DEMO_SEED=1 only loads fixtures; authenticated evaluate still writes the caller's session."""
+    monkeypatch.setenv("OPENEVAL_DEMO_SEED", "1")
+    monkeypatch.setenv("OPENEVAL_AUTH_DISABLED", "0")
+
+    from server.demo_seed import seed_demo_data
+
+    seed_demo_data()
+
+    reg = client.post(
+        "/api/auth/register",
+        json={"username": "hook_user_seed", "password": "password123"},
+    )
+    assert reg.status_code == 200
+    api_key = reg.json()["api_key"]
+
+    eval_resp = client.post(
+        "/api/watcher/evaluate",
+        headers={"Authorization": f"Bearer {api_key}"},
+        json={
+            "tool_name": "bash",
+            "tool_input": "echo hook_user_seed_token",
+            "agent_id": "agent-hook-seed",
+            "session_id": "hook-seed-session-1",
+        },
+    )
+    assert eval_resp.status_code == 200
+
+    sess_resp = client.get(
+        "/api/v1/watcher/sessions",
+        headers={"Authorization": f"Bearer {api_key}"},
+    )
+    assert sess_resp.status_code == 200
+    sessions = sess_resp.json()
+    assert len(sessions) >= 1
+    assert any(
+        s.get("session_id") == "hook-seed-session-1" or "agent-hook-seed" in str(s)
+        for s in sessions
+    )
+
+    # Demo surface still only sees fixture rows
+    demo_resp = client.get(
+        "/api/v1/watcher/sessions",
+        headers={"X-OpenEval-Surface": "demo"},
+    )
+    assert demo_resp.status_code == 200
+    demo_sessions = demo_resp.json()
+    assert not any(s.get("session_id") == "hook-seed-session-1" for s in demo_sessions)
+
+
 def test_api_key_lookup_with_short_env_key_succeeds(client, monkeypatch):
     """When OPENEVAL_API_KEY is set to a short string, a registered user with oe_live_... key returns 200."""
     monkeypatch.setenv("OPENEVAL_API_KEY", "short")

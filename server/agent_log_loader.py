@@ -12,6 +12,7 @@ high-signal flight control, forensic search, and collaborative review.
 
 import json
 import logging
+import os
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -801,9 +802,7 @@ class UniversalAgentLogLoader:
     @classmethod
     def scan_default_agent_directories(cls) -> list[Session]:
         """Scan standard local directories for Antigravity, Claude Code, and Cursor logs."""
-        from server.demo_seed import is_demo_seed_enabled
-
-        if is_demo_seed_enabled():
+        if os.getenv("OPENEVAL_AUTO_SCAN_LOCAL_LOGS", "0").lower() not in ("1", "true", "yes"):
             return []
 
         ingested: list[Session] = []

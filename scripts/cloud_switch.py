@@ -140,7 +140,9 @@ def cmd_status() -> None:
     else:
         est_monthly = rate * 24 * 30.5
         print(f"💰 Estimated Cloud Burn Rate:  ~${rate:.4f} / hour (~${est_monthly:.2f} / month)")
-        print("   ℹ️  Inside the AWS 12-month free tier: ~$0.00 - $1.00 / month")
+        print(
+            "   ℹ️  Typical always-on cost in London: ~$13–$15 / month (t3.micro + public IPv4 + 10GB gp3)"
+        )
         print("   💡 Run 'make cloud-off' at any time for immediate $0.00/hr teardown.")
     print()
 

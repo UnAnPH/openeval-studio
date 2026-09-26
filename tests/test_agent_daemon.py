@@ -3,7 +3,15 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from server.agent_daemon import AgentWatcherDaemon
+
+
+@pytest.fixture(autouse=True)
+def enable_local_log_scan(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Daemon scans are opt-in via OPENEVAL_AUTO_SCAN_LOCAL_LOGS."""
+    monkeypatch.setenv("OPENEVAL_AUTO_SCAN_LOCAL_LOGS", "1")
 
 
 def test_daemon_status_initial():
@@ -17,6 +25,23 @@ def test_daemon_status_initial():
     assert any("Antigravity" in s for s in status.monitored_sources)
     assert any("Claude Code" in s for s in status.monitored_sources)
     assert any("Cursor" in s for s in status.monitored_sources)
+
+
+def test_daemon_scan_skipped_without_flag(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    """Without OPENEVAL_AUTO_SCAN_LOCAL_LOGS, scan_once is a no-op."""
+    monkeypatch.setenv("OPENEVAL_AUTO_SCAN_LOCAL_LOGS", "0")
+    brain_dir = tmp_path / "brain"
+    conv_dir = brain_dir / "conv_abc123" / ".system_generated" / "logs"
+    conv_dir.mkdir(parents=True, exist_ok=True)
+    (conv_dir / "transcript.jsonl").write_text("{}\n", encoding="utf-8")
+
+    daemon = AgentWatcherDaemon(
+        antigravity_brain_dir=brain_dir,
+        claude_sessions_dir=tmp_path / "claude",
+        claude_projects_dir=tmp_path / "claude_projects",
+        cursor_projects_dir=tmp_path / "cursor",
+    )
+    assert daemon.scan_once() == 0
 
 
 def test_daemon_scan_antigravity_logs(tmp_path: Path):

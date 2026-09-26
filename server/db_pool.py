@@ -23,10 +23,7 @@ class DatabaseManager:
 
     def get_storage_dir(self) -> str:
         """Resolve the active storage directory on disk."""
-        from server.demo_seed import is_demo_seed_enabled
-
-        default_dir = ".runs/demo_watcher" if is_demo_seed_enabled() else ".runs/watcher"
-        storage_path = Path(os.getenv("WATCHER_STORAGE_DIR", default_dir)).resolve()
+        storage_path = Path(os.getenv("WATCHER_STORAGE_DIR", ".runs/watcher")).resolve()
         return str(storage_path)
 
     def get_status(self) -> dict[str, Any]:
