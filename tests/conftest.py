@@ -17,7 +17,6 @@ os.environ.setdefault(
 os.environ.setdefault("OPENEVAL_AUTH_DISABLED", "1")
 
 
-
 @pytest.fixture(autouse=True, scope="session")
 def setup_test_database():
     """Ensure database schema is up-to-date for test suite."""

@@ -16,7 +16,7 @@
 
 1. **Eval IDE** — sandboxed agent evaluation harness, streaming trajectories, synchronized run compare, hybrid transcript search, and Inspect AI bridge.
 2. **Runtime Gate** — real-time PreToolUse governance hooks for **Antigravity**, **Claude Code**, and **Cursor** invoking `/api/gate/evaluate` (alias `/api/watcher/evaluate`) with deterministic command rules, tool thresholds (1–10), and optional LLM triage/deep review.
-3. **Org-Wide Analyzer** — DuckDB-backed analytical telemetry tracking cross-session block rates, latency percentiles, and top blocked threat categories.
+3. **Org-Wide Analyzer** — PostgreSQL 16 telemetry tracking cross-session block rates, latency percentiles, and top blocked threat categories.
 
 *Engineering notes: See [PORTFOLIO.md](PORTFOLIO.md) for what this work sample proves, and [SELF_HOST.md](SELF_HOST.md) for self-hosting instructions.*
 
@@ -28,8 +28,9 @@
 | :--- | :--- | :--- |
 | **Safety → Control** | Interactive intervention (`deny` / `force_ask`) | PreToolUse hooks intercept unsafe commands (`sudo rm -rf`, credential dumps) before dispatch. |
 | **Safety → Sessions** | Full agent trajectory audit & hybrid search | Dense semantic embeddings + lexical keyword search over unclipped agent transcripts. |
-| **Safety → Analyzer** | Organization-wide threat & latency metrics | In-process DuckDB SQL queries over session reviews computing $p50/p95$ gate latencies & threat distributions. |
+| **Safety → Analyzer** | Organization-wide threat & latency metrics | PostgreSQL 16 queries over session reviews computing $p50/p95$ gate latencies & threat distributions. |
 | **Evaluate → Runs** | Inspect AI benchmark execution & compare | Synchronized step-by-step diffs across agent trajectories with 4-pillar safety audit verdicts. |
+
 
 ---
 
@@ -65,7 +66,8 @@ In **Safety → Sessions**, use hybrid dense vector + lexical search:
 
 ## 4. Runtime Gate Architecture (What Actually Runs)
 
-1. **Deterministic Command Rules** — regex matching backed by DuckDB: `allow`, `triage`, `human`, `deny`, `off`.
+1. **Deterministic Command Rules** — regex matching backed by PostgreSQL 16: `allow`, `triage`, `human`, `deny`, `off`.
+
 2. **Tool Thresholds** — per-tool 1–10 risk limits: auto-approve, escalate, auto-deny.
 3. **Fast Triage** — heuristic Secret Reading analysis, or Gemini XML grading when `OPENEVAL_GATE_USE_LLM=1`.
 4. **Deep Review** — comprehensive context inspection when risk is elevated.

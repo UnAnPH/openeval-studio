@@ -21,7 +21,9 @@ from server.db import SessionLocal, current_user_id, current_user_slug
 logger = logging.getLogger("openeval.auth")
 
 SESSION_COOKIE_NAME = "oe_session"
-SESSION_SECRET = os.getenv("SESSION_SECRET", "openeval-dev-secret-key-32-chars-long").encode("utf-8")
+SESSION_SECRET = os.getenv("SESSION_SECRET", "openeval-dev-secret-key-32-chars-long").encode(
+    "utf-8"
+)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -114,7 +116,6 @@ def resolve_api_key_user(raw_key: str) -> tuple[int, str] | None:
     return None
 
 
-
 # ---------------------------------------------------------------------------
 # Request & Response Models (password_hash strictly excluded)
 # ---------------------------------------------------------------------------
@@ -183,10 +184,7 @@ def register(req: RegisterRequest, response: Response) -> Any:
             )
 
         res = db.execute(
-            text(
-                "INSERT INTO users (slug, password_hash) VALUES (:slug, :hash) "
-                "RETURNING id"
-            ),
+            text("INSERT INTO users (slug, password_hash) VALUES (:slug, :hash) RETURNING id"),
             {"slug": username, "hash": pwd_hash},
         )
         user_row = res.fetchone()
@@ -199,9 +197,7 @@ def register(req: RegisterRequest, response: Response) -> Any:
 
         # Store hashed API key
         db.execute(
-            text(
-                "INSERT INTO api_keys (user_id, token_hash) VALUES (:uid, :hash)"
-            ),
+            text("INSERT INTO api_keys (user_id, token_hash) VALUES (:uid, :hash)"),
             {"uid": user_id, "hash": key_hash},
         )
         db.commit()

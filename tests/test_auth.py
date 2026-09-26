@@ -1,7 +1,6 @@
 """Tests for multi-tenant authentication, registration, session cookies, and API key management."""
 
 import hashlib
-import os
 
 import pytest
 from fastapi.testclient import TestClient
@@ -270,18 +269,14 @@ def test_demo_surface_write_with_auth_writes_as_user(client):
     assert resp.status_code == 200
     # The session belongs to 'heidi'
     with SessionLocal() as db:
-        heidi_uid = db.execute(
-            text("SELECT id FROM users WHERE slug = 'heidi'")
-        ).scalar()
-        demo_uid = db.execute(
-            text("SELECT id FROM users WHERE slug = 'demo'")
-        ).scalar()
+        heidi_uid = db.execute(text("SELECT id FROM users WHERE slug = 'heidi'")).scalar()
+        demo_uid = db.execute(text("SELECT id FROM users WHERE slug = 'demo'")).scalar()
 
         heidi_sessions = db.execute(
             text("SELECT count(*) FROM sessions WHERE user_id = :uid"),
             {"uid": heidi_uid},
         ).scalar()
-        assert heidi_sessions > 0
+        assert (heidi_sessions or 0) > 0
 
         # Verify demo user was not written to
         demo_sessions = db.execute(
@@ -369,12 +364,9 @@ def test_per_user_session_isolation_and_demo_fixtures(client):
     assert "user1_unique_token" not in str(s2_sessions[0])
 
     # 5. Demo surface queries sessions (unauthenticated read)
-    demo_resp = client.get(
-        "/api/v1/watcher/sessions", headers={"X-OpenEval-Surface": "demo"}
-    )
+    demo_resp = client.get("/api/v1/watcher/sessions", headers={"X-OpenEval-Surface": "demo"})
     assert demo_resp.status_code == 200
     demo_sessions = demo_resp.json()
     assert len(demo_sessions) > 0
     assert not any("agent-user1" in str(s) for s in demo_sessions)
     assert not any("agent-user2" in str(s) for s in demo_sessions)
-

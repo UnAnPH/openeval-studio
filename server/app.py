@@ -41,6 +41,15 @@ from engine.watcher_sdk import WatcherClient
 from sandbox.docker_runner import DockerSandbox, create_sandbox_for_task
 from schemas.models import ModelSpec, get_available_models, get_default_model, get_model_spec
 from schemas.task_spec import TaskMetadata, TaskSpec, load_task_spec
+from server.auth import (
+    SESSION_COOKIE_NAME,
+    resolve_api_key_user,
+    verify_session_token,
+)
+from server.auth import (
+    router as auth_router,
+)
+from server.db import SessionLocal, current_user_id, current_user_slug, get_user_id_by_slug
 from server.inspect_loader import list_inspect_run_records
 from server.store import RunRecord, global_run_store
 from server.watcher_store import get_watcher_store
@@ -110,15 +119,6 @@ app.add_middleware(
 )
 
 
-from server.auth import (
-    SESSION_COOKIE_NAME,
-    resolve_api_key_user,
-    router as auth_router,
-    verify_session_token,
-)
-from server.db import SessionLocal, current_user_id, current_user_slug, get_user_id_by_slug
-
-
 class _AuthMiddleware(BaseHTTPMiddleware):
     """Authentication and tenant isolation middleware.
 
@@ -147,10 +147,14 @@ class _AuthMiddleware(BaseHTTPMiddleware):
 
         # 3. Detect surface header
         surface_header = (
-            request.headers.get("X-OpenEval-Surface")
-            or request.headers.get("x-openeval-surface")
-            or ""
-        ).strip().lower()
+            (
+                request.headers.get("X-OpenEval-Surface")
+                or request.headers.get("x-openeval-surface")
+                or ""
+            )
+            .strip()
+            .lower()
+        )
 
         # 4. Check for session cookie
         cookie_val = request.cookies.get(SESSION_COOKIE_NAME)
@@ -194,7 +198,6 @@ class _AuthMiddleware(BaseHTTPMiddleware):
                         status_code=401,
                     )
 
-
         # 7. Authenticated user path
         if authenticated_user:
             uid, slug = authenticated_user
@@ -212,14 +215,15 @@ class _AuthMiddleware(BaseHTTPMiddleware):
 
         # 9. All other protected endpoints reject unauthenticated access
         return JSONResponse(
-            {"detail": "Authentication required. Provide valid session cookie, Bearer token, or X-OpenEval-Key."},
+            {
+                "detail": "Authentication required. Provide valid session cookie, Bearer token, or X-OpenEval-Key."
+            },
             status_code=401,
         )
 
 
 app.add_middleware(_AuthMiddleware)
 app.include_router(auth_router)
-
 
 
 class TaskSummary(BaseModel):
@@ -1087,14 +1091,14 @@ async def list_watcher_interceptions(
     """Recent blocked/escalated reviews + in-memory live-gate history for Control Live Stream."""
     from server.demo_seed import is_demo_seed_enabled
 
-    if (
-        not is_demo_seed_enabled()
-        and os.getenv("OPENEVAL_AUTO_SCAN_LOCAL_LOGS", "0").lower() in ("1", "true", "yes")
+    if not is_demo_seed_enabled() and os.getenv("OPENEVAL_AUTO_SCAN_LOCAL_LOGS", "0").lower() in (
+        "1",
+        "true",
+        "yes",
     ):
         from server.agent_log_loader import UniversalAgentLogLoader
 
         UniversalAgentLogLoader.scan_default_agent_directories()
-
 
     live = [v.model_dump() for v in global_watcher_engine.get_history(limit)]
     if is_demo_seed_enabled():
@@ -1408,9 +1412,10 @@ async def list_watcher_sessions() -> list[dict[str, Any]]:
     """Legacy alias → WatcherStore sessions (same source as /api/v1/watcher/sessions)."""
     from server.demo_seed import is_demo_seed_enabled
 
-    if (
-        not is_demo_seed_enabled()
-        and os.getenv("OPENEVAL_AUTO_SCAN_LOCAL_LOGS", "0").lower() in ("1", "true", "yes")
+    if not is_demo_seed_enabled() and os.getenv("OPENEVAL_AUTO_SCAN_LOCAL_LOGS", "0").lower() in (
+        "1",
+        "true",
+        "yes",
     ):
         from server.agent_log_loader import UniversalAgentLogLoader
 
@@ -2909,14 +2914,14 @@ async def list_watcher_v1_sessions(
     """List monitored agent sessions from WatcherStore."""
     from server.demo_seed import is_demo_seed_enabled
 
-    if (
-        not is_demo_seed_enabled()
-        and os.getenv("OPENEVAL_AUTO_SCAN_LOCAL_LOGS", "0").lower() in ("1", "true", "yes")
+    if not is_demo_seed_enabled() and os.getenv("OPENEVAL_AUTO_SCAN_LOCAL_LOGS", "0").lower() in (
+        "1",
+        "true",
+        "yes",
     ):
         from server.agent_log_loader import UniversalAgentLogLoader
 
         UniversalAgentLogLoader.scan_default_agent_directories()
-
 
     store = get_watcher_store()
     store.reload_from_disk()
@@ -3535,4 +3540,3 @@ if _ui_dist.exists():
     from fastapi.staticfiles import StaticFiles
 
     app.mount("/", StaticFiles(directory=str(_ui_dist), html=True), name="ui")
-

@@ -15,7 +15,7 @@ import threading
 import time
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from sqlalchemy import text
 
@@ -25,7 +25,9 @@ from schemas.watcher_models import (
     AgentType,
     Message,
     Policy,
+    ReviewDecision,
     ReviewRecord,
+    ReviewStage,
     Session,
     ToolCall,
     ToolResult,
@@ -82,7 +84,7 @@ class CompatDBConn:
                 rows = result.fetchall()
             except Exception:
                 rows = []
-            return CompatResult(rows)
+            return CompatResult(list(rows))
 
 
 class WatcherStore:
@@ -365,7 +367,8 @@ class WatcherStore:
                 {"id": session_id, "uid": user_id},
             )
             db.commit()
-            deleted = (res.rowcount or 0) > 0
+            deleted = bool(getattr(res, "rowcount", 0) > 0)
+
         with self._lock:
             self._sessions.pop(session_id, None)
             self._trajectories.pop(session_id, None)
@@ -459,9 +462,9 @@ class WatcherStore:
                         session_id=str(r[1]),
                         tool_name=str(r[2]),
                         tool_input=str(r[3] or ""),
-                        decision=str(r[4]),
+                        decision=cast(ReviewDecision, str(r[4])),
                         score=int(r[5] or 1),
-                        stage=str(r[6] or "gate"),
+                        stage=cast(ReviewStage, str(r[6] or "rule")),
                         rule_name=str(r[7] or "") if r[7] else None,
                         explanation=str(r[8] or ""),
                         diff=str(r[9] or "") if r[9] else None,

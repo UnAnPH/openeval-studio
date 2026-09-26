@@ -82,7 +82,7 @@ def test_seed_demo_data_is_idempotent_and_preserves_owner_rows():
                 "SELECT count(*) FROM sessions WHERE user_id = (SELECT id FROM users WHERE slug = 'demo')"
             )
         ).scalar()
-        assert demo_count >= 4
+        assert (demo_count or 0) >= 4
 
     # Verify the owner session is still retrievable as owner
     current_user_slug.set("owner")
