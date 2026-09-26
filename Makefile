@@ -2,6 +2,18 @@
 install:
 	uv sync
 
+.PHONY: db-up
+db-up:
+	docker compose up -d postgres
+
+.PHONY: db-down
+db-down:
+	docker compose stop postgres
+
+.PHONY: db-migrate
+db-migrate:
+	uv run alembic upgrade head
+
 .PHONY: dev
 dev:
 	uv run uvicorn server.app:app --host 0.0.0.0 --port 8000 --reload

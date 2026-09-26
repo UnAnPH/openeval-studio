@@ -1,4 +1,17 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: openeval-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-openeval}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-openeval}
+      POSTGRES_DB: ${POSTGRES_DB:-openeval}
+    ports:
+      - "${POSTGRES_PORT:-127.0.0.1:5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
   api:
     build:
       context: .
@@ -11,10 +24,13 @@ services:
       - WATCHER_STORAGE_DIR=/data/watcher
       - WATCHER_WEBHOOK_URL=${WATCHER_WEBHOOK_URL:-}
       - OPENEVAL_API_KEY=${OPENEVAL_API_KEY:-}
+      - DATABASE_URL=${DATABASE_URL:-postgresql+psycopg://openeval:openeval@postgres:5432/openeval}
     volumes:
       - watcher-data:/data/watcher
       - ./tasks:/app/tasks:ro
     command: ["uv", "run", "uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "8000"]
+    depends_on:
+      - postgres
 
   ui:
     image: node:20-alpine
@@ -31,3 +47,4 @@ services:
 
 volumes:
   watcher-data:
+  pgdata:
