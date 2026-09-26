@@ -111,9 +111,10 @@ cd ui && npm run build # Production UI build
 OpenEval Studio runs self-contained locally or in containers without external SaaS dependencies:
 
 ### Production Docker Compose Stack
-Launch the dual-surface environment (port `8000` live evaluation + port `8001` seeded demo):
+Launch the production environment using the prebuilt GHCR container:
 ```bash
-docker compose -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
 ```
 
 ### Reference Documentation

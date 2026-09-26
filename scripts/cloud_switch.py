@@ -7,11 +7,9 @@ to prevent unexpected cloud credit consumption.
 Zero external Python dependencies required (uses built-in standard library + aws cli / terraform).
 
 Usage:
-  python3 scripts/cloud_switch.py on      # Spin up all resources via Terraform (~3-4 min)
+  python3 scripts/cloud_switch.py on      # Spin up EC2 t3.micro via Terraform (~2-3 min)
   python3 scripts/cloud_switch.py off     # Destroy all resources for $0.00/hr clean slate
   python3 scripts/cloud_switch.py status  # Inspect live AWS resources & hourly burn rate
-  python3 scripts/cloud_switch.py pause   # Fast-stop EC2 & RDS (ALB still incurs base charges)
-  python3 scripts/cloud_switch.py resume  # Fast-start EC2 & RDS
 """
 
 from __future__ import annotations
@@ -33,11 +31,9 @@ TF_DIR = REPO_ROOT / "terraform" / "aws"
 AWS_REGION = os.getenv("AWS_REGION", "eu-west-2")
 
 # Hourly cost constants (London eu-west-2, estimated USD)
-COST_ALB_HOUR = 0.0225  # ~$16.40/month
-COST_EC2_T3_MICRO_HOUR = 0.0104  # ~$7.50/month (Free Tier eligible: 750 hrs/mo)
-COST_RDS_T4G_MICRO_HOUR = 0.0160  # ~$11.60/month (Free Tier eligible: 750 hrs/mo)
-COST_PUBLIC_IPV4_HOUR = 0.0050  # ~$3.60/month
-COST_EBS_GP3_GB_MONTH = 0.08  # ~$2.40/month for 30GB
+COST_EC2_T3_MICRO_HOUR = 0.0118  # ~$8.61/month (Free Tier eligible: 750 hrs/mo)
+COST_PUBLIC_IPV4_HOUR = 0.0050  # ~$3.65/month
+COST_EBS_GP3_GB_MONTH = 0.096  # ~$0.96/month for 10GB gp3
 
 
 def print_banner(text: str, emoji: str = "⚡") -> None:
@@ -76,8 +72,7 @@ def check_prerequisites() -> None:
 
 
 def check_live_status() -> dict[str, Any]:
-    """Inspect live AWS resources in the target region."""
-    # 1. EC2 Instances
+    """Inspect live AWS resources in London eu-west-2."""
     ec2_data = run_aws_json(
         [
             "ec2",
@@ -89,62 +84,30 @@ def check_live_status() -> dict[str, Any]:
     instances: list[dict[str, Any]] = []
     for res in ec2_data.get("Reservations", []):
         for inst in res.get("Instances", []):
-            if inst.get("State", {}).get("Name") != "terminated":
+            state = inst.get("State", {}).get("Name")
+            if state != "terminated":
                 instances.append(
                     {
                         "id": inst["InstanceId"],
                         "type": inst.get("InstanceType"),
-                        "state": inst.get("State", {}).get("Name"),
+                        "state": state,
                         "public_ip": inst.get("PublicIpAddress", "none"),
                     }
                 )
 
-    # 2. RDS Instances
-    rds_data = run_aws_json(["rds", "describe-db-instances"])
-    databases: list[dict[str, Any]] = []
-    for db in rds_data.get("DBInstances", []):
-        db_id = db.get("DBInstanceIdentifier", "")
-        if "openeval" in db_id.lower():
-            databases.append(
-                {
-                    "id": db_id,
-                    "class": db.get("DBInstanceClass"),
-                    "status": db.get("DBInstanceStatus"),
-                    "endpoint": db.get("Endpoint", {}).get("Address", "none"),
-                }
-            )
-
-    # 3. Load Balancers
-    elb_data = run_aws_json(["elbv2", "describe-load-balancers"])
-    load_balancers: list[dict[str, Any]] = []
-    for elb in elb_data.get("LoadBalancers", []):
-        name = elb.get("LoadBalancerName", "")
-        if "openeval" in name.lower():
-            load_balancers.append(
-                {
-                    "name": name,
-                    "dns": elb.get("DNSName"),
-                    "state": elb.get("State", {}).get("Code"),
-                }
-            )
-
-    # Compute estimated hourly burn rate
     hourly_rate = 0.0
     for inst in instances:
         if inst["state"] == "running":
-            hourly_rate += COST_EC2_T3_MICRO_HOUR + COST_PUBLIC_IPV4_HOUR
-    for db in databases:
-        if db["status"] == "available":
-            hourly_rate += COST_RDS_T4G_MICRO_HOUR
-    for elb in load_balancers:
-        if elb["state"] == "active":
-            hourly_rate += COST_ALB_HOUR
+            # EC2 compute + public IPv4 + 10GB gp3 prorated
+            hourly_rate += (
+                COST_EC2_T3_MICRO_HOUR
+                + COST_PUBLIC_IPV4_HOUR
+                + (10 * COST_EBS_GP3_GB_MONTH / 730.0)
+            )
 
     return {
         "region": AWS_REGION,
         "instances": instances,
-        "databases": databases,
-        "load_balancers": load_balancers,
         "hourly_rate": hourly_rate,
     }
 
@@ -155,15 +118,12 @@ def cmd_status() -> None:
     status = check_live_status()
 
     instances = status["instances"]
-    databases = status["databases"]
-    elbs = status["load_balancers"]
     rate = status["hourly_rate"]
 
     print(f"Region:             {status['region']}")
-    print(f"Active Resources:   {len(instances)} EC2, {len(databases)} RDS, {len(elbs)} ALB")
+    print(f"Active Instances:   {len(instances)} EC2 (t3.micro single-node demo)")
     print("-" * 64)
 
-    # EC2
     if not instances:
         print("  EC2 Instances:    None active (0 instances)")
     else:
@@ -173,24 +133,6 @@ def cmd_status() -> None:
                 f"  EC2 Instance:     {state_emoji} {inst['id']} ({inst['type']}) -> {inst['state']} (IP: {inst['public_ip']})"
             )
 
-    # RDS
-    if not databases:
-        print("  RDS Databases:    None active (0 databases)")
-    else:
-        for db in databases:
-            db_emoji = "🟢" if db["status"] == "available" else "🟡"
-            print(
-                f"  RDS Database:     {db_emoji} {db['id']} ({db['class']}) -> {db['status']} (Host: {db['endpoint']})"
-            )
-
-    # ALB
-    if not elbs:
-        print("  Load Balancers:   None active (0 ALBs)")
-    else:
-        for elb in elbs:
-            elb_emoji = "🟢" if elb["state"] == "active" else "🟡"
-            print(f"  Load Balancer:    {elb_emoji} {elb['name']} -> {elb['state']} ({elb['dns']})")
-
     print("-" * 64)
     if rate == 0.0:
         print("💰 Estimated Cloud Burn Rate:  $0.00 / hour ($0.00 / month)")
@@ -198,10 +140,8 @@ def cmd_status() -> None:
     else:
         est_monthly = rate * 24 * 30.5
         print(f"💰 Estimated Cloud Burn Rate:  ~${rate:.4f} / hour (~${est_monthly:.2f} / month)")
-        if any(elbs):
-            print(
-                "   ⚠️  NOTE: ALB charges ~$0.0225/hr regardless of traffic. Run 'off' for $0.00/hr teardown."
-            )
+        print("   ℹ️  Inside the AWS 12-month free tier: ~$0.00 - $1.00 / month")
+        print("   💡 Run 'make cloud-off' at any time for immediate $0.00/hr teardown.")
     print()
 
 
@@ -209,11 +149,11 @@ def cmd_on() -> None:
     check_prerequisites()
     print_banner(f"Turning ON OpenEval Cloud Resources ({AWS_REGION})", "🚀")
     print("This provisions:")
-    print("  • 1x Application Load Balancer (ALB)")
-    print("  • 1x EC2 Instance (t3.micro, Ubuntu 24.04, 3GB swap)")
-    print("  • 1x RDS PostgreSQL Instance (db.t4g.micro)")
-    print("  • Dedicated VPC, subnets, and security groups")
-    print("\nStarting Terraform apply (~3-4 minutes)...\n")
+    print("  • 1x London EC2 Instance (t3.micro, amd64, 2GB swap)")
+    print("  • 1x 10GB gp3 SSD root volume with embedded DuckDB")
+    print("  • 1x Auto-assigned Public IPv4 address")
+    print("  • 1x Prebuilt GHCR Docker Container (ghcr.io/unanph/openeval-studio:latest)")
+    print("\nStarting Terraform apply (~2-3 minutes)...\n")
 
     cmd = ["terraform", f"-chdir={TF_DIR}", "apply", "-auto-approve"]
     try:
@@ -228,43 +168,55 @@ def cmd_on() -> None:
             ["terraform", f"-chdir={TF_DIR}", "output", "-json"], text=True
         )
         outputs = json.loads(out_raw)
-        alb_url = outputs.get("alb_preview_url", {}).get("value", "")
-        ec2_ip = outputs.get("ec2_public_ip", {}).get("value", "")
-        ssh_cmd = outputs.get("ec2_ssh_command", {}).get("value", "")
+        public_url = outputs.get("public_url", {}).get("value", "")
+        public_ip = outputs.get("public_ip", {}).get("value", "")
+        ssh_cmd = outputs.get("ssh_command", {}).get("value", "")
+        health_url = outputs.get("health_url", {}).get("value", "")
     except Exception:
-        alb_url, ec2_ip, ssh_cmd = "", "", ""
+        public_url, public_ip, ssh_cmd, health_url = "", "", "", ""
 
-    print_banner("Cloud Infrastructure is Provisioned!", "🎉")
-    if alb_url:
-        print(f"  🌐 Application URL:  {alb_url}")
-    if ec2_ip:
-        print(f"  🖥️  EC2 Public IP:    {ec2_ip}")
+    if not health_url and public_url:
+        health_url = f"{public_url}/api/health"
+
+    print_banner("Cloud Demo Infrastructure is Provisioned!", "🎉")
+    if public_url:
+        print(f"  🌐 Application URL:  {public_url}")
+    if public_ip:
+        print(f"  🖥️  EC2 Public IP:    {public_ip}")
     if ssh_cmd:
         print(f"  🔑 SSH Access:       {ssh_cmd}")
 
-    print("\nWaiting for web service to become healthy (cloud-init bootstrapping)...")
-    health_url = f"{alb_url}/api/health" if alb_url else ""
+    print("\nWaiting for web service to become healthy (cloud-init pulling image & starting)...")
     healthy = False
     if health_url:
-        for attempt in range(1, 25):
-            print(f"  [Probe {attempt}/24] Checking {health_url} ...", end=" ", flush=True)
+        for attempt in range(1, 30):
+            print(f"  [Probe {attempt}/30] Checking {health_url} ...", end=" ", flush=True)
             try:
                 req = urllib.request.Request(health_url, headers={"User-Agent": "CloudSwitch/1.0"})
                 with urllib.request.urlopen(req, timeout=5) as resp:
                     if resp.status == 200:
-                        print("✅ Healthy!")
+                        body = json.loads(resp.read().decode("utf-8"))
+                        demo_seed = body.get("demo_seed", False)
+                        db_engine = body.get("database", {}).get("engine", "duckdb")
+                        print(f"✅ Healthy! (Demo Seed: {demo_seed}, Engine: {db_engine})")
                         healthy = True
                         break
             except Exception:
                 print("⏳ starting up...")
                 time.sleep(10)
 
-    if not healthy and alb_url:
-        print("  ℹ️  EC2 instance is pulling Docker images. Give it ~60 seconds to complete.")
+    if not healthy and public_url:
+        print("  ℹ️  EC2 instance is pulling the Docker image. Give it another 30-60 seconds.")
 
     print("\n" + "=" * 64)
-    print(" 💡 To test the remote Policy Gateway:")
-    print(f"    python3 scripts/test_cloud_watcher.py {alb_url}")
+    print(" 💡 Direct Browser URL:")
+    print(f"    {public_url}")
+    print("\n 💡 Test inline Policy Gate (<25ms DuckDB evaluation):")
+    print(f"    curl -s -X POST {public_url}/api/watcher/evaluate \\")
+    print('      -H "Content-Type: application/json" \\')
+    print(
+        '      -d \'{"tool_name":"bash","arguments":{"cmd":"cat .env | grep -E AWS_SECRET"},"agent_id":"demo","session_id":"curl-test"}\''
+    )
     print("\n 💡 When you are finished, turn everything OFF to save credits:")
     print("    python3 scripts/cloud_switch.py off    (or: make cloud-off)")
     print("=" * 64 + "\n")
@@ -274,10 +226,9 @@ def cmd_off(auto_approve: bool = False) -> None:
     check_prerequisites()
     print_banner("Turning OFF OpenEval Cloud Resources", "🛑")
     print("This will destroy all AWS resources in London:")
-    print("  • Application Load Balancer ($16.40/mo saved)")
-    print("  • EC2 Instance & 30GB gp3 EBS volume ($9.90/mo saved)")
-    print("  • RDS PostgreSQL database ($11.60/mo saved)")
-    print("  • Public IPv4 address ($3.60/mo saved)")
+    print("  • EC2 Instance (t3.micro)")
+    print("  • 10GB gp3 EBS root volume")
+    print("  • Dedicated VPC and network routing")
     print("\nResult: Guaranteed $0.00 / hour burn rate. No credit leak.")
     print("-" * 64)
 
@@ -289,7 +240,7 @@ def cmd_off(auto_approve: bool = False) -> None:
             print("Teardown cancelled.")
             return
 
-    print("\nDestroying resources via Terraform (~2 minutes)...\n")
+    print("\nDestroying resources via Terraform (~1-2 minutes)...\n")
     cmd = ["terraform", f"-chdir={TF_DIR}", "destroy", "-auto-approve"]
     try:
         subprocess.run(cmd, check=True)
@@ -301,89 +252,7 @@ def cmd_off(auto_approve: bool = False) -> None:
     print("  • All billable AWS resources have been cleanly terminated.")
     print("  • Hourly burn rate: $0.00 / hour ($0.00 / month).")
     print("  • Your AWS credits are protected.")
-    print("\nTo turn it back on at any time, run: python3 scripts/cloud_switch.py on\n")
-
-
-def cmd_pause() -> None:
-    """Stops EC2 and RDS instances without destroying infrastructure."""
-    check_prerequisites()
-    print_banner("Pausing Compute & Database (Quick Sleep)", "⏸️")
-
-    # Stop EC2
-    ec2_data = run_aws_json(
-        [
-            "ec2",
-            "describe-instances",
-            "--filters",
-            "Name=tag:Project,Values=OpenEval-Studio,openeval",
-        ]
-    )
-    inst_ids = [
-        inst["InstanceId"]
-        for res in ec2_data.get("Reservations", [])
-        for inst in res.get("Instances", [])
-        if inst.get("State", {}).get("Name") == "running"
-    ]
-    if inst_ids:
-        print(f"Stopping EC2 instance(s): {', '.join(inst_ids)} ...")
-        run_aws_json(["ec2", "stop-instances", "--instance-ids"] + inst_ids)
-        print("✅ EC2 stop signal sent.")
-    else:
-        print("No running EC2 instances found.")
-
-    # Stop RDS
-    rds_data = run_aws_json(["rds", "describe-db-instances"])
-    for db in rds_data.get("DBInstances", []):
-        db_id = db.get("DBInstanceIdentifier", "")
-        if "openeval" in db_id.lower() and db.get("DBInstanceStatus") == "available":
-            print(f"Stopping RDS instance: {db_id} ...")
-            run_aws_json(["rds", "stop-db-instance", "--db-instance-identifier", db_id])
-            print("✅ RDS stop signal sent.")
-
-    print("\n" + "!" * 64)
-    print(" ⚠️  IMPORTANT COST NOTICE:")
-    print("    EC2 and RDS compute hours are paused.")
-    print("    HOWEVER, the Application Load Balancer (ALB) and public IPv4 are STILL active")
-    print("    and incur ~$0.0275/hr (~$0.66/day).")
-    print("    For a guaranteed $0.00/hr cost, run: python3 scripts/cloud_switch.py off")
-    print("!" * 64 + "\n")
-
-
-def cmd_resume() -> None:
-    """Resumes paused EC2 and RDS instances."""
-    check_prerequisites()
-    print_banner("Resuming Compute & Database", "▶️")
-
-    ec2_data = run_aws_json(
-        [
-            "ec2",
-            "describe-instances",
-            "--filters",
-            "Name=tag:Project,Values=OpenEval-Studio,openeval",
-        ]
-    )
-    inst_ids = [
-        inst["InstanceId"]
-        for res in ec2_data.get("Reservations", [])
-        for inst in res.get("Instances", [])
-        if inst.get("State", {}).get("Name") == "stopped"
-    ]
-    if inst_ids:
-        print(f"Starting EC2 instance(s): {', '.join(inst_ids)} ...")
-        run_aws_json(["ec2", "start-instances", "--instance-ids"] + inst_ids)
-        print("✅ EC2 start signal sent.")
-    else:
-        print("No stopped EC2 instances found.")
-
-    rds_data = run_aws_json(["rds", "describe-db-instances"])
-    for db in rds_data.get("DBInstances", []):
-        db_id = db.get("DBInstanceIdentifier", "")
-        if "openeval" in db_id.lower() and db.get("DBInstanceStatus") == "stopped":
-            print(f"Starting RDS instance: {db_id} ...")
-            run_aws_json(["rds", "start-db-instance", "--db-instance-identifier", db_id])
-            print("✅ RDS start signal sent.")
-
-    print("\nDone. Give services ~1-2 minutes to re-establish connectivity.")
+    print("\nTo turn it back on at any time, run: make cloud-on\n")
 
 
 def main() -> None:
@@ -394,7 +263,7 @@ def main() -> None:
 
     # on / up
     subparsers.add_parser(
-        "on", aliases=["up"], help="Spin up cloud infrastructure via Terraform (~3-4 min)"
+        "on", aliases=["up"], help="Spin up cloud demo infrastructure via Terraform (~2-3 min)"
     )
 
     # off / down
@@ -410,12 +279,6 @@ def main() -> None:
     # status
     subparsers.add_parser("status", help="Inspect live AWS resources & hourly burn rate")
 
-    # pause
-    subparsers.add_parser("pause", help="Fast-stop EC2 & RDS (ALB still incurs hourly charges)")
-
-    # resume
-    subparsers.add_parser("resume", help="Resume paused EC2 & RDS")
-
     args = parser.parse_args()
 
     if args.command in ("on", "up"):
@@ -424,10 +287,6 @@ def main() -> None:
         cmd_off(auto_approve=getattr(args, "yes", False))
     elif args.command == "status":
         cmd_status()
-    elif args.command == "pause":
-        cmd_pause()
-    elif args.command == "resume":
-        cmd_resume()
 
 
 if __name__ == "__main__":

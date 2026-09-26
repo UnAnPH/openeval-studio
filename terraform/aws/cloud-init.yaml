@@ -3,7 +3,6 @@ package_upgrade: true
 packages:
   - git
   - curl
-  - ufw
   - docker.io
   - docker-compose-plugin
 
@@ -15,18 +14,39 @@ users:
   - name: ubuntu
     groups: docker
 
+write_files:
+  - path: /opt/openeval/docker-compose.yml
+    owner: ubuntu:docker
+    permissions: "0644"
+    content: |
+      services:
+        openeval:
+          image: ghcr.io/unanph/openeval-studio:latest
+          container_name: openeval-studio
+          restart: always
+          ports:
+            - "80:8000"
+          environment:
+            - PORT=8000
+            - OPENEVAL_DEMO_SEED=1
+            - OPENEVAL_WATCHER_USE_LLM=0
+            - WATCHER_STORAGE_DIR=/var/lib/openeval
+          volumes:
+            - /var/lib/openeval:/var/lib/openeval
+
 runcmd:
-  # 1. Configure 3GB swap on 30GB gp3 SSD to guarantee memory safety for t3.micro
-  - fallocate -l 3G /swapfile
+  # 1. Configure 2GB swap on the 10GB gp3 root volume
+  - fallocate -l 2G /swapfile
   - chmod 600 /swapfile
   - mkswap /swapfile
   - swapon /swapfile
   - echo '/swapfile none swap sw 0 0' >> /etc/fstab
-  # 2. Enable & start Docker
+  # 2. Prepare persistent data and compose directories
+  - mkdir -p /var/lib/openeval /opt/openeval
+  - chown -R ubuntu:docker /var/lib/openeval /opt/openeval
+  # 3. Enable & start Docker
   - systemctl enable --now docker
   - usermod -aG docker ubuntu
-  # 3. Configure firewall (allow SSH, HTTP, HTTPS)
-  - ufw allow 22/tcp
-  - ufw allow 80/tcp
-  - ufw allow 443/tcp
-  - ufw --force enable
+  # 4. Pull prebuilt GHCR image & start single container on port 80 (no local build)
+  - docker compose -f /opt/openeval/docker-compose.yml pull
+  - docker compose -f /opt/openeval/docker-compose.yml up -d

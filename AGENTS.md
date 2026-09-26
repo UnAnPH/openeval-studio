@@ -56,7 +56,7 @@ server/          # FastAPI, stores, policy_gateway, review resolution
 scripts/         # agent hooks + demo_block.sh + install scripts
 tasks/           # 5-file benchmarks
 ui/              # React app
-tests/           # 160 pytest unit/integration tests
+tests/           # 162 pytest unit/integration tests
 DEMO.md FINDINGS.md
 ```
 

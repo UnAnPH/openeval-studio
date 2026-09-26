@@ -1,37 +1,43 @@
-"""Database Pool & Storage Engine Abstraction for OpenEval Studio.
+"""Database & Storage Engine Abstraction for OpenEval Studio.
 
-Supports Amazon RDS / PostgreSQL for relational state and session tracking,
-with automatic fallback to DuckDB and local file-backed persistence.
+OpenEval Studio uses an embedded DuckDB analytical engine paired with local
+file-backed JSON trajectories on instance storage. No external relational
+database or Amazon RDS round-trips are required.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger("openeval.db")
 
-_DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
-
 
 class DatabaseManager:
-    """Manages transactional database connections and health probes."""
+    """Manages local embedded DuckDB telemetry and storage health probes."""
 
-    def __init__(self, database_url: str = "") -> None:
-        self.database_url = database_url or _DATABASE_URL
-        self.engine_type = "postgresql" if self.database_url.startswith("postgres") else "duckdb"
-        self._is_connected = False
+    def __init__(self) -> None:
+        self.engine_type = "duckdb"
+
+    def get_storage_dir(self) -> str:
+        """Resolve the active storage directory on disk."""
+        from server.demo_seed import is_demo_seed_enabled
+
+        default_dir = ".runs/demo_watcher" if is_demo_seed_enabled() else ".runs/watcher"
+        storage_path = Path(os.getenv("WATCHER_STORAGE_DIR", default_dir)).resolve()
+        return str(storage_path)
 
     def get_status(self) -> dict[str, Any]:
-        """Return connectivity status and active database engine."""
+        """Return connectivity status and active storage engine."""
+        storage_dir = self.get_storage_dir()
         return {
-            "engine": self.engine_type,
-            "connected": bool(self.database_url) or self.engine_type == "duckdb",
-            "has_external_db": bool(self.database_url),
-            "target": "Amazon RDS PostgreSQL"
-            if "rds.amazonaws.com" in self.database_url
-            else self.engine_type.upper(),
+            "engine": "duckdb",
+            "connected": True,
+            "has_external_db": False,
+            "storage_dir": storage_dir,
+            "target": "DuckDB (local disk)",
         }
 
 

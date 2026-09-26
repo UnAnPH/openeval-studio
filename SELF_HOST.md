@@ -33,14 +33,15 @@ Open `http://localhost:5173` in your browser.
 
 ---
 
-## 2. Production Docker Compose (Dual Surface)
+## 2. Production Docker Compose (Single Service)
 
-The production Docker Compose configuration runs two isolated instances:
-- **Port 8000 (`openeval-live`)**: Real evaluation workbench and active agent runtime gate.
-- **Port 8001 (`openeval-demo`)**: Hermetic sandbox seeded with demo trajectories for safe demonstration without exposing private logs.
+The production Docker Compose configuration runs a single prebuilt container pulling directly from GHCR:
+- **Port 80:8000**: Unified FastAPI backend serving the precompiled React 19 UI with DuckDB session persistence mounted at `/var/lib/openeval`.
+- Zero local compilation on host (avoids OOM on 1GB memory instances).
 
 ```bash
-docker compose -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
 ```
 
 ### Inspect Container Status
@@ -50,17 +51,17 @@ docker compose -f docker-compose.prod.yml ps
 
 ### View Application Logs
 ```bash
-docker compose -f docker-compose.prod.yml logs -f openeval-live
+docker compose -f docker-compose.prod.yml logs -f openeval
 ```
 
 ---
 
 ## 3. Cloud Deployment (AWS London `eu-west-2`)
 
-For evaluating remote agent fleets or providing a shared reviewer link, use the integrated **Cloud Power Switch**:
+For evaluating remote agent fleets or providing a public reviewer demo link, use the integrated **Cloud Power Switch**:
 
 ```bash
-# Spin up AWS Application Load Balancer, EC2 t3.micro, and RDS PostgreSQL (~3-4 min)
+# Spin up London EC2 t3.micro instance with prebuilt GHCR container (~2-3 min)
 make cloud-on
 
 # Inspect live resources and estimated hourly burn rate ($/hr)
@@ -84,10 +85,7 @@ make cloud-off
 | `OPENEVAL_WATCHER_USE_LLM` | `0` | When `1`, enables Layer 3 deep LLM trajectory review (requires `GEMINI_API_KEY`). |
 | `GEMINI_API_KEY` | `""` | API key for frontier LLM calls (Gemini 2.5/Flash-Lite). |
 | `OPENEVAL_API_KEY` | `""` | Optional shared bearer token for authenticating remote client hooks. |
-| `ADMIN_USER` | `jayson` | Basic auth username for private workbench endpoints. |
-| `ADMIN_PASSWORD` | `""` | Basic auth password. If empty, authentication is disabled. |
-| `DATABASE_URL` | `""` | PostgreSQL connection string. If empty, uses SQLite/DuckDB on local disk. |
-| `WATCHER_STORAGE_DIR` | `artifacts/watcher` | Directory path where session transcripts and reviews are persisted. |
+| `WATCHER_STORAGE_DIR` | `.runs/watcher` | Directory path where session transcripts, DuckDB, and reviews are persisted (`/var/lib/openeval` in cloud). |
 
 ---
 

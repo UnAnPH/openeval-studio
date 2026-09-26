@@ -1,6 +1,8 @@
 # AWS Production Deployment Guide (London `eu-west-2`)
 
-Complete guide to deploying OpenEval Studio to AWS using **Terraform (IaC)**, **AWS Application Load Balancer (ALB)**, **Amazon RDS for PostgreSQL**, and **Docker Compose**, operating within the AWS Free Tier and your $100–$200 credits.
+Complete guide to deploying OpenEval Studio to AWS using a lean, cost-optimized single-instance architecture on **Amazon EC2 (t3.micro amd64)** with prebuilt **GHCR Docker** images and local **DuckDB** storage.
+
+Always-on cost: **~$12–16 / month** (or **$0–1 / month** within the AWS 12-month Free Tier). When destroyed via `make cloud-off`, the burn rate is **$0.00 / hour**.
 
 ---
 
@@ -9,184 +11,130 @@ Complete guide to deploying OpenEval Studio to AWS using **Terraform (IaC)**, **
 ```mermaid
 flowchart TD
     subgraph Clients["Clients"]
-        Visitor["Public Recruiter / Visitor"]
-        Jayson["Your Local Mac / Browser"]
+        Visitor["Public Recruiter / Evaluator"]
+        Terminal["Local CLI / IDE Gate Hook"]
     end
 
     subgraph AWSCloud["AWS London Region (eu-west-2)"]
-        subgraph Ingress["AWS Application Load Balancer (Free Tier: 750 hrs/mo)"]
-            ALB["Multi-AZ ALB (eu-west-2a & eu-west-2b)"]
-            Rules{"Host-Header Listener Rules"}
-            ALB --> Rules
-        end
-
-        subgraph VPC["Custom VPC (10.20.0.0/16)"]
+        subgraph VPC["VPC (10.20.0.0/16)"]
             subgraph PublicSubnet["Public Subnet (eu-west-2a)"]
-                EC2["Amazon EC2 (t3.micro - Free Tier)<br/>30GB gp3 SSD + 3GB Swapfile"]
-                
-                subgraph DockerStack["Docker Containers (No Proxy Needed!)"]
-                    LiveApp["openeval-live (Port 8000)<br/>OPENEVAL_DEMO_SEED=0<br/>Auth: jayson | Real Trajectories"]
-                    DemoApp["openeval-demo (Port 8001)<br/>OPENEVAL_DEMO_SEED=1<br/>Zero Auth | Sanitized Fixtures"]
-                end
-                EC2 --- LiveApp
-                EC2 --- DemoApp
-            end
+                EC2["Amazon EC2 (t3.micro amd64)<br/>10GB gp3 SSD + 2GB Swap<br/>Auto-assigned Public IPv4"]
 
-            subgraph PrivateSubnets["Private DB Subnets (eu-west-2a & eu-west-2b)"]
-                RDS[("Amazon RDS PostgreSQL<br/>db.t4g.micro (750h/mo Free Tier)<br/>Port 5432")]
+                subgraph SecurityGroup["Security Group Perimeter"]
+                    Port80["Port 80 (HTTP) -> 0.0.0.0/0"]
+                    Port22["Port 22 (SSH) -> admin_cidr only"]
+                end
+
+                subgraph Container["Prebuilt Docker Image (GHCR)"]
+                    StudioApp["openeval-studio (Port 80:8000)<br/>FastAPI + Precompiled React 19 UI<br/>OPENEVAL_DEMO_SEED=1"]
+                    DuckDBStorage[("Local DuckDB + JSON Storage<br/>/var/lib/openeval<br/>Sub-millisecond Policy Gating")]
+                end
+
+                EC2 --- SecurityGroup
+                SecurityGroup --- Container
+                StudioApp --- DuckDBStorage
             end
         end
     end
 
-    Visitor -->|demo.openeval.studio| ALB
-    Jayson -->|openeval.studio| ALB
-
-    Rules -->|Host: demo.openeval.studio| DemoApp
-    Rules -->|Host: openeval.studio or Default| LiveApp
-
-    LiveApp -->|Internal VPC 5432| RDS
+    Visitor -->|HTTP Port 80| Port80
+    Terminal -->|POST /api/watcher/evaluate| Port80
+    Port80 --> StudioApp
 ```
+
+### Architectural Principles
+1. **Single Public URL:** The instance serves the unified UI and FastAPI backend directly on port 80. No Application Load Balancer (ALB), no second host, no port 8001, and no DNS record required to view the live demo.
+2. **Local DuckDB & File Storage:** Trajectories and policy review records reside directly in DuckDB and JSON files at `/var/lib/openeval` on the 10GB gp3 root volume. RDS PostgreSQL has been eliminated, removing database round-trip latency and monthly idle RDS costs.
+3. **Zero Local Builds:** The instance pulls `ghcr.io/unanph/openeval-studio:latest` built by GitHub Actions CI. Building React bundles or compiling dependencies on a 1GB `t3.micro` instance is strictly avoided to prevent out-of-memory crashes.
+4. **Hardened Perimeter:** Port 80 is open to the public; Port 22 is only open if `admin_cidr` is explicitly passed (defaults to `[]` so SSH is closed by default).
 
 ---
 
-## 2. Step-by-Step Deployment
+## 2. Cost Analysis (London `eu-west-2`)
 
-### Step 1: Provision Infrastructure with Terraform
-From your local terminal:
+| Resource | Configuration | Monthly Cost (Post-Free Tier) | AWS Free Tier (First 12 Mo) |
+| :--- | :--- | :--- | :--- |
+| **Compute** | EC2 `t3.micro` (amd64, 2 vCPU, 1GB RAM) | ~$8.61 | **$0.00** (750 hrs/mo free) |
+| **Public IPv4** | 1 In-use auto-assigned Public IPv4 | ~$3.65 | **$0.00** (covered under free tier allowance) |
+| **Storage** | 10 GB gp3 Root SSD volume | ~$0.96 | **$0.00** (up to 30GB free) |
+| **Total Always-On** | | **~$12 – $16 / mo** | **~$0.00 – $1.00 / mo** |
+| **Teardown (`make cloud-off`)** | All resources destroyed | **$0.00 / mo** | **$0.00 / mo** |
+
+*Eliminated from prior architecture:* Application Load Balancer (~$16.40/mo + ~$7.30 for 2 public IPs), Amazon RDS db.t4g.micro (~$11.60/mo + storage), secondary public and private subnets, 30GB disk.
+
+---
+
+## 3. Quickstart: Managing with the Cloud Power Switch
+
+The repository includes `scripts/cloud_switch.py` (wrapped by `make` and `cloud.sh`):
+
+```bash
+# 1. Turn ON the cloud demo (~2-3 minutes)
+make cloud-on
+
+# 2. Check live AWS status and estimated burn rate
+make cloud-status
+
+# 3. Turn OFF and destroy all resources when finished ($0.00/hr clean slate)
+make cloud-off
+```
+
+When `make cloud-on` finishes, it automatically polls `http://<EC2_PUBLIC_IP>/api/health` until HTTP 200 is confirmed and prints the demo URL.
+
+---
+
+## 4. Manual Deployment via Terraform
+
+If you prefer to invoke Terraform directly:
+
 ```bash
 cd terraform/aws
 
-# 1. Initialize Terraform provider
+# 1. Initialize Terraform
 terraform init
 
 # 2. Preview the plan
 terraform plan
 
-# 3. Apply infrastructure (creates VPC, Subnets, ALB, RDS, EC2, Elastic IP)
-terraform apply
+# 3. Apply infrastructure
+# To enable SSH from your IP, pass -var='admin_cidr=["YOUR_IP/32"]'
+terraform apply -auto-approve
 ```
-*Note: Amazon RDS and ALB typically take 5–8 minutes to initialize.*
 
-When `terraform apply` finishes, note the outputs:
-- `alb_dns_name`: Public DNS of the AWS Application Load Balancer.
-- `alb_preview_url`: Direct HTTP preview URL to test right away.
-- `ec2_ssh_command`: SSH command to connect to your instance.
-- `rds_database_url`: PostgreSQL connection string for the backend.
+### Outputs
+- `public_url`: Direct HTTP URL to OpenEval Studio Demo (`http://<public-ip>`).
+- `public_ip`: Public IPv4 address.
+- `health_url`: Endpoint to probe readiness (`http://<public-ip>/api/health`).
+- `ssh_command`: SSH login command (if `admin_cidr` was supplied).
 
 ---
 
-### Step 2: SSH into the Provisioned EC2 Instance
+## 5. Verification & Testing
+
+### 1. Verify Health & Demo Fixtures
 ```bash
-ssh -i ~/.ssh/id_ed25519 ubuntu@<EC2_PUBLIC_IP>
+curl -s http://<EC2_PUBLIC_IP>/api/health | jq .
+```
+Expected output:
+```json
+{
+  "status": "ok",
+  "version": "0.1.0",
+  "demo_seed": true,
+  "database": {
+    "engine": "duckdb",
+    "connected": true,
+    "has_external_db": false,
+    "storage_dir": "/var/lib/openeval",
+    "target": "DuckDB (local disk)"
+  }
+}
 ```
 
-Verify Docker and swap:
+### 2. Test Policy Gate Sub-Millisecond Evaluation
 ```bash
-docker --version
-free -h   # Should show 1GB RAM + 3GB Swap!
+curl -s -X POST http://<EC2_PUBLIC_IP>/api/watcher/evaluate \
+  -H "Content-Type: application/json" \
+  -d '{"tool_name":"bash","arguments":{"cmd":"cat .env | grep -E AWS_SECRET"},"agent_id":"demo","session_id":"curl-eval-1"}' | jq .
 ```
-
----
-
-### Step 3: Clone the Repository & Configure `.env`
-```bash
-git clone https://github.com/UnAnPH/openeval-studio.git
-cd openeval-studio
-```
-
-Create your production `.env` file:
-```bash
-cat << 'EOF' > .env
-# Authentication for openeval.studio
-ADMIN_USER=jayson
-ADMIN_PASSWORD=your_secure_password_here
-
-# Security & Watcher Webhooks
-OPENEVAL_API_KEY=your_secret_watcher_token_12345
-GEMINI_API_KEY=your_google_gemini_api_key
-OPENEVAL_WATCHER_USE_LLM=1
-
-# Amazon RDS PostgreSQL Database URL (retrieve via: terraform output -raw rds_database_url)
-DATABASE_URL=postgresql://openeval:<generated-password>@openeval-postgres.cxxxx.eu-west-2.rds.amazonaws.com:5432/openeval
-EOF
-```
-
----
-
-### Step 4: Launch OpenEval Containers
-```bash
-docker compose -f docker-compose.prod.yml up -d --build
-```
-
-Verify both containers are running:
-```bash
-docker compose -f docker-compose.prod.yml ps
-```
-
----
-
-### Step 5: Test the Deployment Immediately
-Even before you claim your domain on Name.com, you can test directly via the **ALB DNS Name** or **EC2 Public IP**:
-- **Direct Live Studio:** `http://<ALB_DNS_NAME>` (prompts for user `jayson` and password)
-- **Direct Public Demo:** `http://<EC2_PUBLIC_IP>:8001` (zero login, demo fixtures)
-
----
-
-### Step 6: Configure Domain DNS on Name.com (Once Claimed)
-In your Name.com DNS Management console:
-1. Add a **CNAME** record:
-   - **Type:** `CNAME` | **Host:** `@` | **Answer:** `<ALB_DNS_NAME>`
-2. Add a **CNAME** record:
-   - **Type:** `CNAME` | **Host:** `demo` | **Answer:** `<ALB_DNS_NAME>`
-3. Set TTL to `300` (5 minutes).
-
----
-
-### Step 7: Connect Your Local Mac IDE to the Cloud
-On your local machine, add these lines to your `~/.zshrc`:
-```bash
-export OPENEVAL_WATCHER_URL="http://<ALB_DNS_NAME>/api/watcher/evaluate"
-export OPENEVAL_API_KEY="your_secret_watcher_token_12345"
-```
-Test the connection:
-```bash
-python3 scripts/test_cloud_watcher.py http://<ALB_DNS_NAME> your_secret_watcher_token_12345
-```
-
----
-
-## 3. Managing Cloud Costs & Turning On / Off
-
-To ensure your AWS credits and Free Tier allowance are strictly preserved, OpenEval Studio includes a dedicated **Cloud Power Switch**:
-
-```bash
-# Check live AWS resources and current hourly burn rate in London (eu-west-2)
-make cloud-status
-# or: ./cloud.sh status
-
-# Turn ON everything (ALB, EC2, RDS, VPC) (~3-4 min)
-make cloud-on
-# or: ./cloud.sh on
-
-# Turn OFF everything completely ($0.00 / hour guaranteed clean slate)
-make cloud-off
-# or: ./cloud.sh off
-```
-
-### Why `make cloud-off` is required for $0 cost
-> [!WARNING]
-> **The AWS Load Balancer Trap**: If you only "stop" EC2 and RDS, AWS continues to bill:
-> - **Application Load Balancer (ALB)**: ~$0.0225/hr (~$16.40/month) simply for existing.
-> - **Public IPv4 Address**: ~$0.0050/hr (~$3.60/month).
-> - **EBS Storage (30GB gp3)**: ~$0.08/GB-mo (~$2.40/month).
-> 
-> Therefore, stopping compute instances still drains ~$22.40/month in credits!  
-> Running **`make cloud-off`** destroys the provisioned resources via Terraform, returning your hourly burn rate to **$0.00 / hour ($0.00 / month)**.
-
-### Quick Sleep (`pause` / `resume`)
-For short intervals (e.g. lunch breaks) where you don't want to recreate infrastructure:
-```bash
-make cloud-pause   # Stops EC2 & RDS compute (ALB still incurs ~$0.0225/hr)
-make cloud-resume  # Resumes EC2 & RDS
-```
-
+Response will immediately return `decision: "deny"` or `escalate` evaluated against the local DuckDB policy engine in <25ms.

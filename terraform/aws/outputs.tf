@@ -1,48 +1,47 @@
-output "alb_dns_name" {
-  value       = aws_lb.main.dns_name
-  description = "Public DNS Name of the AWS Application Load Balancer."
+output "public_ip" {
+  value       = aws_instance.openeval.public_ip
+  description = "Public IPv4 address of the EC2 demo instance."
 }
 
-output "alb_preview_url" {
-  value       = "http://${aws_lb.main.dns_name}"
-  description = "Direct URL to preview the Application Load Balancer right away in your browser."
+output "public_url" {
+  value       = "http://${aws_instance.openeval.public_ip}"
+  description = "Direct URL to OpenEval Studio Demo (Port 80)."
 }
 
-output "ec2_public_ip" {
-  value       = aws_eip.web.public_ip
-  description = "Elastic IP of the EC2 instance (for SSH access)."
+output "health_url" {
+  value       = "http://${aws_instance.openeval.public_ip}/api/health"
+  description = "API health check endpoint."
 }
 
-output "ec2_ssh_command" {
-  value       = "ssh ubuntu@${aws_eip.web.public_ip}"
-  description = "SSH Command to connect to the EC2 server."
+output "ssh_command" {
+  value       = "ssh ubuntu@${aws_instance.openeval.public_ip}"
+  description = "SSH Command to connect to the EC2 server (active if admin_cidr was specified)."
 }
 
-output "rds_endpoint" {
-  value       = aws_db_instance.postgres.endpoint
-  description = "Internal private RDS PostgreSQL endpoint."
+output "monthly_cost_estimate" {
+  value       = "~$12 - $16 / month (or $0 - $1 in AWS 12-month free tier); $0.00 / hour when destroyed via 'make cloud-off'"
+  description = "Estimated monthly run cost in eu-west-2 (London)."
 }
 
-output "rds_database_url" {
-  value       = "postgresql://${var.db_username}:${local.rds_password}@${aws_db_instance.postgres.endpoint}/${var.db_name}"
-  description = "PostgreSQL connection string for the backend."
-  sensitive   = true
-}
-
-output "dns_records_instructions" {
+output "demo_instructions" {
   value       = <<EOT
 ============================================================
-  DNS CONFIGURATION FOR NAME.COM (Once Domain is Claimed)
+  OPENEVAL STUDIO DEMO (London EC2 - Single Instance)
 ============================================================
-In your Name.com DNS Management Console, add:
-   - Type: CNAME  | Host: @    | Answer: ${aws_lb.main.dns_name}
-   - Type: CNAME  | Host: demo | Answer: ${aws_lb.main.dns_name}
+Open in your browser:
+   http://${aws_instance.openeval.public_ip}
 
-Before DNS is active, you can preview the deployment directly at:
-   - Live Studio (Default):  http://${aws_lb.main.dns_name}
-   - EC2 Direct Live:        http://${aws_eip.web.public_ip}:8000
-   - EC2 Direct Demo:        http://${aws_eip.web.public_ip}:8001
+Verify health endpoint:
+   curl -s http://${aws_instance.openeval.public_ip}/api/health
+
+Test inline Policy Gate (<25ms DuckDB):
+   curl -s -X POST http://${aws_instance.openeval.public_ip}/api/watcher/evaluate \
+     -H "Content-Type: application/json" \
+     -d '{"tool_name":"bash","arguments":{"cmd":"cat .env | grep -E AWS_SECRET"},"agent_id":"demo","session_id":"curl-test"}'
+
+Turn off to stop all billing ($0.00/hour):
+   make cloud-off
 ============================================================
 EOT
-  description = "Instructions for pointing openeval.studio and demo.openeval.studio."
+  description = "Quick-start verification instructions for the single-instance demo."
 }

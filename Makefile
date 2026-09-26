@@ -70,11 +70,3 @@ cloud-down:
 cloud-status:
 	python3 scripts/cloud_switch.py status
 
-.PHONY: cloud-pause
-cloud-pause:
-	python3 scripts/cloud_switch.py pause
-
-.PHONY: cloud-resume
-cloud-resume:
-	python3 scripts/cloud_switch.py resume
-
