@@ -18,6 +18,11 @@ output "ssh_command" {
   description = "SSH Command to connect to the EC2 server (active if admin_cidr was specified)."
 }
 
+output "backup_bucket" {
+  value       = aws_s3_bucket.backups.bucket
+  description = "Private S3 bucket name for daily PostgreSQL backups."
+}
+
 output "monthly_cost_estimate" {
   value       = "~$12 - $16 / month (or $0 - $1 in AWS 12-month free tier); $0.00 / hour when destroyed via 'make cloud-off'"
   description = "Estimated monthly run cost in eu-west-2 (London)."

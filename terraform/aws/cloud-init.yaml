@@ -3,6 +3,7 @@ package_upgrade: true
 packages:
   - git
   - curl
+  - awscli
   - docker.io
   - docker-compose-plugin
 
@@ -15,24 +16,72 @@ users:
     groups: docker
 
 write_files:
-  - path: /opt/openeval/docker-compose.yml
-    owner: ubuntu:docker
+  - path: /etc/openeval.env
+    owner: root:root
+    permissions: "0600"
+    content: |
+      BACKUP_BUCKET=${backup_bucket}
+      OPENEVAL_DEMO_SEED=1
+      DATABASE_URL=postgresql+psycopg://openeval:openeval@postgres:5432/openeval
+      PORT=8000
+
+  - path: /var/lib/openeval/pg_password
+    owner: root:root
+    permissions: "0600"
+    content: |
+      openeval
+
+  - path: /var/lib/openeval/Caddyfile
+    owner: root:root
     permissions: "0644"
     content: |
-      services:
-        openeval:
-          image: ghcr.io/unanph/openeval-studio:latest
-          container_name: openeval-studio
-          restart: always
-          ports:
-            - "80:8000"
-          environment:
-            - PORT=8000
-            - OPENEVAL_DEMO_SEED=1
-            - OPENEVAL_WATCHER_USE_LLM=0
-            - WATCHER_STORAGE_DIR=/var/lib/openeval
-          volumes:
-            - /var/lib/openeval:/var/lib/openeval
+      openeval.studio, :80 {
+          reverse_proxy app:8000
+      }
+
+  - path: /opt/openeval/scripts/pg_dump_to_s3.sh
+    owner: root:root
+    permissions: "0755"
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      if [[ -z "$${BACKUP_BUCKET:-}" ]]; then
+        echo "Error: BACKUP_BUCKET is unset." >&2
+        exit 1
+      fi
+      DATE_STR=$(date -u +%F)
+      DEST="s3://$${BACKUP_BUCKET}/postgres/$${DATE_STR}.sql.gz"
+      echo "Starting backup to $${DEST}..."
+      docker exec openeval-postgres pg_dump -U openeval openeval | gzip | aws s3 cp - "$${DEST}"
+      echo "Backup completed successfully."
+
+  - path: /etc/systemd/system/openeval-backup.service
+    owner: root:root
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=OpenEval Daily PostgreSQL S3 Backup
+      After=docker.service
+
+      [Service]
+      Type=oneshot
+      EnvironmentFile=-/etc/openeval.env
+      ExecStart=/opt/openeval/scripts/pg_dump_to_s3.sh
+      User=root
+
+  - path: /etc/systemd/system/openeval-backup.timer
+    owner: root:root
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Daily OpenEval PostgreSQL Backup at 03:15 UTC
+
+      [Timer]
+      OnCalendar=*-*-* 03:15:00 UTC
+      Persistent=true
+
+      [Install]
+      WantedBy=timers.target
 
 runcmd:
   # 1. Configure 2GB swap on the 10GB gp3 root volume
@@ -41,12 +90,18 @@ runcmd:
   - mkswap /swapfile
   - swapon /swapfile
   - echo '/swapfile none swap sw 0 0' >> /etc/fstab
-  # 2. Prepare persistent data and compose directories
-  - mkdir -p /var/lib/openeval /opt/openeval
-  - chown -R ubuntu:docker /var/lib/openeval /opt/openeval
-  # 3. Enable & start Docker
+
+  # 2. Prepare persistent data and directory tree
+  - mkdir -p /var/lib/openeval/pg /var/lib/openeval/caddy_data /var/lib/openeval/caddy_config /opt/openeval/scripts /home/ubuntu/openeval-studio
+  - chown -R ubuntu:docker /var/lib/openeval /opt/openeval /home/ubuntu/openeval-studio
+
+  # 3. Enable & start Docker and backup timer
+  - systemctl daemon-reload
   - systemctl enable --now docker
+  - systemctl enable --now openeval-backup.timer
   - usermod -aG docker ubuntu
-  # 4. Pull prebuilt GHCR image & start single container on port 80 (no local build)
-  - docker compose -f /opt/openeval/docker-compose.yml pull
-  - docker compose -f /opt/openeval/docker-compose.yml up -d
+
+  # 4. Clone repo and launch production docker compose stack
+  - su - ubuntu -c "git clone https://github.com/unanph/openeval-studio.git /home/ubuntu/openeval-studio || true"
+  - su - ubuntu -c "cd /home/ubuntu/openeval-studio && docker compose --env-file /etc/openeval.env -f docker-compose.prod.yml pull"
+  - su - ubuntu -c "cd /home/ubuntu/openeval-studio && docker compose --env-file /etc/openeval.env -f docker-compose.prod.yml up -d"

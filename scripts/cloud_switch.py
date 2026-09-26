@@ -150,7 +150,7 @@ def cmd_on() -> None:
     print_banner(f"Turning ON OpenEval Cloud Resources ({AWS_REGION})", "🚀")
     print("This provisions:")
     print("  • 1x London EC2 Instance (t3.micro, amd64, 2GB swap)")
-    print("  • 1x 10GB gp3 SSD root volume with embedded DuckDB")
+    print("  • 1x 10GB gp3 SSD root volume with Docker PostgreSQL 16")
     print("  • 1x Auto-assigned Public IPv4 address")
     print("  • 1x Prebuilt GHCR Docker Container (ghcr.io/unanph/openeval-studio:latest)")
     print("\nStarting Terraform apply (~2-3 minutes)...\n")
@@ -197,8 +197,8 @@ def cmd_on() -> None:
                     if resp.status == 200:
                         body = json.loads(resp.read().decode("utf-8"))
                         demo_seed = body.get("demo_seed", False)
-                        db_engine = body.get("database", {}).get("engine", "duckdb")
-                        print(f"✅ Healthy! (Demo Seed: {demo_seed}, Engine: {db_engine})")
+                        db_status = body.get("db", "connected")
+                        print(f"✅ Healthy! (Demo Seed: {demo_seed}, Database: {db_status})")
                         healthy = True
                         break
             except Exception:
@@ -211,7 +211,7 @@ def cmd_on() -> None:
     print("\n" + "=" * 64)
     print(" 💡 Direct Browser URL:")
     print(f"    {public_url}")
-    print("\n 💡 Test inline Policy Gate (<25ms DuckDB evaluation):")
+    print("\n 💡 Test inline Policy Gate (<25ms evaluation):")
     print(f"    curl -s -X POST {public_url}/api/watcher/evaluate \\")
     print('      -H "Content-Type: application/json" \\')
     print(
