@@ -196,11 +196,13 @@ def cmd_on() -> None:
                 with urllib.request.urlopen(req, timeout=5) as resp:
                     if resp.status == 200:
                         body = json.loads(resp.read().decode("utf-8"))
-                        demo_seed = body.get("demo_seed", False)
-                        db_status = body.get("db", "connected")
-                        print(f"✅ Healthy! (Demo Seed: {demo_seed}, Database: {db_status})")
-                        healthy = True
-                        break
+                        if body.get("db") == "connected" and body.get("status") == "ok":
+                            demo_seed = body.get("demo_seed", False)
+                            print(
+                                f"✅ Healthy! (Status: ok, Database: connected, Demo Seed: {demo_seed})"
+                            )
+                            healthy = True
+                            break
             except Exception:
                 print("⏳ starting up...")
                 time.sleep(10)

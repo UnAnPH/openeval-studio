@@ -39,9 +39,11 @@ def reset_tenant_context():
     """Ensure every test runs under the 'owner' tenant context with a clean state."""
     from sqlalchemy import text
 
+    from server.app import app
     from server.db import SessionLocal, current_user_id, current_user_slug
     from server.watcher_store import get_watcher_store
 
+    app.state.db_ready = True
     current_user_slug.set("owner")
     current_user_id.set(None)
     with SessionLocal() as db:

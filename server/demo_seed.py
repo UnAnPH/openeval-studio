@@ -66,9 +66,6 @@ def seed_demo_data(
     seeded_interceptions = 0
     seeded_evals = 0
 
-    if is_demo_seed_enabled():
-        global_watcher_engine._interception_history.clear()
-
     # 1. Seed sessions into WatcherStore under demo user
     if sessions_dir.exists():
         for f in sorted(sessions_dir.glob("*.json")):

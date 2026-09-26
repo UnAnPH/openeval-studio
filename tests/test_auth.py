@@ -370,3 +370,34 @@ def test_per_user_session_isolation_and_demo_fixtures(client):
     assert len(demo_sessions) > 0
     assert not any("agent-user1" in str(s) for s in demo_sessions)
     assert not any("agent-user2" in str(s) for s in demo_sessions)
+
+
+def test_api_key_lookup_with_short_env_key_succeeds(client, monkeypatch):
+    """When OPENEVAL_API_KEY is set to a short string, a registered user with oe_live_... key returns 200."""
+    monkeypatch.setenv("OPENEVAL_API_KEY", "short")
+    reg = client.post(
+        "/api/auth/register",
+        json={"username": "short_env_user", "password": "password123"},
+    )
+    assert reg.status_code == 200
+    api_key = reg.json()["api_key"]
+
+    resp = client.get(
+        "/api/auth/me",
+        headers={"Authorization": f"Bearer {api_key}"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["username"] == "short_env_user"
+
+
+def test_production_env_refuses_default_session_secret(client, monkeypatch):
+    """When OPENEVAL_ENV=production and SESSION_SECRET is default or unset, registration refuses cookies with 500."""
+    monkeypatch.setenv("OPENEVAL_ENV", "production")
+    monkeypatch.setenv("SESSION_SECRET", "openeval-dev-secret-key-32-chars-long")
+
+    resp = client.post(
+        "/api/auth/register",
+        json={"username": "prod_fail_user", "password": "password123"},
+    )
+    assert resp.status_code == 500
+    assert "Insecure or missing SESSION_SECRET" in resp.json().get("detail", "")

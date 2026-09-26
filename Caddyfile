@@ -1,3 +1,3 @@
-openeval.studio, :80 {
+openeval.studio {
     reverse_proxy app:8000
 }

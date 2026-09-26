@@ -178,17 +178,21 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         env:
           TAG: ${{ github.ref_name }}
+          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
         with:
           host: ${{ secrets.AWS_EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.AWS_SSH_PRIVATE_KEY }}
-          envs: TAG
+          envs: TAG,GHCR_PULL_TOKEN
           script: |
             set -e
             cd /home/ubuntu/openeval-studio || (git clone https://github.com/unanph/openeval-studio.git /home/ubuntu/openeval-studio && cd /home/ubuntu/openeval-studio)
             git fetch --tags
             git checkout $TAG
             echo "IMAGE_TAG=$TAG" > /home/ubuntu/openeval-studio/.release-env
+            if [ -n "$GHCR_PULL_TOKEN" ]; then
+              echo "$GHCR_PULL_TOKEN" | docker login ghcr.io -u unanph --password-stdin
+            fi
             docker compose --env-file /etc/openeval.env --env-file .release-env -f docker-compose.prod.yml pull
             docker compose --env-file /etc/openeval.env --env-file .release-env -f docker-compose.prod.yml up -d
 

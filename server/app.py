@@ -18,7 +18,7 @@ from typing import Any, Literal, cast
 from uuid import uuid4
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
@@ -73,7 +73,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from server.db import SessionLocal, engine
     from server.demo_seed import is_demo_seed_enabled, seed_demo_data
 
-    # Startup:
+    # Startup: fail-closed initial state
+    app.state.db_ready = False
     try:
         with SessionLocal() as db:
             db.execute(text("SELECT 1"))
@@ -81,24 +82,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         if alembic_ini.exists():
             alembic_cfg = Config(str(alembic_ini))
             command.upgrade(alembic_cfg, "head")
+        app.state.db_ready = True
     except Exception as exc:
         logger.error("Database connection or migration failed during startup: %s", exc)
+        app.state.db_ready = False
 
-    if is_demo_seed_enabled():
+    if is_demo_seed_enabled() and app.state.db_ready:
         seed_demo_data()
 
     _scrub_accidental_safe_overrides()
 
-    daemon: AgentWatcherDaemon | None = None
-    if not is_demo_seed_enabled():
-        daemon = AgentWatcherDaemon.get_instance()
-        daemon.start()
+    daemon: AgentWatcherDaemon = AgentWatcherDaemon.get_instance()
+    daemon.start()
 
     yield
 
     # Shutdown:
-    if daemon is not None:
-        daemon.stop()
+    daemon.stop()
     engine.dispose()
 
 
@@ -108,6 +108,7 @@ app = FastAPI(
     description="Real-time Evaluation Engine & Sandbox Platform for Frontier AI Agents",
     lifespan=lifespan,
 )
+app.state.db_ready = True
 
 # Enable CORS for local development and Vite frontend
 app.add_middleware(
@@ -130,11 +131,11 @@ class _AuthMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         method = request.method.upper()
 
-        # 1. Non-API routes (SPA, static assets, favicon, /demo) are unauthenticated
+        # Non-API routes (SPA, static assets, favicon, /demo) are unauthenticated
         if not path.startswith("/api/"):
             return await call_next(request)
 
-        # 2. Public API endpoints that bypass authentication
+        # Public API endpoints that bypass authentication
         if (
             path == "/api/health"
             or path == "/api/demo/status"
@@ -145,24 +146,21 @@ class _AuthMiddleware(BaseHTTPMiddleware):
         ):
             return await call_next(request)
 
-        # 3. Detect surface header
-        surface_header = (
-            (
-                request.headers.get("X-OpenEval-Surface")
-                or request.headers.get("x-openeval-surface")
-                or ""
+        # Fail-closed for mutating writes if database is not ready
+        db_ready = getattr(request.app.state, "db_ready", True)
+        if not db_ready and method in ("POST", "PUT", "PATCH", "DELETE"):
+            return JSONResponse(
+                {"detail": "Database is not ready."},
+                status_code=503,
             )
-            .strip()
-            .lower()
-        )
 
-        # 4. Check for session cookie
+        # Check for session cookie
         cookie_val = request.cookies.get(SESSION_COOKIE_NAME)
         authenticated_user: tuple[int, str] | None = None
         if cookie_val:
             authenticated_user = verify_session_token(cookie_val)
 
-        # 5. Check for API key (Bearer token or X-OpenEval-Key)
+        # Check for API key (Bearer token or X-OpenEval-Key)
         api_key = request.headers.get("X-OpenEval-Key") or request.headers.get("x-openeval-key")
         auth_header = (
             request.headers.get("Authorization") or request.headers.get("authorization") or ""
@@ -178,34 +176,45 @@ class _AuthMiddleware(BaseHTTPMiddleware):
                     status_code=401,
                 )
 
-        auth_disabled = os.getenv("OPENEVAL_AUTH_DISABLED", "0").lower() in ("1", "true", "yes")
-        is_demo_mode = os.getenv("OPENEVAL_DEMO_SEED", "0").lower() in ("1", "true", "yes")
+        # Detect demo surface
+        surface_header = (
+            (
+                request.headers.get("X-OpenEval-Surface")
+                or request.headers.get("x-openeval-surface")
+                or ""
+            )
+            .strip()
+            .lower()
+        )
+        is_demo_surface = (
+            surface_header == "demo" or path.startswith("/demo") or path.startswith("/api/demo")
+        )
 
-        # 6. Handle demo surface or demo-seeded instance
-        if surface_header == "demo" or (is_demo_mode and not authenticated_user):
-            # Read-only requests allow demo access without credentials
-            if method in ("GET", "HEAD", "OPTIONS"):
-                with SessionLocal() as db:
-                    demo_uid = get_user_id_by_slug(db, "demo")
-                current_user_slug.set("demo")
-                current_user_id.set(demo_uid)
-                return await call_next(request)
-            else:
-                # Mutating requests (e.g. POST /api/watcher/evaluate): ignore demo header, enforce authentication
-                if not authenticated_user and not auth_disabled:
-                    return JSONResponse(
-                        {"detail": "Authentication required. Demo mode is read-only."},
-                        status_code=401,
-                    )
+        # Demo surface read requests strictly view the demo user's rows,
+        # even if the browser has an active session cookie for another account.
+        if is_demo_surface and method in ("GET", "HEAD", "OPTIONS"):
+            with SessionLocal() as db:
+                demo_uid = get_user_id_by_slug(db, "demo")
+            current_user_slug.set("demo")
+            current_user_id.set(demo_uid)
+            return await call_next(request)
 
-        # 7. Authenticated user path
+        # 1. Valid session cookie or API key sets current_user_id and current_user_slug
         if authenticated_user:
             uid, slug = authenticated_user
             current_user_id.set(uid)
             current_user_slug.set(slug)
             return await call_next(request)
 
-        # 8. Test / dev fallback when auth is explicitly disabled
+        # 2. Mutating requests on demo surface without credentials are rejected
+        if is_demo_surface:
+            return JSONResponse(
+                {"detail": "Authentication required. Demo mode is read-only."},
+                status_code=401,
+            )
+
+        # 3. OPENEVAL_AUTH_DISABLED=1 stays the test-only owner fallback
+        auth_disabled = os.getenv("OPENEVAL_AUTH_DISABLED", "0").lower() in ("1", "true", "yes")
         if auth_disabled:
             with SessionLocal() as db:
                 owner_uid = get_user_id_by_slug(db, "owner")
@@ -213,7 +222,7 @@ class _AuthMiddleware(BaseHTTPMiddleware):
             current_user_id.set(owner_uid)
             return await call_next(request)
 
-        # 9. All other protected endpoints reject unauthenticated access
+        # 4. Anything else on /api/* returns 401
         return JSONResponse(
             {
                 "detail": "Authentication required. Provide valid session cookie, Bearer token, or X-OpenEval-Key."
@@ -374,6 +383,12 @@ async def evaluate_action_watcher_gateway(req: WatcherRequest) -> WatcherVerdict
 
     Float deny/flag fields on WatcherConfig are legacy and do not affect decisions.
     """
+    if not getattr(app.state, "db_ready", True):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database connection is not ready.",
+        )
+
     from server.policy_gateway import PolicyGateway
     from server.watcher_store import get_watcher_store
 
@@ -1089,9 +1104,7 @@ async def list_watcher_interceptions(
     limit: int = Query(default=40, ge=1, le=200),
 ) -> list[dict[str, Any]]:
     """Recent blocked/escalated reviews + in-memory live-gate history for Control Live Stream."""
-    from server.demo_seed import is_demo_seed_enabled
-
-    if not is_demo_seed_enabled() and os.getenv("OPENEVAL_AUTO_SCAN_LOCAL_LOGS", "0").lower() in (
+    if os.getenv("OPENEVAL_AUTO_SCAN_LOCAL_LOGS", "0").lower() in (
         "1",
         "true",
         "yes",
@@ -1101,7 +1114,7 @@ async def list_watcher_interceptions(
         UniversalAgentLogLoader.scan_default_agent_directories()
 
     live = [v.model_dump() for v in global_watcher_engine.get_history(limit)]
-    if is_demo_seed_enabled():
+    if current_user_slug.get() == "demo":
         live = [
             v
             for v in live
@@ -1410,9 +1423,7 @@ def scan_antigravity_brain_sessions(limit: int = 15) -> list[dict[str, Any]]:
 @app.get("/api/watcher/sessions")
 async def list_watcher_sessions() -> list[dict[str, Any]]:
     """Legacy alias → WatcherStore sessions (same source as /api/v1/watcher/sessions)."""
-    from server.demo_seed import is_demo_seed_enabled
-
-    if not is_demo_seed_enabled() and os.getenv("OPENEVAL_AUTO_SCAN_LOCAL_LOGS", "0").lower() in (
+    if os.getenv("OPENEVAL_AUTO_SCAN_LOCAL_LOGS", "0").lower() in (
         "1",
         "true",
         "yes",
@@ -1424,10 +1435,6 @@ async def list_watcher_sessions() -> list[dict[str, Any]]:
     store = get_watcher_store()
     store.reload_from_disk()
     sessions = store.list_sessions()
-    if is_demo_seed_enabled():
-        sessions = [
-            s for s in sessions if "demo" in s.session_id or s.session_id.startswith("demo-")
-        ]
     return [s.model_dump() for s in sessions]
 
 
@@ -2912,9 +2919,7 @@ async def list_watcher_v1_sessions(
     min_messages: int = 0,
 ) -> list[dict[str, Any]]:
     """List monitored agent sessions from WatcherStore."""
-    from server.demo_seed import is_demo_seed_enabled
-
-    if not is_demo_seed_enabled() and os.getenv("OPENEVAL_AUTO_SCAN_LOCAL_LOGS", "0").lower() in (
+    if os.getenv("OPENEVAL_AUTO_SCAN_LOCAL_LOGS", "0").lower() in (
         "1",
         "true",
         "yes",
@@ -2926,10 +2931,6 @@ async def list_watcher_v1_sessions(
     store = get_watcher_store()
     store.reload_from_disk()
     sessions = store.list_sessions(agent_type=agent_type, status=status)
-    if is_demo_seed_enabled():
-        sessions = [
-            s for s in sessions if "demo" in s.session_id or s.session_id.startswith("demo-")
-        ]
     if min_messages > 0:
         sessions = [
             s

@@ -90,3 +90,41 @@ def test_seed_demo_data_is_idempotent_and_preserves_owner_rows():
     fetched_owner = store.get_session(owner_session.session_id)
     assert fetched_owner is not None
     assert fetched_owner.project_name == "private-owner-work"
+
+
+def test_startup_db_failure_fails_closed_on_evaluate(monkeypatch):
+    """When DATABASE_URL points at a closed port, lifespan marks db_ready=False and evaluate returns 503."""
+    bad_url = "postgresql+psycopg://openeval:openeval@127.0.0.1:59999/openeval"
+    monkeypatch.setenv("DATABASE_URL", bad_url)
+    monkeypatch.setenv("OPENEVAL_AUTH_DISABLED", "1")
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    bad_engine = create_engine(bad_url)
+    bad_session = sessionmaker(autocommit=False, autoflush=False, bind=bad_engine)
+    orig_ready = getattr(app.state, "db_ready", True)
+
+    try:
+        with (
+            patch("server.db.engine", bad_engine),
+            patch("server.db.SessionLocal", bad_session),
+            TestClient(app) as client,
+        ):
+            # Health probe fails with 503
+            h_resp = client.get("/api/health")
+            assert h_resp.status_code == 503
+
+            # Mutating evaluate endpoint returns 503
+            eval_resp = client.post(
+                "/api/watcher/evaluate",
+                json={
+                    "tool_name": "bash",
+                    "tool_input": "echo 'failing-db'",
+                    "agent_id": "test-agent",
+                },
+            )
+            assert eval_resp.status_code == 503
+            assert "Database" in eval_resp.json().get("detail", "")
+    finally:
+        app.state.db_ready = orig_ready

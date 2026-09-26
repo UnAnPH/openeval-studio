@@ -269,10 +269,6 @@ export function App() {
       let isDemo = isDemoSurface();
       if (healthRes && healthRes.ok) {
         setServerConnected(true);
-        const healthData = await healthRes.json().catch(() => ({}));
-        if (Boolean(healthData?.demo_seed)) {
-          isDemo = true;
-        }
         setIsDemoSeed(isDemo);
       } else {
         // Appwrite Sites static demo mode (seamless fallback when no backend is running)

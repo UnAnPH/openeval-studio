@@ -55,11 +55,40 @@ def hash_token(raw_token: str) -> str:
     return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
 
 
+def is_production_env() -> bool:
+    """Check if server is executing in production environment."""
+    return os.getenv("OPENEVAL_ENV", "").strip().lower() == "production"
+
+
+def get_session_secret() -> bytes:
+    """Retrieve HMAC session secret, refusing insecure defaults in production."""
+    raw = os.getenv("SESSION_SECRET", "").strip()
+    if is_production_env() and (not raw or raw == "openeval-dev-secret-key-32-chars-long"):
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Insecure or missing SESSION_SECRET in production environment.",
+        )
+    if not raw:
+        raw = "openeval-dev-secret-key-32-chars-long"
+    return raw.encode("utf-8")
+
+
+def is_https_request(request: Request) -> bool:
+    """Determine whether request was made over HTTPS directly or via reverse proxy."""
+    proto = (
+        (request.headers.get("x-forwarded-proto") or request.headers.get("X-Forwarded-Proto") or "")
+        .strip()
+        .lower()
+    )
+    return proto == "https" or request.url.scheme == "https"
+
+
 def create_session_token(user_id: int, slug: str) -> str:
     """Create signed HMAC-SHA256 session token."""
+    secret = get_session_secret()
     ts = int(time.time())
     payload = f"{user_id}:{slug}:{ts}"
-    sig = hmac.new(SESSION_SECRET, payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    sig = hmac.new(secret, payload.encode("utf-8"), hashlib.sha256).hexdigest()
     return f"{payload}:{sig}"
 
 
@@ -71,7 +100,8 @@ def verify_session_token(token: str) -> tuple[int, str] | None:
             return None
         uid_str, slug, ts_str, sig = parts
         payload = f"{uid_str}:{slug}:{ts_str}"
-        expected_sig = hmac.new(SESSION_SECRET, payload.encode("utf-8"), hashlib.sha256).hexdigest()
+        secret = get_session_secret()
+        expected_sig = hmac.new(secret, payload.encode("utf-8"), hashlib.sha256).hexdigest()
         if not hmac.compare_digest(sig, expected_sig):
             return None
         # 14 days expiration
@@ -88,9 +118,9 @@ def resolve_api_key_user(raw_key: str) -> tuple[int, str] | None:
     if not raw_key:
         return None
 
-    # 1. Environment override OPENEVAL_API_KEY writes as owner
+    # 1. Environment override OPENEVAL_API_KEY writes as owner (only compare if lengths match)
     env_key = os.getenv("OPENEVAL_API_KEY", "").strip()
-    if env_key and hmac.compare_digest(raw_key, env_key):
+    if env_key and len(raw_key) == len(env_key) and hmac.compare_digest(raw_key, env_key):
         with SessionLocal() as db:
             from server.db import get_user_id_by_slug
 
@@ -152,7 +182,7 @@ class KeyRotationResponse(BaseModel):
 
 
 @router.post("/register", response_model=RegisterResponse)
-def register(req: RegisterRequest, response: Response) -> Any:
+def register(req: RegisterRequest, response: Response, request: Request) -> Any:
     """Register a new tenant user, create initial API key, and set session cookie."""
     username = req.username.strip().lower()
 
@@ -208,6 +238,7 @@ def register(req: RegisterRequest, response: Response) -> Any:
         key=SESSION_COOKIE_NAME,
         value=token,
         httponly=True,
+        secure=is_https_request(request),
         samesite="lax",
         max_age=14 * 86400,
     )
@@ -216,7 +247,7 @@ def register(req: RegisterRequest, response: Response) -> Any:
 
 
 @router.post("/login", response_model=UserResponse)
-def login(req: LoginRequest, response: Response) -> Any:
+def login(req: LoginRequest, response: Response, request: Request) -> Any:
     """Authenticate with username and password, setting signed session cookie."""
     username = req.username.strip().lower()
 
@@ -240,6 +271,7 @@ def login(req: LoginRequest, response: Response) -> Any:
         key=SESSION_COOKIE_NAME,
         value=token,
         httponly=True,
+        secure=is_https_request(request),
         samesite="lax",
         max_age=14 * 86400,
     )

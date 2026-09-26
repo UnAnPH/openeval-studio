@@ -70,7 +70,7 @@ flowchart TD
 
 | Resource | Configuration | Monthly Cost (Post-Free Tier) | AWS Free Tier (First 12 Mo) |
 | :--- | :--- | :--- | :--- |
-| **Compute** | EC2 `t3.micro` (amd64, 2 vCPU, 1GB RAM) | ~$8.61 | **$0.00** (750 hrs/mo free) |
+| **Compute** | EC2 `t3.micro` (amd64, 2 vCPU, 1GB RAM) | ~$8.60 | **$0.00** (750 hrs/mo free) |
 | **Public IPv4** | 1 In-use auto-assigned Public IPv4 | ~$3.65 | **$0.00** (covered under free tier allowance) |
 | **Storage** | 10 GB gp3 Root SSD volume | ~$0.96 | **$0.00** (up to 30GB free) |
 | **Backups** | Amazon S3 Standard (~100MB gzipped dumps) | ~$0.05 | **$0.00** (up to 5GB free) |
@@ -78,6 +78,13 @@ flowchart TD
 | **Teardown (`make cloud-off`)** | All resources destroyed | **$0.00 / mo** | **$0.00 / mo** |
 
 *Eliminated from prior architecture:* Application Load Balancer (~$16.40/mo + ~$7.30 for 2 public IPs), Amazon RDS db.t4g.micro (~$11.60/mo + storage), secondary public and private subnets, 30GB disk.
+
+> [!WARNING]
+> **Instance-Only Boot Secrets (`pg_password` & `session_secret`):**
+> On first boot, cloud-init securely generates `/var/lib/openeval/pg_password` (24 bytes hex) and `/var/lib/openeval/session_secret` (32 bytes hex) on the EC2 instance root disk. These secrets live **only on the instance disk** and are never committed to version control.
+> If an instance is replaced or terminated, restoring database operations requires either:
+> 1. Restoring the S3 database dump alongside the original `/var/lib/openeval/pg_password` and `/var/lib/openeval/session_secret`, OR
+> 2. Booting with fresh randomly-generated secrets and updating the restored Postgres database credentials to match.
 
 ---
 
@@ -96,7 +103,7 @@ make cloud-status
 make cloud-off
 ```
 
-When `make cloud-on` finishes, it automatically polls `http://<EC2_PUBLIC_IP>/api/health` until HTTP 200 is confirmed and prints the demo URL.
+When `make cloud-on` finishes, it automatically polls `http://<EC2_PUBLIC_IP>/api/health` until HTTP 200 is confirmed (checking `body["db"] == "connected"` and `body["status"] == "ok"`) and prints the direct URL.
 
 ---
 
@@ -132,9 +139,10 @@ terraform apply -auto-approve
 ### Scheduled Backups
 Backups run automatically every day at **03:15 UTC** via systemd service `openeval-backup.service`.
 The script `scripts/pg_dump_to_s3.sh`:
-1. Executes `pg_dump` inside the `openeval-postgres` container.
-2. Compresses the SQL stream using `gzip`.
-3. Uploads the compressed archive to `s3://${BACKUP_BUCKET}/postgres/YYYY-MM-DD.sql.gz`.
+1. Verifies PostgreSQL readiness (`pg_isready`) before executing dump.
+2. Executes `pg_dump` inside the `openeval-postgres` container.
+3. Compresses the SQL stream using `gzip`.
+4. Uploads the compressed archive to `s3://${BACKUP_BUCKET}/postgres/YYYY-MM-DD.sql.gz`.
 
 ### Manual Backup
 To trigger an immediate backup on the EC2 host:
@@ -170,12 +178,9 @@ Expected output:
 ```json
 {
   "status": "ok",
+  "db": "connected",
   "version": "0.1.0",
-  "database": {
-    "engine": "postgresql",
-    "connected": true,
-    "status": "ok"
-  }
+  "demo_seed": true
 }
 ```
 

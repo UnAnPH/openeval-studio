@@ -16,26 +16,11 @@ users:
     groups: docker
 
 write_files:
-  - path: /etc/openeval.env
-    owner: root:root
-    permissions: "0600"
-    content: |
-      BACKUP_BUCKET=${backup_bucket}
-      OPENEVAL_DEMO_SEED=1
-      DATABASE_URL=postgresql+psycopg://openeval:openeval@postgres:5432/openeval
-      PORT=8000
-
-  - path: /var/lib/openeval/pg_password
-    owner: root:root
-    permissions: "0600"
-    content: |
-      openeval
-
   - path: /var/lib/openeval/Caddyfile
     owner: root:root
     permissions: "0644"
     content: |
-      openeval.studio, :80 {
+      openeval.studio {
           reverse_proxy app:8000
       }
 
@@ -48,6 +33,10 @@ write_files:
       if [[ -z "$${BACKUP_BUCKET:-}" ]]; then
         echo "Error: BACKUP_BUCKET is unset." >&2
         exit 1
+      fi
+      if ! docker exec openeval-postgres pg_isready -U openeval -d openeval >/dev/null 2>&1; then
+        echo "PostgreSQL is not ready or container is not running; skipping backup." >&2
+        exit 0
       fi
       DATE_STR=$(date -u +%F)
       DEST="s3://$${BACKUP_BUCKET}/postgres/$${DATE_STR}.sql.gz"
@@ -95,13 +84,35 @@ runcmd:
   - mkdir -p /var/lib/openeval/pg /var/lib/openeval/caddy_data /var/lib/openeval/caddy_config /opt/openeval/scripts /home/ubuntu/openeval-studio
   - chown -R ubuntu:docker /var/lib/openeval /opt/openeval /home/ubuntu/openeval-studio
 
-  # 3. Enable & start Docker and backup timer
+  # 3. Generate boot secrets if absent and create /etc/openeval.env
+  - |
+    if [ ! -f /var/lib/openeval/pg_password ]; then
+      openssl rand -hex 24 > /var/lib/openeval/pg_password
+      chmod 0600 /var/lib/openeval/pg_password
+    fi
+    if [ ! -f /var/lib/openeval/session_secret ]; then
+      openssl rand -hex 32 > /var/lib/openeval/session_secret
+      chmod 0600 /var/lib/openeval/session_secret
+    fi
+    PG_PASS=$$(tr -d '\r\n' < /var/lib/openeval/pg_password)
+    SESS_SEC=$$(tr -d '\r\n' < /var/lib/openeval/session_secret)
+    cat <<EOF > /etc/openeval.env
+    BACKUP_BUCKET=${backup_bucket}
+    OPENEVAL_ENV=production
+    OPENEVAL_DEMO_SEED=1
+    SESSION_SECRET=$$SESS_SEC
+    DATABASE_URL=postgresql+psycopg://openeval:$$PG_PASS@postgres:5432/openeval
+    PORT=8000
+    EOF
+    chmod 0600 /etc/openeval.env
+
+  # 4. Enable & start Docker and backup timer
   - systemctl daemon-reload
   - systemctl enable --now docker
   - systemctl enable --now openeval-backup.timer
   - usermod -aG docker ubuntu
 
-  # 4. Clone repo and launch production docker compose stack
+  # 5. Clone repo and launch production docker compose stack
   - su - ubuntu -c "git clone https://github.com/unanph/openeval-studio.git /home/ubuntu/openeval-studio || true"
   - su - ubuntu -c "cd /home/ubuntu/openeval-studio && docker compose --env-file /etc/openeval.env -f docker-compose.prod.yml pull"
   - su - ubuntu -c "cd /home/ubuntu/openeval-studio && docker compose --env-file /etc/openeval.env -f docker-compose.prod.yml up -d"
