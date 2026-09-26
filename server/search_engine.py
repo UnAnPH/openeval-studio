@@ -100,62 +100,85 @@ class TranscriptSearchEngine:
 
             # Check each step
             for step in run.steps:
+                if isinstance(step, dict):
+                    step_thought = step.get("thought")
+                    action = step.get("action") or {}
+                    step_command = (
+                        action.get("command")
+                        if isinstance(action, dict)
+                        else getattr(action, "command", None)
+                    )
+                    step_content = (
+                        action.get("content")
+                        if isinstance(action, dict)
+                        else getattr(action, "content", None)
+                    )
+                    step_observation = step.get("observation")
+                    step_num = step.get("step_number")
+                else:
+                    step_thought = getattr(step, "thought", None)
+                    action = getattr(step, "action", None)
+                    step_command = getattr(action, "command", None) if action else None
+                    step_content = getattr(action, "content", None) if action else None
+                    step_observation = getattr(step, "observation", None)
+                    step_num = getattr(step, "step_number", None)
+
                 # Thought match
-                if step.thought and q_lower in step.thought.lower():
+                if step_thought and q_lower in str(step_thought).lower():
                     results.append(
                         SearchResultMatch(
                             run_id=run.run_id,
                             task_id=run.task_id,
                             model=run.model,
                             passed=run.passed,
-                            step_number=step.step_number,
+                            step_number=step_num,
                             match_field="thought",
-                            snippet=cls._create_snippet(step.thought, query),
+                            snippet=cls._create_snippet(str(step_thought), query),
                             created_at=run.created_at,
                         )
                     )
 
                 # Command match
-                if step.action.command and q_lower in step.action.command.lower():
+                if step_command and q_lower in str(step_command).lower():
                     results.append(
                         SearchResultMatch(
                             run_id=run.run_id,
                             task_id=run.task_id,
                             model=run.model,
                             passed=run.passed,
-                            step_number=step.step_number,
+                            step_number=step_num,
                             match_field="command",
-                            snippet=cls._create_snippet(step.action.command, query),
+                            snippet=cls._create_snippet(str(step_command), query),
                             created_at=run.created_at,
                         )
                     )
 
                 # File content match
-                if step.action.content and q_lower in step.action.content.lower():
+                if step_content and q_lower in str(step_content).lower():
                     results.append(
                         SearchResultMatch(
                             run_id=run.run_id,
                             task_id=run.task_id,
                             model=run.model,
                             passed=run.passed,
-                            step_number=step.step_number,
+                            step_number=step_num,
                             match_field="file_content",
-                            snippet=cls._create_snippet(step.action.content, query),
+                            snippet=cls._create_snippet(str(step_content), query),
                             created_at=run.created_at,
                         )
                     )
 
                 # Observation match
-                if step.observation and q_lower in step.observation.lower():
+                if step_observation and q_lower in str(step_observation).lower():
                     results.append(
                         SearchResultMatch(
                             run_id=run.run_id,
                             task_id=run.task_id,
                             model=run.model,
                             passed=run.passed,
-                            step_number=step.step_number,
+                            step_number=step_num,
                             match_field="observation",
-                            snippet=cls._create_snippet(step.observation, query),
+                            snippet=cls._create_snippet(str(step_observation), query),
                             created_at=run.created_at,
                         )
                     )

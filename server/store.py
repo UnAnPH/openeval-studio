@@ -45,6 +45,8 @@ class RunStore:
         """Look up a run/session by its ID (session_id or run_id field)."""
         if run_id in self._deleted_ids:
             return None
+        if run_id in self._runs:
+            return self._runs[run_id]
         # First try by session_id (fastest path)
         session = self._watcher.get_session(run_id)
         if session and session.agent_type not in ("antigravity", "claude_code", "cursor"):
@@ -61,10 +63,16 @@ class RunStore:
 
     def list_runs(self) -> list[Session]:
         """Return all historical evaluation runs sorted by created_at descending."""
-        sessions = self._watcher.list_sessions()
+        db_sessions = self._watcher.list_sessions()
+        seen = {s.session_id for s in db_sessions}
+        all_sessions = list(db_sessions)
+        for s in self._runs.values():
+            if s.session_id not in seen:
+                all_sessions.append(s)
+                seen.add(s.session_id)
         return [
             s
-            for s in sessions
+            for s in all_sessions
             if s.session_id not in self._deleted_ids
             and (s.run_id is None or s.run_id not in self._deleted_ids)
             and s.agent_type not in ("antigravity", "claude_code", "cursor")
