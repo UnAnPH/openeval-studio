@@ -110,68 +110,116 @@ app.add_middleware(
 )
 
 
-class _ApiKeyMiddleware(BaseHTTPMiddleware):
-    """Optional API key gate (OPENEVAL_API_KEY) for mutating / evaluate routes."""
+from server.auth import (
+    SESSION_COOKIE_NAME,
+    resolve_api_key_user,
+    router as auth_router,
+    verify_session_token,
+)
+from server.db import SessionLocal, current_user_id, current_user_slug, get_user_id_by_slug
+
+
+class _AuthMiddleware(BaseHTTPMiddleware):
+    """Authentication and tenant isolation middleware.
+
+    Enforces session cookies, Bearer tokens, and X-OpenEval-Key headers,
+    while permitting unauthenticated read access for the demo surface.
+    """
 
     async def dispatch(self, request: Request, call_next: Any) -> Response:
-        required = os.environ.get("OPENEVAL_API_KEY", "").strip()
-        if not required:
-            return await call_next(request)
         path = request.url.path
-        protected_api = (
-            path.startswith("/api/watcher/evaluate")
-            or path.startswith("/api/gate/evaluate")
-            or (
-                request.method in ("POST", "PUT", "PATCH", "DELETE")
-                and path.startswith("/api/")
-                and not path.endswith("/health")
-                and not path.endswith("/demo/status")
-            )
+        method = request.method.upper()
+
+        # 1. Non-API routes (SPA, static assets, favicon, /demo) are unauthenticated
+        if not path.startswith("/api/"):
+            return await call_next(request)
+
+        # 2. Public API endpoints that bypass authentication
+        if (
+            path == "/api/health"
+            or path == "/api/demo/status"
+            or path in ("/api/auth/register", "/api/auth/login")
+            or path.startswith("/docs")
+            or path.startswith("/redoc")
+            or path == "/openapi.json"
+        ):
+            return await call_next(request)
+
+        # 3. Detect surface header
+        surface_header = (
+            request.headers.get("X-OpenEval-Surface")
+            or request.headers.get("x-openeval-surface")
+            or ""
+        ).strip().lower()
+
+        # 4. Check for session cookie
+        cookie_val = request.cookies.get(SESSION_COOKIE_NAME)
+        authenticated_user: tuple[int, str] | None = None
+        if cookie_val:
+            authenticated_user = verify_session_token(cookie_val)
+
+        # 5. Check for API key (Bearer token or X-OpenEval-Key)
+        api_key = request.headers.get("X-OpenEval-Key") or request.headers.get("x-openeval-key")
+        auth_header = (
+            request.headers.get("Authorization") or request.headers.get("authorization") or ""
         )
-        if protected_api and required:
-            key = request.headers.get("X-OpenEval-Key") or request.headers.get("x-openeval-key")
-            auth = (
-                request.headers.get("Authorization") or request.headers.get("authorization") or ""
-            )
-            if not key and auth.startswith("Bearer "):
-                key = auth[7:].strip()
-            if key != required:
+        if not api_key and auth_header.startswith("Bearer "):
+            api_key = auth_header[7:].strip()
+
+        if api_key:
+            authenticated_user = resolve_api_key_user(api_key)
+            if not authenticated_user:
                 return JSONResponse(
-                    {"detail": "Invalid or missing X-OpenEval-Key or Authorization Bearer token"},
+                    {"detail": "Invalid or expired API key or Bearer token."},
                     status_code=401,
                 )
 
-        # Basic Auth protection for live studio UI (disabled in demo mode)
-        admin_pass = os.environ.get("ADMIN_PASSWORD", "").strip()
-        admin_user = os.environ.get("ADMIN_USER", "jayson").strip()
-        is_demo = os.environ.get("OPENEVAL_DEMO_SEED", "0").lower() in ("1", "true", "yes")
+        auth_disabled = os.getenv("OPENEVAL_AUTH_DISABLED", "0").lower() in ("1", "true", "yes")
+        is_demo_mode = os.getenv("OPENEVAL_DEMO_SEED", "0").lower() in ("1", "true", "yes")
 
-        if admin_pass and not is_demo and not path.startswith("/api/"):
-            auth_header = request.headers.get("Authorization") or ""
-            if not auth_header.startswith("Basic "):
-                return Response(
-                    status_code=401,
-                    headers={"WWW-Authenticate": 'Basic realm="OpenEval Private Studio"'},
-                    content="Authentication required\n",
-                )
-            import base64
-
-            try:
-                decoded = base64.b64decode(auth_header[6:]).decode("utf-8")
-                user, _, password = decoded.partition(":")
-                if user != admin_user or password != admin_pass:
-                    return Response(
+        # 6. Handle demo surface or demo-seeded instance
+        if surface_header == "demo" or (is_demo_mode and not authenticated_user):
+            # Read-only requests allow demo access without credentials
+            if method in ("GET", "HEAD", "OPTIONS"):
+                with SessionLocal() as db:
+                    demo_uid = get_user_id_by_slug(db, "demo")
+                current_user_slug.set("demo")
+                current_user_id.set(demo_uid)
+                return await call_next(request)
+            else:
+                # Mutating requests (e.g. POST /api/watcher/evaluate): ignore demo header, enforce authentication
+                if not authenticated_user and not auth_disabled:
+                    return JSONResponse(
+                        {"detail": "Authentication required. Demo mode is read-only."},
                         status_code=401,
-                        headers={"WWW-Authenticate": 'Basic realm="OpenEval Private Studio"'},
-                        content="Invalid credentials\n",
                     )
-            except Exception:
-                return Response(status_code=401, content="Invalid authorization header\n")
-
-        return await call_next(request)
 
 
-app.add_middleware(_ApiKeyMiddleware)
+        # 7. Authenticated user path
+        if authenticated_user:
+            uid, slug = authenticated_user
+            current_user_id.set(uid)
+            current_user_slug.set(slug)
+            return await call_next(request)
+
+        # 8. Test / dev fallback when auth is explicitly disabled
+        if auth_disabled:
+            with SessionLocal() as db:
+                owner_uid = get_user_id_by_slug(db, "owner")
+            current_user_slug.set("owner")
+            current_user_id.set(owner_uid)
+            return await call_next(request)
+
+        # 9. All other protected endpoints reject unauthenticated access
+        return JSONResponse(
+            {"detail": "Authentication required. Provide valid session cookie, Bearer token, or X-OpenEval-Key."},
+            status_code=401,
+        )
+
+
+app.add_middleware(_AuthMiddleware)
+app.include_router(auth_router)
+
 
 
 class TaskSummary(BaseModel):
@@ -3457,7 +3505,22 @@ def _scrub_accidental_safe_overrides() -> None:
 
 
 _ui_dist = Path(__file__).resolve().parent.parent / "ui" / "dist"
+
+
+@app.get("/demo")
+@app.get("/demo/{rest:path}")
+def serve_demo_spa(rest: str = "") -> Response:
+    """Serve SPA index for the demo surface."""
+    index_file = _ui_dist / "index.html"
+    if index_file.exists():
+        from fastapi.responses import FileResponse
+
+        return FileResponse(str(index_file))
+    return JSONResponse({"status": "ok", "mode": "demo"})
+
+
 if _ui_dist.exists():
     from fastapi.staticfiles import StaticFiles
 
     app.mount("/", StaticFiles(directory=str(_ui_dist), html=True), name="ui")
+

@@ -14,6 +14,8 @@ os.environ["OPENEVAL_WATCHER_USE_LLM"] = "0"
 os.environ.setdefault(
     "DATABASE_URL", "postgresql+psycopg://openeval:openeval@127.0.0.1:5432/openeval"
 )
+os.environ.setdefault("OPENEVAL_AUTH_DISABLED", "1")
+
 
 
 @pytest.fixture(autouse=True, scope="session")
