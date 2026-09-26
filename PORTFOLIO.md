@@ -26,8 +26,8 @@ Autonomous coding agents like Cursor, Claude Code, and Antigravity issue hundred
    Implemented as pure in-process regex heuristics within client hook scripts (`scripts/cursor_watcher_gate.py`, `scripts/antigravity_watcher_gate.py`). Known benign developer commands bypass network dispatch entirely with zero human-perceptible delay ($<3\mu\text{s}$). Destructive commands (`rm -rf /`, credential harvesting) are trapped instantaneously.
 2. **Tier 2: Synchronous Policy Gateway Evaluation (`~5.3 ms` at p95)**  
    Client hooks forward non-trivial actions to the FastAPI Gateway (`POST /api/watcher/evaluate`). The gateway evaluates deterministic rules, dynamic tool thresholds (1–10 scale), and prior session context in sub-6ms roundtrip time, well within the $<50\text{ms}$ budget.
-3. **Tier 3: Asynchronous LLM Deep Review (`800 ms – 1500 ms`)**  
-   When frontier LLM reasoning is wired (`OPENEVAL_WATCHER_USE_LLM=1`), deep context analysis runs with an enforced **1.5s hard client timeout** and configurable **fail-open semantics** (`FAIL_OPEN=true`). If the network or LLM slows down, the developer is never frozen in place.
+3. **Tier 3: Synchronous-with-Timeout LLM Deep Review (`800 ms – 1500 ms`)**  
+   When frontier LLM reasoning is wired (`OPENEVAL_WATCHER_USE_LLM=1`), the gate executes synchronously in the tool execution path, bounded by an enforced **1.5s hard client timeout** and configurable **fail-open semantics** (`FAIL_OPEN=true`). Rather than framing this as unblocking background processing, we explicitly acknowledge that the agent blocks and waits up to the timeout. The 1.5s client-side cutoff guarantees that slow model inference or network latency never hangs developer terminals indefinitely.
 
 ---
 
@@ -74,7 +74,7 @@ Empirically profiled using `scripts/benchmark_gate_latency.py` across 5,000 loca
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Tier 1: Local In-Process Regex** | **0.001 ms** | 0.002 ms | **0.002 ms** | 0.002 ms | 0.011 ms |
 | **Tier 2: Policy Gateway HTTP API** | **3.89 ms** | 4.79 ms | **5.02 ms** | 9.92 ms | 13.82 ms |
-| **Tier 3: Asynchronous LLM Deep Review** | ~950 ms | ~1200 ms | ~1450 ms | — | 1.5s (Hard Cutoff) |
+| **Tier 3: Sync-with-Timeout LLM Review** | ~950 ms | ~1200 ms | ~1450 ms | — | 1.5s (Hard Cutoff) |
 
 **Conclusion**: The synchronous blocking budget is satisfied with substantial headroom ($\approx 10\times$ faster than the 50ms requirement).
 

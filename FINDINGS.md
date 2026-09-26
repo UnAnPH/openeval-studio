@@ -158,7 +158,7 @@ Artifact: scripts/benchmark_gate_latency.py
 
 ### Three-Tier Latency Architecture & Full-Path Trade-Offs
 
-It is critical to distinguish microbenchmark latency from full-path asynchronous analysis:
+It is critical to distinguish microbenchmark latency from full-path evaluation:
 
 1. **Tier 1: Synchronous In-Process Regex (Client Hook)**
    - **p50: 0.001 ms | p95: 0.002 ms** ($\approx 1.1\mu\text{s}$)
@@ -168,9 +168,10 @@ It is critical to distinguish microbenchmark latency from full-path asynchronous
    - **p50: 3.89 ms | p95: 5.02 ms**
    - Evaluates dynamic command rules, tool thresholds, and session state. Confirmed well within the $<50\text{ms}$ interactive blocking budget.
 
-3. **Tier 3: Asynchronous LLM Deep Review (Frontier Model Calling)**
+3. **Tier 3: Synchronous-with-Timeout LLM Deep Review (Bounded Blocking Path)**
    - **Typical RTT: 800 ms – 1500 ms**
-   - Deep review and trajectory evaluation involve external LLM inference. To prevent blocking developer flow, client hooks enforce a **1.5s hard client-side timeout with configurable fail-open semantics** (`FAIL_OPEN=true`). If deep review does not complete within budget, the gate fails open to allow benign workflows to continue while logging an asynchronous audit event.
+   - When frontier LLM reasoning is enabled (`OPENEVAL_WATCHER_USE_LLM=1`), the gate executes synchronously in the tool dispatch path, bounded by an enforced **1.5s hard client timeout with configurable fail-open semantics** (`FAIL_OPEN=true`).
+   - *Honest path mechanics*: This is **sync-with-timeout**, not an unblocking background job. The client agent runtime pauses and waits up to the timeout duration before tool execution proceeds. If the model responds in 950ms, the agent waits 950ms. If the model exceeds 1.5s or fails, the client hook aborts the wait and fails open (`allow`) to prevent freezing developer flow while logging an incident record.
 
 ## Scope
 

@@ -20,7 +20,7 @@ import { MainNavTab } from '../types';
 interface NavItem {
   id: MainNavTab;
   label: string;
-  icon: string;
+  icon: any;
   isActive: boolean;
 }
 
