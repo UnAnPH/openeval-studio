@@ -53,16 +53,33 @@ ion-app, ion-page, ion-content, ion-card, ion-header, ion-toolbar {
   color: #14121F;
 }
 
-/* Global IonIcon sizing fix to prevent SVGs expanding to native 512px */
+/* Global icon sizing standard: default to 1em (~14-16px proportional to font size) */
+@layer base {
+  svg.lucide,
+  ion-icon,
+  .icon-inner {
+    width: 1em;
+    height: 1em;
+    font-size: inherit;
+    display: inline-block;
+    vertical-align: -0.125em;
+    flex-shrink: 0;
+  }
+
+  /* Universal button & interactive control icon standard: ~15px */
+  button svg.lucide,
+  button ion-icon,
+  .btn svg.lucide,
+  a svg.lucide {
+    width: 15px;
+    height: 15px;
+  }
+}
+
 ion-icon {
-  display: inline-block;
-  width: 1em;
-  height: 1em;
-  font-size: inherit;
   contain: strict;
   fill: currentColor;
   box-sizing: content-box;
-  vertical-align: -0.125em;
 }
 
 ion-icon svg,

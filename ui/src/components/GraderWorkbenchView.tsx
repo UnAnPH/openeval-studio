@@ -455,9 +455,6 @@ export const GraderWorkbenchView: React.FC = () => {
                 <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
                   Canonical Prompt Anatomy (C1–C15)
                 </span>
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">
-                  Per-User Customization
-                </span>
               </div>
               <div className="flex items-center gap-2">
                 {saveSuccess && (
@@ -597,11 +594,11 @@ export const GraderWorkbenchView: React.FC = () => {
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                 <div
                   onClick={() => setIsPickerOpen(true)}
-                  className="flex-1 p-3 px-4 rounded-xl border border-gray-200 bg-gray-50/70 hover:bg-gray-100/80 transition-all cursor-pointer flex items-center justify-between gap-3 group shadow-2xs select-none"
+                  className="flex-1 min-h-[41px] h-[41px] px-4 rounded-xl border border-gray-200 bg-gray-50/70 hover:bg-gray-100/80 transition-all cursor-pointer flex items-center justify-between gap-3 group shadow-2xs select-none"
                   title="Click to choose a monitored agent session"
                 >
                   {selectedSession ? (
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
                       {/* Agent Badge */}
                       <span className="px-2 py-0.5 rounded-md bg-dark-base text-white text-[10px] font-mono font-semibold shrink-0">
                         {selectedSession.agent_type === 'antigravity'
@@ -631,11 +628,11 @@ export const GraderWorkbenchView: React.FC = () => {
                       </span>
 
                       {/* Session Title & Info */}
-                      <div className="min-w-0 flex-1">
+                      <div className="min-w-0 flex-1 flex items-center gap-2">
                         <div className="text-xs font-bold text-gray-900 truncate">
                           {selectedSession.title || selectedSession.project_name || selectedSession.session_id}
                         </div>
-                        <div className="text-[10px] text-gray-400 font-mono truncate">
+                        <div className="text-[10px] text-gray-400 font-mono truncate hidden md:inline">
                           id: {selectedSession.session_id.slice(0, 16)} · {selectedSession.trajectory?.messages?.length || 0} msgs · {selectedSession.trajectory?.tool_calls?.length || 0} tools
                         </div>
                       </div>
@@ -656,9 +653,9 @@ export const GraderWorkbenchView: React.FC = () => {
                 <button
                   onClick={runLiveAudit}
                   disabled={isAuditing || !selectedSessionId}
-                  className="py-3 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50 shrink-0"
+                  className="min-h-[41px] h-[41px] px-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50 shrink-0"
                 >
-                  <IonIcon icon={isAuditing ? refreshOutline : playOutline} className={isAuditing ? 'animate-spin text-sm' : 'text-sm'} />
+                  <IonIcon icon={isAuditing ? refreshOutline : playOutline} className={isAuditing ? 'animate-spin text-[15px]' : 'text-[15px]'} />
                   <span>{isAuditing ? 'Auditing Transcript...' : 'Audit Live Session'}</span>
                 </button>
               </div>

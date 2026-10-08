@@ -12,8 +12,8 @@ export interface IonIconProps {
 export const IonIcon: React.FC<IonIconProps> = ({ icon: Icon, className = '', style, onClick }) => {
   if (!Icon) return null;
   if (typeof Icon === 'function' || (typeof Icon === 'object' && ('render' in Icon || '$$typeof' in Icon))) {
-    const Component = Icon as React.ComponentType<{ className?: string; style?: React.CSSProperties; onClick?: React.MouseEventHandler }>;
-    return <Component className={clsx('inline-block shrink-0', className)} style={style} onClick={onClick} />;
+    const Component = Icon as React.ComponentType<{ className?: string; style?: React.CSSProperties; onClick?: React.MouseEventHandler; size?: number | string }>;
+    return <Component size="1em" className={clsx('inline-block shrink-0', className)} style={style} onClick={onClick} />;
   }
   return null;
 };
