@@ -21,6 +21,7 @@ interface FirewallGateViewProps {
   watcherConfig?: WatcherConfig;
   liveInterceptions?: WatcherVerdict[];
   isDemoSeed?: boolean;
+  isDemo?: boolean;
   onSelectIncident?: (finding: FindingRecord) => void;
   onUpdateWatcherConfig?: (config: Partial<WatcherConfig>) => void;
   onNavigateToSessions?: () => void;
@@ -96,6 +97,7 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
   liveInterceptions = [],
   discoveredSessions: _discoveredSessions = [],
   isDemoSeed,
+  isDemo,
   onUpdateWatcherConfig,
   onNavigateToSessions,
 }) => {
@@ -252,7 +254,7 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-[#fcfcfd] text-[#1e2029] font-sans p-6 space-y-5 overflow-y-auto">
-      {isDemoSeed && (
+      {isDemo && isDemoSeed && (
         <div className="sticky top-0 z-20 flex items-center justify-between gap-3 px-4 py-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-900 text-xs font-medium shadow-xs shrink-0 backdrop-blur-sm">
           <div className="flex items-center gap-2.5">
             <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500 text-white tracking-wide uppercase">

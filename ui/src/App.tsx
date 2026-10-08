@@ -300,8 +300,10 @@ export function App() {
             : sessData;
           setDiscoveredSessions(filtered);
         }
-      } else {
+      } else if (isDemo) {
         setDiscoveredSessions((prev) => (prev.length === 0 ? (DEMO_SESSIONS as unknown as any[]) : prev));
+      } else {
+        setDiscoveredSessions([]);
       }
 
       if (modelsRes && modelsRes.ok) {
@@ -365,21 +367,10 @@ export function App() {
       if (interceptRes && interceptRes.ok) {
         const rows: WatcherVerdict[] = await interceptRes.json();
         if (Array.isArray(rows) && rows.length > 0) {
-          setLiveInterceptions((prev) => {
-            if (prev.length === 0) return rows;
-            const seen = new Set(
-              prev.map((v) => `${v.agent_id}|${v.decision}|${v.action_preview}|${v.timestamp}`)
-            );
-            const merged = [...prev];
-            for (const row of rows) {
-              const key = `${row.agent_id}|${row.decision}|${row.action_preview}|${row.timestamp}`;
-              if (!seen.has(key)) {
-                seen.add(key);
-                merged.push(row);
-              }
-            }
-            return merged.slice(0, 50);
-          });
+          const filteredRows = isDemo
+            ? rows
+            : rows.filter((r) => !(r.session_id || '').includes('demo') && !(r.session_id || '').startsWith('demo-'));
+          setLiveInterceptions(filteredRows);
         } else if (!isDemo) {
           setLiveInterceptions([]);
         }
@@ -1090,6 +1081,7 @@ export function App() {
               <SessionsView
                 initialSessionId={selectedSessionId}
                 isDemoSeed={isDemoSeed}
+                isDemo={isDemo}
                 onBack={() => {
                   if (window.history.length > 1) {
                     window.history.back();
@@ -1134,6 +1126,7 @@ export function App() {
                 watcherConfig={watcherConfig}
                 liveInterceptions={liveInterceptions}
                 isDemoSeed={isDemoSeed}
+                isDemo={isDemo}
                 onSelectIncident={handleSelectIncident}
                 onUpdateWatcherConfig={handleUpdateWatcherConfig}
                 onNavigateToSessions={() => setRoute('sessions')}

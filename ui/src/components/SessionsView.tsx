@@ -41,13 +41,16 @@ interface FragmentMatch {
 interface SessionsViewProps {
   initialSessionId?: string | null;
   isDemoSeed?: boolean;
+  isDemo?: boolean;
   onBack?: () => void;
 }
 
 export const SessionsView: React.FC<SessionsViewProps> = ({
   initialSessionId,
   isDemoSeed,
+  isDemo: propIsDemo,
 }) => {
+  const isDemo = propIsDemo ?? (isDemoSeed || (typeof window !== 'undefined' && (window.location.pathname.startsWith('/demo') || window.location.hash.startsWith('#/demo'))));
   const [sessions, setSessions] = useState<WatcherSession[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(initialSessionId || null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -81,34 +84,53 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
       const res = await fetch('/api/v1/watcher/sessions?min_messages=1').catch(() => null);
       if (res && res.ok) {
         const data: WatcherSession[] = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          setSessions(data);
-          if (autoSelect || !selectedSessionId) {
-            if (initialSessionId && data.some((s) => s.session_id === initialSessionId)) {
-              setSelectedSessionId(initialSessionId);
-            } else if (data.length > 0) {
-              setSelectedSessionId(data[0].session_id);
+        if (Array.isArray(data)) {
+          const validData = isDemo
+            ? data
+            : data.filter((s) => !(s.session_id || '').includes('demo') && !(s.session_id || '').startsWith('demo-'));
+          if (validData.length > 0) {
+            setSessions(validData);
+            if (autoSelect || !selectedSessionId) {
+              if (initialSessionId && validData.some((s) => s.session_id === initialSessionId)) {
+                setSelectedSessionId(initialSessionId);
+              } else if (validData.length > 0) {
+                setSelectedSessionId(validData[0].session_id);
+              }
             }
+            return;
+          } else if (!isDemo) {
+            setSessions([]);
+            setSelectedSessionId(null);
+            return;
           }
-          return;
         }
       }
-      // Static Appwrite Sites fallback
-      const fallback = DEMO_SESSIONS as unknown as WatcherSession[];
-      setSessions(fallback);
-      if (autoSelect || !selectedSessionId) {
-        if (initialSessionId && fallback.some((s) => s.session_id === initialSessionId)) {
-          setSelectedSessionId(initialSessionId);
-        } else if (fallback.length > 0) {
-          setSelectedSessionId(fallback[0].session_id);
+      if (isDemo) {
+        // Static Appwrite Sites fallback
+        const fallback = DEMO_SESSIONS as unknown as WatcherSession[];
+        setSessions(fallback);
+        if (autoSelect || !selectedSessionId) {
+          if (initialSessionId && fallback.some((s) => s.session_id === initialSessionId)) {
+            setSelectedSessionId(initialSessionId);
+          } else if (fallback.length > 0) {
+            setSelectedSessionId(fallback[0].session_id);
+          }
         }
+      } else {
+        setSessions([]);
+        setSelectedSessionId(null);
       }
     } catch (err) {
-      console.warn('Backend unavailable, using bundled demo sessions:', err);
-      const fallback = DEMO_SESSIONS as unknown as WatcherSession[];
-      setSessions(fallback);
-      if (fallback.length > 0 && !selectedSessionId) {
-        setSelectedSessionId(fallback[0].session_id);
+      if (isDemo) {
+        console.warn('Backend unavailable, using bundled demo sessions:', err);
+        const fallback = DEMO_SESSIONS as unknown as WatcherSession[];
+        setSessions(fallback);
+        if (fallback.length > 0 && !selectedSessionId) {
+          setSelectedSessionId(fallback[0].session_id);
+        }
+      } else {
+        setSessions([]);
+        setSelectedSessionId(null);
       }
     } finally {
       setIsLoading(false);
@@ -544,7 +566,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-[#fcfcfd] text-[#1e2029] font-sans p-6 space-y-5 overflow-hidden">
-      {isDemoSeed && (
+      {isDemo && isDemoSeed && (
         <div className="sticky top-0 z-20 flex items-center justify-between gap-3 px-4 py-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-900 text-xs font-medium shadow-xs shrink-0 backdrop-blur-sm">
           <div className="flex items-center gap-2.5">
             <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500 text-white tracking-wide uppercase">
