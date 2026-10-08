@@ -25,6 +25,9 @@ services:
         required: false
       - path: .release-env
         required: false
+    volumes:
+      - ./alembic:/app/alembic:ro
+      - ./alembic.ini:/app/alembic.ini:ro
     command: >
       sh -c "uv run alembic upgrade head && uv run uvicorn server.app:app --host 0.0.0.0 --port 8000"
     networks:

@@ -16,7 +16,8 @@ COPY engine engine
 COPY server server
 COPY sandbox sandbox
 COPY fixtures fixtures
-COPY cli.py inspect_tasks.py ./
+COPY alembic alembic
+COPY alembic.ini cli.py inspect_tasks.py ./
 COPY --from=ui-builder /app/ui/dist /app/ui/dist
 RUN uv sync --no-dev || uv pip install --system -e .
 

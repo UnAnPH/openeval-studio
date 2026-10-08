@@ -104,7 +104,8 @@ runcmd:
     DATABASE_URL=postgresql+psycopg://openeval:$PG_PASS@postgres:5432/openeval
     PORT=8000
     EOF
-    chmod 0600 /etc/openeval.env
+    chown root:docker /etc/openeval.env
+    chmod 0640 /etc/openeval.env
 
   # 4. Enable & start Docker and backup timer
   - systemctl daemon-reload
