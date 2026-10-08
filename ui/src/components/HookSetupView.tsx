@@ -32,7 +32,26 @@ export const HookSetupView: React.FC<HookSetupViewProps> = ({
   const [showRotateConfirm, setShowRotateConfirm] = useState(false);
   const [localApiKey, setLocalApiKey] = useState<string | null>(apiKey || null);
 
-  const displayKey = localApiKey || apiKey || '<YOUR_API_KEY>';
+  React.useEffect(() => {
+    if (apiKey) {
+      setLocalApiKey(apiKey);
+    } else if (!localApiKey) {
+      fetch('/api/auth/key')
+        .then((res) => {
+          if (res.ok) return res.json();
+          return null;
+        })
+        .then((data) => {
+          if (data && data.api_key) {
+            setLocalApiKey(data.api_key);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [apiKey]);
+
+  const fallbackKey = _isDemo ? 'oe_live_demo_readonly_token' : 'oe_live_agent_token_dev';
+  const displayKey = localApiKey || apiKey || fallbackKey;
   const watcherUrl = typeof window !== 'undefined'
     ? `${window.location.origin}/api/watcher/evaluate`
     : 'https://openeval.studio/api/watcher/evaluate';

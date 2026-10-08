@@ -71,7 +71,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from alembic import command
     from server.agent_daemon import AgentWatcherDaemon
     from server.db import SessionLocal, engine
-    from server.demo_seed import is_demo_seed_enabled, seed_demo_data
+    from server.demo_seed import seed_demo_data
 
     # Startup: fail-closed initial state
     app.state.db_ready = False
@@ -87,7 +87,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.error("Database connection or migration failed during startup: %s", exc)
         app.state.db_ready = False
 
-    if is_demo_seed_enabled() and app.state.db_ready:
+    if app.state.db_ready:
         seed_demo_data()
 
     _scrub_accidental_safe_overrides()

@@ -298,10 +298,14 @@ export function App() {
           const filtered = isDemo
             ? sessData.filter((s: any) => (s.session_id || s.id || '').includes('demo') || (s.session_id || s.id || '').startsWith('demo-'))
             : sessData;
-          setDiscoveredSessions(filtered);
+          if (isDemo && filtered.length === 0) {
+            setDiscoveredSessions(DEMO_SESSIONS as unknown as any[]);
+          } else {
+            setDiscoveredSessions(filtered);
+          }
         }
       } else if (isDemo) {
-        setDiscoveredSessions((prev) => (prev.length === 0 ? (DEMO_SESSIONS as unknown as any[]) : prev));
+        setDiscoveredSessions(DEMO_SESSIONS as unknown as any[]);
       } else {
         setDiscoveredSessions([]);
       }
@@ -344,9 +348,13 @@ export function App() {
             return rev ? { ...r, ...rev } : r;
           });
 
-        setRunsHistory(activeOnly);
+        if (isDemo && activeOnly.length === 0) {
+          setRunsHistory(DEMO_EVAL_RUNS as unknown as RunRecord[]);
+        } else {
+          setRunsHistory(activeOnly);
+        }
       } else if (isDemo) {
-        setRunsHistory((prev) => (prev.length === 0 ? (DEMO_EVAL_RUNS as unknown as RunRecord[]) : prev));
+        setRunsHistory(DEMO_EVAL_RUNS as unknown as RunRecord[]);
       } else {
         setRunsHistory([]);
       }
@@ -355,11 +363,13 @@ export function App() {
         const findingsData: FindingRecord[] = await findingsRes.json();
         if (findingsData.length > 0) {
           setFindings(findingsData);
-        } else if (!isDemo) {
+        } else if (isDemo) {
+          setFindings(DEMO_INTERCEPTIONS as unknown as any[]);
+        } else {
           setFindings([]);
         }
       } else if (isDemo) {
-        setFindings((prev) => (prev.length === 0 ? (DEMO_INTERCEPTIONS as unknown as any[]) : prev));
+        setFindings(DEMO_INTERCEPTIONS as unknown as any[]);
       } else {
         setFindings([]);
       }
@@ -370,12 +380,18 @@ export function App() {
           const filteredRows = isDemo
             ? rows
             : rows.filter((r) => !(r.session_id || '').includes('demo') && !(r.session_id || '').startsWith('demo-'));
-          setLiveInterceptions(filteredRows);
-        } else if (!isDemo) {
+          if (isDemo && filteredRows.length === 0) {
+            setLiveInterceptions(DEMO_INTERCEPTIONS as unknown as any[]);
+          } else {
+            setLiveInterceptions(filteredRows);
+          }
+        } else if (isDemo) {
+          setLiveInterceptions(DEMO_INTERCEPTIONS as unknown as any[]);
+        } else {
           setLiveInterceptions([]);
         }
       } else if (isDemo) {
-        setLiveInterceptions((prev) => (prev.length === 0 ? (DEMO_INTERCEPTIONS as unknown as any[]) : prev));
+        setLiveInterceptions(DEMO_INTERCEPTIONS as unknown as any[]);
       } else {
         setLiveInterceptions([]);
       }

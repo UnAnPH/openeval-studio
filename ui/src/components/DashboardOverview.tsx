@@ -7,6 +7,7 @@ import {
   timeOutline,
 } from 'ionicons/icons';
 import { FindingRecord, RunRecord, TaskSummary } from '../types';
+import { DEMO_SESSIONS } from '../data/demoFixtures';
 
 interface DashboardOverviewProps {
   runs?: RunRecord[];
@@ -52,7 +53,10 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   isDemoSeed,
 }) => {
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'this_week' | 'last_week' | 'this_month' | 'last_month'>('all');
-  const [watcherSessions, setWatcherSessions] = useState<RawSession[]>([]);
+  const isDemo = Boolean(isDemoSeed || (typeof window !== 'undefined' && (window.location.pathname.startsWith('/demo') || window.location.hash.startsWith('#/demo'))));
+  const [watcherSessions, setWatcherSessions] = useState<RawSession[]>(() =>
+    isDemo ? (DEMO_SESSIONS as unknown as RawSession[]) : []
+  );
 
   // Fetch monitored watcher sessions (same source as Safety → Sessions)
   useEffect(() => {
@@ -61,19 +65,29 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         const res = await fetch('/api/v1/watcher/sessions');
         if (res.ok) {
           const data: RawSession[] = await res.json();
-          const filtered = isDemoSeed
+          const filtered = isDemo
             ? data.filter((s) => (s.session_id || s.id || '').includes('demo') || (s.session_id || s.id || '').startsWith('demo-'))
             : data;
-          setWatcherSessions(filtered);
+          if (isDemo && filtered.length === 0) {
+            setWatcherSessions(DEMO_SESSIONS as unknown as RawSession[]);
+          } else {
+            setWatcherSessions(filtered);
+          }
+        } else if (isDemo) {
+          setWatcherSessions(DEMO_SESSIONS as unknown as RawSession[]);
         }
       } catch (err) {
-        console.warn('Failed to fetch watcher sessions:', err);
+        if (isDemo) {
+          setWatcherSessions(DEMO_SESSIONS as unknown as RawSession[]);
+        } else {
+          console.warn('Failed to fetch watcher sessions:', err);
+        }
       }
     };
     fetchSessions();
     const interval = setInterval(fetchSessions, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [isDemo]);
 
   // Safe timestamp parser
   const parseTimestamp = (ts?: string | null): number => {

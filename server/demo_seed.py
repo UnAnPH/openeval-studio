@@ -94,6 +94,7 @@ def seed_demo_data(
                             timestamp=rev.timestamp or session.created_at,
                             is_safe=False,
                             mode_applied="enforce",
+                            user_id=demo_user_id,
                         )
                         global_watcher_engine.record_interception(verdict)
                         seeded_interceptions += 1

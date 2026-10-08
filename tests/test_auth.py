@@ -451,3 +451,24 @@ def test_production_env_refuses_default_session_secret(client, monkeypatch):
     )
     assert resp.status_code == 500
     assert "Insecure or missing SESSION_SECRET" in resp.json().get("detail", "")
+
+
+def test_get_user_api_key_endpoint(client):
+    """GET /api/auth/key returns the active raw API key for authenticated user."""
+    # 1. Unauthenticated or demo returns fallback demo key
+    demo_resp = client.get("/api/auth/key", headers={"X-OpenEval-Surface": "demo"})
+    assert demo_resp.status_code == 200
+    assert "oe_live_demo" in demo_resp.json()["api_key"]
+
+    # 2. Authenticated user receives their real active API key
+    reg = client.post(
+        "/api/auth/register",
+        json={"username": "key_user", "password": "password123"},
+    )
+    assert reg.status_code == 200
+    expected_key = reg.json()["api_key"]
+
+    key_resp = client.get("/api/auth/key")
+    assert key_resp.status_code == 200
+    assert key_resp.json()["api_key"] == expected_key
+

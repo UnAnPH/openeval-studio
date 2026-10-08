@@ -60,6 +60,19 @@ def is_production_env() -> bool:
     return os.getenv("OPENEVAL_ENV", "").strip().lower() == "production"
 
 
+def _ensure_api_keys_schema() -> None:
+    """Ensure raw_key column exists on api_keys table for user convenience."""
+    try:
+        with SessionLocal() as db:
+            db.execute(text("ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS raw_key VARCHAR(255)"))
+            db.commit()
+    except Exception:
+        pass
+
+
+_ensure_api_keys_schema()
+
+
 def get_session_secret() -> bytes:
     """Retrieve HMAC session secret, refusing insecure defaults in production."""
     raw = os.getenv("SESSION_SECRET", "").strip()
@@ -225,11 +238,17 @@ def register(req: RegisterRequest, response: Response, request: Request) -> Any:
             )
         user_id = int(user_row[0])
 
-        # Store hashed API key
-        db.execute(
-            text("INSERT INTO api_keys (user_id, token_hash) VALUES (:uid, :hash)"),
-            {"uid": user_id, "hash": key_hash},
-        )
+        # Store API key
+        try:
+            db.execute(
+                text("INSERT INTO api_keys (user_id, token_hash, raw_key) VALUES (:uid, :hash, :raw)"),
+                {"uid": user_id, "hash": key_hash, "raw": raw_key},
+            )
+        except Exception:
+            db.execute(
+                text("INSERT INTO api_keys (user_id, token_hash) VALUES (:uid, :hash)"),
+                {"uid": user_id, "hash": key_hash},
+            )
         db.commit()
 
     # Issue signed session cookie
@@ -315,10 +334,64 @@ def rotate_api_key(request: Request) -> Any:
 
     with SessionLocal() as db:
         db.execute(text("DELETE FROM api_keys WHERE user_id = :uid"), {"uid": uid})
-        db.execute(
-            text("INSERT INTO api_keys (user_id, token_hash) VALUES (:uid, :hash)"),
-            {"uid": uid, "hash": key_hash},
-        )
+        try:
+            db.execute(
+                text("INSERT INTO api_keys (user_id, token_hash, raw_key) VALUES (:uid, :hash, :raw)"),
+                {"uid": uid, "hash": key_hash, "raw": raw_key},
+            )
+        except Exception:
+            db.execute(
+                text("INSERT INTO api_keys (user_id, token_hash) VALUES (:uid, :hash)"),
+                {"uid": uid, "hash": key_hash},
+            )
         db.commit()
 
     return KeyRotationResponse(api_key=raw_key)
+
+
+class ApiKeyResponse(BaseModel):
+    api_key: str
+
+
+@router.get("/key", response_model=ApiKeyResponse)
+def get_user_api_key(request: Request) -> Any:
+    """Retrieve the active raw API key for authenticated user, or generate one if missing."""
+    uid = current_user_id.get()
+    slug = current_user_slug.get()
+
+    if not uid or slug in ("demo", "unknown"):
+        return ApiKeyResponse(api_key="oe_live_demo_readonly_token")
+
+    with SessionLocal() as db:
+        try:
+            row = db.execute(
+                text(
+                    "SELECT raw_key FROM api_keys "
+                    "WHERE user_id = :uid AND raw_key IS NOT NULL AND raw_key != '' "
+                    "ORDER BY id DESC LIMIT 1"
+                ),
+                {"uid": uid},
+            ).fetchone()
+            if row and row[0]:
+                return ApiKeyResponse(api_key=str(row[0]))
+        except Exception:
+            pass
+
+        # Generate fresh key if none exists
+        raw_key, key_hash = generate_api_key()
+        try:
+            db.execute(text("DELETE FROM api_keys WHERE user_id = :uid"), {"uid": uid})
+            db.execute(
+                text("INSERT INTO api_keys (user_id, token_hash, raw_key) VALUES (:uid, :hash, :raw)"),
+                {"uid": uid, "hash": key_hash, "raw": raw_key},
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
+            db.execute(
+                text("INSERT INTO api_keys (user_id, token_hash) VALUES (:uid, :hash)"),
+                {"uid": uid, "hash": key_hash},
+            )
+            db.commit()
+
+        return ApiKeyResponse(api_key=raw_key)
