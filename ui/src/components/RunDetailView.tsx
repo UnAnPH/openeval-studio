@@ -32,6 +32,11 @@ interface RunDetailViewProps {
   onCompareWith?: (runId: string) => void;
 }
 
+function cleanThought(raw?: string | null): string {
+  if (!raw) return '';
+  return raw.replace(/<\/?think>/gi, '').trim();
+}
+
 export const RunDetailView: React.FC<RunDetailViewProps> = ({
   run,
   task,
@@ -546,8 +551,8 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
 
                       <p className="text-[11px] text-slate-600 line-clamp-2 leading-relaxed font-sans">
                         {isProbe
-                          ? (probeArgs.attacker_prompt || step.thought || 'Adversarial probe turn.')
-                          : (step.thought || (step.action.command ? `$ ${step.action.command}` : 'No reasoning text.'))}
+                          ? (probeArgs.attacker_prompt || cleanThought(step.thought) || 'Adversarial probe turn.')
+                          : (cleanThought(step.thought) || (step.action.command ? `$ ${step.action.command}` : 'No reasoning text.'))}
                       </p>
                     </div>
                   );
@@ -695,7 +700,7 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
                               Agent Inner Reasoning & Planning
                             </div>
                             <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 leading-relaxed whitespace-pre-wrap font-sans">
-                              {selectedStep.thought || 'No explicit thought string provided.'}
+                              {cleanThought(selectedStep.thought) || (selectedStep.action.command ? `Direct action execution: $ ${selectedStep.action.command}` : 'No explicit thought string provided.')}
                             </div>
                           </div>
 

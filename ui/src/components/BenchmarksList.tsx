@@ -209,7 +209,7 @@ export const BenchmarksList: React.FC<BenchmarksListProps> = ({
 
                 {/* Title */}
                 <div>
-                  <h3 className="text-sm font-bold text-text-primary font-mono group-hover:text-brand-purple transition-colors">
+                  <h3 className="text-sm font-bold text-text-primary font-mono group-hover:text-brand-purple transition-colors break-words [overflow-wrap:anywhere]" title={task.task_id}>
                     {task.task_id}
                   </h3>
                   <p className="text-xs text-text-secondary mt-1.5 leading-relaxed line-clamp-3">

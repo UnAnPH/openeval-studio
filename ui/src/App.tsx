@@ -343,17 +343,23 @@ export function App() {
           });
 
         setRunsHistory(activeOnly);
-      } else {
+      } else if (isDemo) {
         setRunsHistory((prev) => (prev.length === 0 ? (DEMO_EVAL_RUNS as unknown as RunRecord[]) : prev));
+      } else {
+        setRunsHistory([]);
       }
 
       if (findingsRes && findingsRes.ok) {
         const findingsData: FindingRecord[] = await findingsRes.json();
         if (findingsData.length > 0) {
           setFindings(findingsData);
+        } else if (!isDemo) {
+          setFindings([]);
         }
-      } else {
+      } else if (isDemo) {
         setFindings((prev) => (prev.length === 0 ? (DEMO_INTERCEPTIONS as unknown as any[]) : prev));
+      } else {
+        setFindings([]);
       }
 
       if (interceptRes && interceptRes.ok) {
@@ -374,9 +380,13 @@ export function App() {
             }
             return merged.slice(0, 50);
           });
+        } else if (!isDemo) {
+          setLiveInterceptions([]);
         }
-      } else {
+      } else if (isDemo) {
         setLiveInterceptions((prev) => (prev.length === 0 ? (DEMO_INTERCEPTIONS as unknown as any[]) : prev));
+      } else {
+        setLiveInterceptions([]);
       }
 
       if (watcherCfgRes && watcherCfgRes.ok) {
