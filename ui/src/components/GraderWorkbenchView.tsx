@@ -83,6 +83,9 @@ export const GraderWorkbenchView: React.FC = () => {
     'step4' | 'definition' | 'step1' | 'step2' | 'step3' | 'example'
   >('step4');
   const [customPrompt, setCustomPrompt] = useState<string>('');
+  const [isSavingPrompt, setIsSavingPrompt] = useState<boolean>(false);
+  const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+  const [draftPrompts, setDraftPrompts] = useState<Record<string, string>>({});
   const useEnsemble = false;
   const [selectedModel, setSelectedModel] = useState<string>('gemini-3.1-flash-lite');
 
@@ -169,6 +172,15 @@ export const GraderWorkbenchView: React.FC = () => {
   const currentGrader =
     graders.find((g) => g.name === selectedGraderName) || (graders.length > 0 ? graders[0] : null);
 
+  const tabFieldMap: Record<string, string> = {
+    definition: 'c3_definition',
+    step1: 'c5_context_questions',
+    step2: 'c7_agent_user_split',
+    step3: 'c11_rules_table',
+    step4: 'c12_rubric_table',
+    example: 'c15_worked_example',
+  };
+
   const handleSelectGrader = (name: string) => {
     setSelectedGraderName(name);
     setAuditResult(null);
@@ -179,7 +191,16 @@ export const GraderWorkbenchView: React.FC = () => {
     }
   };
 
-  const updatePromptContent = (tab: typeof activePromptTab, grader: GraderDefinition) => {
+  const updatePromptContent = (
+    tab: typeof activePromptTab,
+    grader: GraderDefinition,
+    drafts = draftPrompts
+  ) => {
+    const draftKey = `${grader.name}_${tab}`;
+    if (drafts[draftKey] !== undefined) {
+      setCustomPrompt(drafts[draftKey]);
+      return;
+    }
     if (tab === 'definition') setCustomPrompt(grader.c3_definition);
     else if (tab === 'step1')
       setCustomPrompt(`${grader.c5_context_questions}\n\n${grader.c6_mitigating_factors}`);
@@ -197,9 +218,56 @@ export const GraderWorkbenchView: React.FC = () => {
     }
   };
 
-  const handleResetPrompt = () => {
-    if (currentGrader) {
-      updatePromptContent(activePromptTab, currentGrader);
+  const handleSavePrompt = async () => {
+    if (!currentGrader) return;
+    setIsSavingPrompt(true);
+    const field = tabFieldMap[activePromptTab] || 'c12_rubric_table';
+    try {
+      const res = await fetch(`/api/v1/watcher/graders/definitions/${selectedGraderName}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          updates: { [field]: customPrompt },
+        }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setGraders((prev) => prev.map((g) => (g.name === selectedGraderName ? updated : g)));
+        setSaveSuccess('Saved for your account!');
+        setTimeout(() => setSaveSuccess(null), 3000);
+      } else {
+        setSaveSuccess('Failed to save prompt');
+        setTimeout(() => setSaveSuccess(null), 3000);
+      }
+    } catch (err) {
+      console.error('Error saving custom prompt:', err);
+      setSaveSuccess('Network error');
+      setTimeout(() => setSaveSuccess(null), 3000);
+    } finally {
+      setIsSavingPrompt(false);
+    }
+  };
+
+  const handleResetPrompt = async () => {
+    if (!currentGrader) return;
+    try {
+      const res = await fetch(`/api/v1/watcher/graders/definitions/${selectedGraderName}/reset`, {
+        method: 'POST',
+      });
+      if (res.ok) {
+        const resetDef = await res.json();
+        setGraders((prev) => prev.map((g) => (g.name === selectedGraderName ? resetDef : g)));
+        const nextDrafts = { ...draftPrompts };
+        Object.keys(nextDrafts).forEach((k) => {
+          if (k.startsWith(`${selectedGraderName}_`)) delete nextDrafts[k];
+        });
+        setDraftPrompts(nextDrafts);
+        updatePromptContent(activePromptTab, resetDef, nextDrafts);
+        setSaveSuccess('Reset to defaults');
+        setTimeout(() => setSaveSuccess(null), 2500);
+      }
+    } catch (err) {
+      console.error('Error resetting prompt:', err);
     }
   };
 
@@ -353,11 +421,11 @@ export const GraderWorkbenchView: React.FC = () => {
             </div>
             <div className="grid grid-cols-1 gap-2">
               {[
-                { id: 'CredentialsGrader', title: '1. Credentials & API Keys', dim: 'Data Exfiltration' },
-                { id: 'PIIGrader', title: '2. PII & Sensitive Customer Data', dim: 'Privacy & PII' },
-                { id: 'InstructionGrader', title: '3. Instruction & Boundary Drift', dim: 'Instruction Following' },
-                { id: 'SecurityGrader', title: '4. Code Injection & Privilege Esc', dim: 'Code Security' },
-                { id: 'DeletionGrader', title: '5. Destructive Wipes & Deletions', dim: 'Infrastructure Safety' },
+                { id: 'CredentialsGrader', title: 'Credentials & API Keys', dim: 'Data Exfiltration' },
+                { id: 'PIIGrader', title: 'PII & Sensitive Customer Data', dim: 'Privacy & PII' },
+                { id: 'InstructionGrader', title: 'Instruction & Boundary Drift', dim: 'Instruction Following' },
+                { id: 'SecurityGrader', title: 'Code Injection & Privilege Esc', dim: 'Code Security' },
+                { id: 'DeletionGrader', title: 'Destructive Wipes & Deletions', dim: 'Infrastructure Safety' },
               ].map((item) => (
                 <button
                   key={item.id}
@@ -380,51 +448,37 @@ export const GraderWorkbenchView: React.FC = () => {
             </div>
           </div>
 
-          {/* Model & Ensemble Controls
-          <div className="bg-white p-5 rounded-2xl border border-border-subtle shadow-sm space-y-3">
-            <div className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-              2. Judge Model Configuration
-            </div>
-            <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50 border border-gray-200">
-              <div className="space-y-0.5">
-                <div className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
-                  <IonIcon icon={layersOutline} className="text-indigo-600" />
-                  <span>Ensemble Verification</span>
-                </div>
-                <div className="text-[11px] text-gray-500">
-                  {useEnsemble
-                    ? 'Gemini 3.1 Flash-Lite + Gemini 3.7 Flash'
-                    : 'Gemini 3.1 Flash-Lite (Single Fast Model)'}
-                </div>
-              </div>
-              <button
-                onClick={() => setUseEnsemble(!useEnsemble)}
-                className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                  useEnsemble
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'bg-gray-200 text-gray-600'
-                }`}
-              >
-                {useEnsemble ? 'Ensemble (2x)' : 'Single Model'}
-              </button>
-            </div>
-            <div className="text-[11px] text-gray-500 italic">
-              Multi-model ensemble averaging improves discrimination robustness across boundary edge-cases.
-            </div>
-          </div> */}
-
           {/* Prompt Anatomy Section Editor */}
           <div className="bg-white p-5 rounded-2xl border border-border-subtle shadow-sm space-y-3 flex-1 flex flex-col">
             <div className="flex items-center justify-between">
-              <div className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                Canonical Prompt Anatomy (C1–C15)
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                  Canonical Prompt Anatomy (C1–C15)
+                </span>
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">
+                  Per-User Customization
+                </span>
               </div>
-              <button
-                onClick={handleResetPrompt}
-                className="text-[10px] text-indigo-600 hover:text-indigo-800 font-semibold cursor-pointer"
-              >
-                Reset Default
-              </button>
+              <div className="flex items-center gap-2">
+                {saveSuccess && (
+                  <span className="text-[10px] font-semibold text-emerald-600 flex items-center gap-1">
+                    ✓ {saveSuccess}
+                  </span>
+                )}
+                <button
+                  onClick={handleResetPrompt}
+                  className="text-[10px] text-gray-400 hover:text-gray-600 font-semibold cursor-pointer px-2 py-1 rounded hover:bg-gray-100 transition-colors"
+                >
+                  Reset Default
+                </button>
+                <button
+                  onClick={handleSavePrompt}
+                  disabled={isSavingPrompt}
+                  className="text-[10px] bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-1 rounded-lg cursor-pointer transition-colors shadow-xs disabled:opacity-50"
+                >
+                  {isSavingPrompt ? 'Saving...' : 'Save Prompt'}
+                </button>
+              </div>
             </div>
 
             {/* Section Tabs */}
@@ -453,7 +507,13 @@ export const GraderWorkbenchView: React.FC = () => {
 
             <textarea
               value={customPrompt}
-              onChange={(e) => setCustomPrompt(e.target.value)}
+              onChange={(e) => {
+                setCustomPrompt(e.target.value);
+                setDraftPrompts((prev) => ({
+                  ...prev,
+                  [`${selectedGraderName}_${activePromptTab}`]: e.target.value,
+                }));
+              }}
               rows={8}
               className="w-full flex-1 p-3 text-xs font-mono bg-gray-50 rounded-xl border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none resize-none leading-relaxed text-gray-800"
               placeholder="Edit canonical grader component prompt..."

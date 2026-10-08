@@ -92,3 +92,41 @@ Clean unit test run on mock data fixture.
     assert verdict.score == 1
     assert verdict.severity == "cleared"
     assert verdict.passed is True
+
+
+def test_per_user_grader_prompt_customization_and_isolation():
+    from server.watcher_store import get_watcher_store
+
+    store = get_watcher_store()
+    user_a = 501
+    user_b = 502
+
+    # Baseline: both get default definitions
+    defs_a = store.get_grader_definitions(user_id=user_a)
+    defs_b = store.get_grader_definitions(user_id=user_b)
+    assert len(defs_a) == 5
+    assert len(defs_b) == 5
+    assert defs_a[0].c3_definition == defs_b[0].c3_definition
+
+    # User A customizes C3 definition on CredentialsGrader
+    custom_c3 = "Custom internal security definition: DO NOT print API tokens anywhere."
+    updated = store.update_grader_definition(
+        "CredentialsGrader",
+        {"c3_definition": custom_c3},
+        user_id=user_a,
+    )
+    assert updated is not None
+    assert updated.c3_definition == custom_c3
+
+    # User A sees their custom prompt, User B still sees standard default
+    a_grader = store.get_grader_definition("CredentialsGrader", user_id=user_a)
+    b_grader = store.get_grader_definition("CredentialsGrader", user_id=user_b)
+    assert a_grader is not None and b_grader is not None
+    assert a_grader.c3_definition == custom_c3
+    assert b_grader.c3_definition != custom_c3
+
+    # User A resets back to default
+    reset_grader = store.reset_grader_definition("CredentialsGrader", user_id=user_a)
+    assert reset_grader is not None
+    assert reset_grader.c3_definition == b_grader.c3_definition
+

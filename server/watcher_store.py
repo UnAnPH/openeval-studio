@@ -102,9 +102,10 @@ class WatcherStore:
         self._trajectories: dict[str, Trajectory] = {}
         self._reviews: dict[str, list[ReviewRecord]] = {}
 
-        # Multi-tenant Policy & WatcherConfig registries
+        # Multi-tenant Policy, WatcherConfig, and Grader Prompt registries
         self._user_policies: dict[int, Policy] = {}
         self._user_configs: dict[int, WatcherConfig] = {}
+        self._user_graders: dict[int, dict[str, dict[str, str]]] = {}
         self._load_user_settings_from_disk()
 
         # Default MDM Policy (fallback runtime)
@@ -898,8 +899,17 @@ class WatcherStore:
             except Exception as e:
                 logger.warning("Failed to load user configs from disk: %s", e)
 
+        graders_path = self.storage_dir / "user_graders.json"
+        if graders_path.exists():
+            try:
+                data = json.loads(graders_path.read_text(encoding="utf-8"))
+                for uid_str, g_dict in data.items():
+                    self._user_graders[int(uid_str)] = g_dict
+            except Exception as e:
+                logger.warning("Failed to load user graders from disk: %s", e)
+
     def _save_user_settings_to_disk(self) -> None:
-        """Persist user policies and configs to disk."""
+        """Persist user policies, configs, and custom grader prompts to disk."""
         try:
             pol_path = self.storage_dir / "user_policies.json"
             pol_data = {str(uid): p.model_dump() for uid, p in self._user_policies.items()}
@@ -908,6 +918,10 @@ class WatcherStore:
             cfg_path = self.storage_dir / "user_configs.json"
             cfg_data = {str(uid): c.model_dump() for uid, c in self._user_configs.items()}
             cfg_path.write_text(json.dumps(cfg_data, indent=2), encoding="utf-8")
+
+            graders_path = self.storage_dir / "user_graders.json"
+            graders_data = {str(uid): g for uid, g in self._user_graders.items()}
+            graders_path.write_text(json.dumps(graders_data, indent=2), encoding="utf-8")
         except Exception as e:
             logger.warning("Failed to persist user settings to disk: %s", e)
 
@@ -1045,6 +1059,71 @@ class WatcherStore:
             self._user_configs[uid] = new_config.model_copy()
             self._save_user_settings_to_disk()
             return self._user_configs[uid]
+
+    def get_grader_definitions(self, user_id: int | None = None) -> list[Any]:
+        """Retrieve the 5 Canonical Graders, applying user-specific prompt customizations if any."""
+        from engine.graders_suite import list_canonical_graders
+
+        uid = self._resolve_user_id(user_id)
+        base_graders = list_canonical_graders()
+        with self._lock:
+            user_overrides = self._user_graders.get(uid, {})
+            if not user_overrides:
+                return base_graders
+
+            customized = []
+            for g in base_graders:
+                if g.name in user_overrides:
+                    customized.append(g.model_copy(update=user_overrides[g.name]))
+                else:
+                    customized.append(g)
+            return customized
+
+    def get_grader_definition(
+        self, grader_name: str, user_id: int | None = None
+    ) -> Any | None:
+        """Retrieve a specific Canonical Grader with user customizations applied."""
+        definitions = self.get_grader_definitions(user_id)
+        for g in definitions:
+            if g.name == grader_name:
+                return g
+        return None
+
+    def update_grader_definition(
+        self, grader_name: str, updates: dict[str, str], user_id: int | None = None
+    ) -> Any | None:
+        """Update prompt components for a specific grader for this user."""
+        uid = self._resolve_user_id(user_id)
+        from engine.graders_suite import CanonicalGrader, get_canonical_grader
+
+        base = get_canonical_grader(grader_name)
+        if not base:
+            return None
+
+        valid_fields = set(CanonicalGrader.model_fields.keys())
+        filtered = {k: v for k, v in updates.items() if k in valid_fields and isinstance(v, str)}
+
+        with self._lock:
+            if uid not in self._user_graders:
+                self._user_graders[uid] = {}
+            if grader_name not in self._user_graders[uid]:
+                self._user_graders[uid][grader_name] = {}
+            self._user_graders[uid][grader_name].update(filtered)
+            self._save_user_settings_to_disk()
+
+        return self.get_grader_definition(grader_name, uid)
+
+    def reset_grader_definition(
+        self, grader_name: str, user_id: int | None = None
+    ) -> Any | None:
+        """Reset a grader's prompt components back to defaults for this user."""
+        uid = self._resolve_user_id(user_id)
+        with self._lock:
+            if uid in self._user_graders and grader_name in self._user_graders[uid]:
+                del self._user_graders[uid][grader_name]
+                self._save_user_settings_to_disk()
+
+        return self.get_grader_definition(grader_name, uid)
 
     # -------------------------------------------------------------------------
     # Real-Time SSE Pub/Sub

@@ -3219,11 +3219,42 @@ class ModelOnboardRequest(BaseModel):
 
 @app.get("/api/v1/watcher/graders/definitions")
 async def list_grader_definitions() -> list[dict[str, Any]]:
-    """Retrieve the 5 Canonical Graders with 15-part prompt definitions."""
-    from engine.graders_suite import list_canonical_graders
+    """Retrieve the 5 Canonical Graders with 15-part prompt definitions for the active user."""
+    from server.watcher_store import get_watcher_store
 
-    graders = list_canonical_graders()
+    store = get_watcher_store()
+    graders = store.get_grader_definitions()
     return [g.model_dump() for g in graders]
+
+
+class GraderUpdatePayload(BaseModel):
+    updates: dict[str, str]
+
+
+@app.put("/api/v1/watcher/graders/definitions/{grader_name}")
+async def update_grader_definition_endpoint(
+    grader_name: str, payload: GraderUpdatePayload
+) -> dict[str, Any]:
+    """Save user-customized prompt components for a canonical grader."""
+    from server.watcher_store import get_watcher_store
+
+    store = get_watcher_store()
+    updated = store.update_grader_definition(grader_name, payload.updates)
+    if not updated:
+        raise HTTPException(status_code=404, detail=f"Grader '{grader_name}' not found")
+    return updated.model_dump()
+
+
+@app.post("/api/v1/watcher/graders/definitions/{grader_name}/reset")
+async def reset_grader_definition_endpoint(grader_name: str) -> dict[str, Any]:
+    """Reset a canonical grader's prompt components back to defaults for active user."""
+    from server.watcher_store import get_watcher_store
+
+    store = get_watcher_store()
+    reset_g = store.reset_grader_definition(grader_name)
+    if not reset_g:
+        raise HTTPException(status_code=404, detail=f"Grader '{grader_name}' not found")
+    return reset_g.model_dump()
 
 
 @app.post("/api/v1/watcher/graders/backtest")
@@ -3250,7 +3281,7 @@ class GraderAuditSessionRequest(BaseModel):
 @app.post("/api/v1/watcher/graders/audit-session")
 async def audit_session_with_grader(req: GraderAuditSessionRequest) -> dict[str, Any]:
     """Audit a real monitored agent session using a canonical safety grader."""
-    from engine.graders_suite import get_canonical_grader, parse_c1_c15_output
+    from engine.graders_suite import parse_c1_c15_output
     from engine.llm_runner import AsyncLLMRunner, LLMConfig
     from server.watcher_store import get_watcher_store
 
@@ -3275,7 +3306,7 @@ async def audit_session_with_grader(req: GraderAuditSessionRequest) -> dict[str,
         "\n".join(lines) if lines else f"Session {session.session_id} in {session.working_dir}"
     )
 
-    grader = get_canonical_grader(req.grader_name)
+    grader = store.get_grader_definition(req.grader_name)
     runner = AsyncLLMRunner()
     cfg = LLMConfig(model=req.model, temperature=0.0, timeout_sec=5.0)
 
