@@ -8,6 +8,7 @@ import {
   ShieldCheck,
   AlertTriangle,
   Code2,
+  Download,
 } from 'lucide-react';
 
 interface HookSetupViewProps {
@@ -64,16 +65,23 @@ export const HookSetupView: React.FC<HookSetupViewProps> = ({
     }
   };
 
+  const getScriptFilename = () => {
+    if (activeAgent === 'cursor') return 'install_cursor_watcher_hook.sh';
+    if (activeAgent === 'claude') return 'claude_code_watcher_hook.py';
+    return 'install_antigravity_watcher_hook.sh';
+  };
+
   const getCommands = () => {
     const envExports = `export OPENEVAL_WATCHER_URL="${watcherUrl}"\nexport OPENEVAL_API_KEY="${displayKey}"`;
+    const serverOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://openeval.studio';
 
     if (activeAgent === 'cursor') {
-      return `${envExports}\n\n# Run the installer to configure .cursor/hooks.json\n./scripts/install_cursor_watcher_hook.sh`;
+      return `${envExports}\n\n# Option 1: One-line install (downloads & configures .cursor/hooks.json)\ncurl -fsSL "${serverOrigin}/api/scripts/install_cursor_watcher_hook.sh" | bash\n\n# Option 2: From local cloned repo\n./scripts/install_cursor_watcher_hook.sh`;
     }
     if (activeAgent === 'claude') {
-      return `${envExports}\n\n# Point Claude Code to the Python hook\npython3 scripts/claude_code_watcher_hook.py`;
+      return `${envExports}\n\n# Option 1: Download Python hook and point Claude Code to it\nmkdir -p ~/scripts && curl -fsSL "${serverOrigin}/api/scripts/claude_code_watcher_hook.py" -o ~/scripts/claude_code_watcher_hook.py\npython3 ~/scripts/claude_code_watcher_hook.py\n\n# Option 2: From local cloned repo\npython3 scripts/claude_code_watcher_hook.py`;
     }
-    return `${envExports}\n\n# Install the hook into ~/.gemini/config/hooks.json\n./scripts/install_antigravity_watcher_hook.sh`;
+    return `${envExports}\n\n# Option 1: One-line install (downloads & configures ~/.gemini/config/hooks.json)\ncurl -fsSL "${serverOrigin}/api/scripts/install_antigravity_watcher_hook.sh" | bash\n\n# Option 2: From local cloned repo\n./scripts/install_antigravity_watcher_hook.sh`;
   };
 
   return (
@@ -184,14 +192,24 @@ export const HookSetupView: React.FC<HookSetupViewProps> = ({
               {activeAgent === 'claude' && 'Terminal Setup (Claude Code Hook)'}
               {activeAgent === 'antigravity' && 'Terminal Setup (Antigravity Hook)'}
             </span>
-            <button
-              type="button"
-              onClick={() => copyToClipboard(getCommands(), false)}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono transition-colors"
-            >
-              {copiedScript ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copiedScript ? 'Copied' : 'Copy'}</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <a
+                href={`/api/scripts/${getScriptFilename()}`}
+                download={getScriptFilename()}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-mono transition-colors shadow-xs"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Download Script</span>
+              </a>
+              <button
+                type="button"
+                onClick={() => copyToClipboard(getCommands(), false)}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono transition-colors"
+              >
+                {copiedScript ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedScript ? 'Copied' : 'Copy'}</span>
+              </button>
+            </div>
           </div>
           <pre className="p-4 text-xs font-mono text-emerald-400 overflow-x-auto leading-relaxed whitespace-pre-wrap">
             {getCommands()}

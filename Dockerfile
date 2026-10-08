@@ -16,6 +16,7 @@ COPY engine engine
 COPY server server
 COPY sandbox sandbox
 COPY fixtures fixtures
+COPY scripts scripts
 COPY alembic alembic
 COPY alembic.ini cli.py inspect_tasks.py ./
 COPY --from=ui-builder /app/ui/dist /app/ui/dist

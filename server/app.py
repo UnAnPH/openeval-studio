@@ -139,6 +139,7 @@ class _AuthMiddleware(BaseHTTPMiddleware):
         if (
             path == "/api/health"
             or path == "/api/demo/status"
+            or path.startswith("/api/scripts")
             or path in ("/api/auth/register", "/api/auth/login")
             or path.startswith("/docs")
             or path.startswith("/redoc")
@@ -3494,6 +3495,34 @@ def _scrub_accidental_safe_overrides() -> None:
                     item.reason = re.sub(r"\s*\[Operator[^\]]*\]", "", item.reason).strip()
     except Exception as err:
         logger.warning("Failed scrubbing accidental safe overrides: %s", err)
+
+
+_scripts_dir = Path(__file__).resolve().parent.parent / "scripts"
+
+
+@app.get("/api/scripts/{filename}")
+async def download_agent_script(filename: str) -> Response:
+    """Download installer or hook gate scripts directly."""
+    allowed_scripts = {
+        "install_antigravity_watcher_hook.sh",
+        "antigravity_watcher_gate.py",
+        "install_cursor_watcher_hook.sh",
+        "cursor_watcher_gate.py",
+        "claude_code_watcher_hook.py",
+    }
+    if filename not in allowed_scripts:
+        raise HTTPException(status_code=404, detail="Script not found")
+    target_file = _scripts_dir / filename
+    if not target_file.is_file():
+        raise HTTPException(status_code=404, detail="Script not found")
+    from fastapi.responses import FileResponse
+
+    media_type = "text/x-shellscript" if filename.endswith(".sh") else "text/x-python"
+    return FileResponse(
+        str(target_file),
+        media_type=media_type,
+        filename=filename,
+    )
 
 
 _ui_dist = Path(__file__).resolve().parent.parent / "ui" / "dist"

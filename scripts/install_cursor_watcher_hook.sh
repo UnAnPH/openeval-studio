@@ -7,14 +7,27 @@ GATE="$ROOT/scripts/cursor_watcher_gate.py"
 PROJECT_HOOKS="$ROOT/.cursor/hooks.json"
 USER_HOOKS="${HOME}/.cursor/hooks.json"
 
-mkdir -p "$ROOT/.cursor" "${HOME}/.cursor" "${HOME}/.openeval"
-chmod +x "$GATE"
+INSTALL_DIR="${HOME}/scripts"
+INSTALL_GATE="${INSTALL_DIR}/cursor_watcher_gate.py"
+
+mkdir -p "$ROOT/.cursor" "${HOME}/.cursor" "${HOME}/.openeval" "$INSTALL_DIR"
+
+if [ -f "$GATE" ]; then
+  chmod +x "$GATE"
+  INSTALL_GATE="$GATE"
+else
+  SERVER_URL="${OPENEVAL_WATCHER_URL:-https://openeval.studio}"
+  SERVER_URL="${SERVER_URL%/api/watcher/evaluate}"
+  echo "Downloading cursor_watcher_gate.py from ${SERVER_URL}..."
+  curl -fsSL "${SERVER_URL}/api/scripts/cursor_watcher_gate.py" -o "$INSTALL_GATE"
+  chmod +x "$INSTALL_GATE"
+fi
 
 python3 - <<PY
 import json
 from pathlib import Path
 
-gate = ${GATE@Q}
+gate = ${INSTALL_GATE@Q}
 def build_payload(cmd: str) -> dict:
     return {
         "version": 1,
