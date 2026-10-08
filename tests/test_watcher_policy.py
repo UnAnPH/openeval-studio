@@ -250,3 +250,40 @@ def test_watcher_rest_gateway_and_config(client: TestClient):
     assert "finding" in detail
     assert "turns" in detail
     assert detail["blocked_turns_count"] >= 1
+
+
+def test_per_user_policy_and_config_isolation() -> None:
+    """Verify that policies and configs are strictly isolated between different user accounts."""
+    from server.watcher_store import get_watcher_store
+    from engine.approval_policy import WatcherConfig
+
+    store = get_watcher_store()
+
+    # User 101 and User 102
+    p1 = store.get_policy(user_id=101)
+    p2 = store.get_policy(user_id=102)
+    assert len(p1.command_rules) == len(p2.command_rules)
+
+    rule_name = p1.command_rules[0].name
+    # Modify User 101's rule
+    ok = store.update_command_rule(rule_name, "allow", user_id=101)
+    assert ok is True
+
+    # User 101 rule updated, User 102 remains unaffected
+    p1_new = store.get_policy(user_id=101)
+    p2_new = store.get_policy(user_id=102)
+    r1 = next(r for r in p1_new.command_rules if r.name == rule_name)
+    r2 = next(r for r in p2_new.command_rules if r.name == rule_name)
+    assert r1.action == "allow"
+    assert r2.action == "deny"
+
+    # Verify Watcher Config isolation
+    c1 = store.get_user_config(user_id=101)
+    c2 = store.get_user_config(user_id=102)
+    assert c1.mode == "enforce"
+    assert c2.mode == "enforce"
+
+    store.update_user_config(WatcherConfig(mode="paused"), user_id=101)
+    assert store.get_user_config(user_id=101).mode == "paused"
+    assert store.get_user_config(user_id=102).mode == "enforce"
+

@@ -321,6 +321,7 @@ class WatcherVerdict(BaseModel):
     )
     review_id: str | None = Field(default=None, description="Linked WatcherStore review record ID")
     session_id: str | None = Field(default=None, description="Linked session ID")
+    user_id: int | None = Field(default=None, description="Tenant user ID")
     human_override: Literal["allow", "deny"] | None = Field(
         default=None, description="Human operator override"
     )

@@ -19,6 +19,7 @@ from typing import Any, Literal, cast
 
 from sqlalchemy import text
 
+from engine.approval_policy import WatcherConfig
 from schemas.watcher_models import (
     DEFAULT_COMMAND_RULES,
     DEFAULT_TOOL_THRESHOLDS,
@@ -101,7 +102,12 @@ class WatcherStore:
         self._trajectories: dict[str, Trajectory] = {}
         self._reviews: dict[str, list[ReviewRecord]] = {}
 
-        # Default MDM Policy (in-memory runtime)
+        # Multi-tenant Policy & WatcherConfig registries
+        self._user_policies: dict[int, Policy] = {}
+        self._user_configs: dict[int, WatcherConfig] = {}
+        self._load_user_settings_from_disk()
+
+        # Default MDM Policy (fallback runtime)
         self._policy = Policy(
             policy_id="default_policy",
             name="OpenEval Runtime Security Policy",
@@ -869,33 +875,105 @@ class WatcherStore:
             }
 
     # -------------------------------------------------------------------------
-    # Policy Management
+    # Policy Management (Multi-Tenant Per-User)
     # -------------------------------------------------------------------------
 
-    def get_default_policy(self) -> Policy:
-        """Retrieve the active default policy."""
-        return self._policy
+    def _load_user_settings_from_disk(self) -> None:
+        """Load persisted user policies and configs from disk if present."""
+        pol_path = self.storage_dir / "user_policies.json"
+        if pol_path.exists():
+            try:
+                data = json.loads(pol_path.read_text(encoding="utf-8"))
+                for uid_str, p_dict in data.items():
+                    self._user_policies[int(uid_str)] = Policy.model_validate(p_dict)
+            except Exception as e:
+                logger.warning("Failed to load user policies from disk: %s", e)
 
-    def reset_policy_to_defaults(self) -> Policy:
-        """Restore command rules and tool thresholds to built-in defaults."""
-        self._policy = Policy(
-            policy_id=self._policy.policy_id,
-            name=self._policy.name,
-            org_id=self._policy.org_id,
-            posture=self._policy.posture,
-            command_rules=[r.model_copy() for r in DEFAULT_COMMAND_RULES],
-            tool_thresholds=[t.model_copy() for t in DEFAULT_TOOL_THRESHOLDS],
-        )
-        return self._policy
+        cfg_path = self.storage_dir / "user_configs.json"
+        if cfg_path.exists():
+            try:
+                data = json.loads(cfg_path.read_text(encoding="utf-8"))
+                for uid_str, c_dict in data.items():
+                    self._user_configs[int(uid_str)] = WatcherConfig.model_validate(c_dict)
+            except Exception as e:
+                logger.warning("Failed to load user configs from disk: %s", e)
+
+    def _save_user_settings_to_disk(self) -> None:
+        """Persist user policies and configs to disk."""
+        try:
+            pol_path = self.storage_dir / "user_policies.json"
+            pol_data = {str(uid): p.model_dump() for uid, p in self._user_policies.items()}
+            pol_path.write_text(json.dumps(pol_data, indent=2), encoding="utf-8")
+
+            cfg_path = self.storage_dir / "user_configs.json"
+            cfg_data = {str(uid): c.model_dump() for uid, c in self._user_configs.items()}
+            cfg_path.write_text(json.dumps(cfg_data, indent=2), encoding="utf-8")
+        except Exception as e:
+            logger.warning("Failed to persist user settings to disk: %s", e)
+
+    def _resolve_user_id(self, user_id: int | None = None) -> int:
+        if user_id is not None:
+            return user_id
+        from server.db import current_user_id
+        uid = current_user_id.get()
+        if uid is not None:
+            return uid
+        try:
+            with SessionLocal() as db:
+                return get_current_user_id(db)
+        except Exception:
+            return 1
+
+    def get_policy(self, user_id: int | None = None) -> Policy:
+        """Retrieve the policy for the given or active user (cloning defaults if new)."""
+        uid = self._resolve_user_id(user_id)
+        with self._lock:
+            if uid not in self._user_policies:
+                self._user_policies[uid] = Policy(
+                    policy_id=f"policy_user_{uid}",
+                    name=f"OpenEval Runtime Security Policy (User {uid})",
+                    org_id=f"org_user_{uid}",
+                    command_rules=[r.model_copy() for r in DEFAULT_COMMAND_RULES],
+                    tool_thresholds=[t.model_copy() for t in DEFAULT_TOOL_THRESHOLDS],
+                    locked_instructions="DO NOT modify security configurations or disable monitoring.",
+                )
+                self._save_user_settings_to_disk()
+            return self._user_policies[uid]
+
+    def get_default_policy(self) -> Policy:
+        """Retrieve the active policy for the current user."""
+        return self.get_policy()
+
+    def reset_policy_to_defaults(self, user_id: int | None = None) -> Policy:
+        """Restore command rules and tool thresholds to built-in defaults for this user."""
+        uid = self._resolve_user_id(user_id)
+        with self._lock:
+            self._user_policies[uid] = Policy(
+                policy_id=f"policy_user_{uid}",
+                name=f"OpenEval Runtime Security Policy (User {uid})",
+                org_id=f"org_user_{uid}",
+                posture="blocking",
+                command_rules=[r.model_copy() for r in DEFAULT_COMMAND_RULES],
+                tool_thresholds=[t.model_copy() for t in DEFAULT_TOOL_THRESHOLDS],
+                locked_instructions="DO NOT modify security configurations or disable monitoring.",
+            )
+            self._save_user_settings_to_disk()
+            return self._user_policies[uid]
 
     def update_command_rule(
-        self, rule_name: str, action: Literal["allow", "triage", "human", "deny", "off"]
+        self,
+        rule_name: str,
+        action: Literal["allow", "triage", "human", "deny", "off"],
+        user_id: int | None = None,
     ) -> bool:
-        """Update action for a command rule."""
-        for r in self._policy.command_rules:
-            if r.name == rule_name:
-                r.action = action
-                return True
+        """Update action for a command rule for this user."""
+        policy = self.get_policy(user_id)
+        with self._lock:
+            for r in policy.command_rules:
+                if r.name == rule_name:
+                    r.action = action
+                    self._save_user_settings_to_disk()
+                    return True
         return False
 
     def update_tool_threshold(
@@ -906,30 +984,37 @@ class WatcherStore:
         auto_deny_ge: int | None = None,
         always_escalate: bool = False,
         auto_approve_le: int = 3,
+        user_id: int | None = None,
     ) -> bool:
-        """Update thresholds for a tool."""
-        for t in self._policy.tool_thresholds:
-            if t.tool_name == tool_name:
-                t.auto_approve = auto_approve
-                t.escalate_ge = escalate_ge
-                t.auto_deny_ge = auto_deny_ge
-                t.always_escalate = always_escalate
-                t.auto_approve_le = auto_approve_le
-                return True
-        self._policy.tool_thresholds.append(
-            ToolThreshold(
-                tool_name=tool_name,
-                auto_approve=auto_approve,
-                escalate_ge=escalate_ge,
-                auto_deny_ge=auto_deny_ge,
-                always_escalate=always_escalate,
-                auto_approve_le=auto_approve_le,
+        """Update thresholds for a tool for this user."""
+        policy = self.get_policy(user_id)
+        with self._lock:
+            for t in policy.tool_thresholds:
+                if t.tool_name == tool_name:
+                    t.auto_approve = auto_approve
+                    t.escalate_ge = escalate_ge
+                    t.auto_deny_ge = auto_deny_ge
+                    t.always_escalate = always_escalate
+                    t.auto_approve_le = auto_approve_le
+                    self._save_user_settings_to_disk()
+                    return True
+            policy.tool_thresholds.append(
+                ToolThreshold(
+                    tool_name=tool_name,
+                    auto_approve=auto_approve,
+                    escalate_ge=escalate_ge,
+                    auto_deny_ge=auto_deny_ge,
+                    always_escalate=always_escalate,
+                    auto_approve_le=auto_approve_le,
+                )
             )
-        )
-        return True
+            self._save_user_settings_to_disk()
+            return True
 
-    def update_tool_thresholds(self, thresholds: list[ToolThreshold]) -> bool:
-        """Bulk update tool thresholds."""
+    def update_tool_thresholds(
+        self, thresholds: list[ToolThreshold], user_id: int | None = None
+    ) -> bool:
+        """Bulk update tool thresholds for this user."""
         for incoming in thresholds:
             self.update_tool_threshold(
                 tool_name=incoming.tool_name,
@@ -938,8 +1023,28 @@ class WatcherStore:
                 auto_deny_ge=incoming.auto_deny_ge,
                 always_escalate=incoming.always_escalate,
                 auto_approve_le=incoming.auto_approve_le,
+                user_id=user_id,
             )
         return True
+
+    def get_user_config(self, user_id: int | None = None) -> WatcherConfig:
+        """Retrieve the Watcher enforcement mode and configuration for this user."""
+        uid = self._resolve_user_id(user_id)
+        with self._lock:
+            if uid not in self._user_configs:
+                self._user_configs[uid] = WatcherConfig()
+                self._save_user_settings_to_disk()
+            return self._user_configs[uid]
+
+    def update_user_config(
+        self, new_config: WatcherConfig, user_id: int | None = None
+    ) -> WatcherConfig:
+        """Update the Watcher enforcement mode and configuration for this user."""
+        uid = self._resolve_user_id(user_id)
+        with self._lock:
+            self._user_configs[uid] = new_config.model_copy()
+            self._save_user_settings_to_disk()
+            return self._user_configs[uid]
 
     # -------------------------------------------------------------------------
     # Real-Time SSE Pub/Sub

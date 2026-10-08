@@ -338,8 +338,8 @@ async def broadcast_watcher_event(event_type: str, data: dict[str, Any]) -> None
 
 @app.get("/api/watcher/config", response_model=WatcherConfig)
 async def get_watcher_config() -> WatcherConfig:
-    """Get Watcher mode settings. Thresholds for deny/escalate live in /api/v1/watcher/policy."""
-    return global_watcher_engine.config
+    """Get Watcher mode settings for active user. Thresholds for deny/escalate live in /api/v1/watcher/policy."""
+    return get_watcher_store().get_user_config()
 
 
 @app.get("/api/v1/watcher/config", response_model=WatcherConfig)
@@ -364,10 +364,12 @@ async def watcher_analyzer_lite() -> dict[str, Any]:
 
 @app.post("/api/watcher/config", response_model=WatcherConfig)
 async def update_watcher_config(new_config: WatcherConfig) -> WatcherConfig:
-    """Update runtime mode (enforce/observe/paused). Float threshold fields are ignored for gating."""
-    # Preserve legacy fields in memory for API compat, but evaluate ignores them.
-    updated = global_watcher_engine.update_config(new_config)
-    await broadcast_watcher_event("config_update", updated.model_dump())
+    """Update runtime mode (enforce/observe/paused) for active user. Float threshold fields are ignored for gating."""
+    store = get_watcher_store()
+    updated = store.update_user_config(new_config)
+    cfg_dict = updated.model_dump()
+    cfg_dict["user_id"] = current_user_id.get()
+    await broadcast_watcher_event("config_update", cfg_dict)
     return updated
 
 
@@ -393,7 +395,8 @@ async def evaluate_action_watcher_gateway(req: WatcherRequest) -> WatcherVerdict
     from server.policy_gateway import PolicyGateway
     from server.watcher_store import get_watcher_store
 
-    cfg = global_watcher_engine.config
+    store = get_watcher_store()
+    cfg = store.get_user_config()
 
     # Paused mode: never block
     if cfg.mode == "paused":
@@ -409,6 +412,7 @@ async def evaluate_action_watcher_gateway(req: WatcherRequest) -> WatcherVerdict
             is_safe=True,
             action_preview=f"{req.tool_name}",
             agent_id=req.agent_id or "unknown",
+            user_id=current_user_id.get(),
         )
         await broadcast_watcher_event("interception_event", verdict.model_dump())
         return verdict
@@ -576,6 +580,7 @@ async def evaluate_action_watcher_gateway(req: WatcherRequest) -> WatcherVerdict
             full_command=full_cmd,
             tool_result=None,
             threat_category=rec.threat_category,
+            user_id=current_user_id.get(),
         )
 
     await broadcast_watcher_event("interception_event", verdict.model_dump())
@@ -1102,7 +1107,13 @@ async def list_watcher_interceptions(
 
         UniversalAgentLogLoader.scan_default_agent_directories()
 
-    live = [v.model_dump() for v in global_watcher_engine.get_history(limit)]
+    uid = current_user_id.get()
+    live = [
+        v.model_dump()
+        for v in global_watcher_engine.get_history(limit)
+        if (v.user_id is None and current_user_slug.get() in ("owner", "demo"))
+        or (v.user_id is not None and v.user_id == uid)
+    ]
     if current_user_slug.get() == "demo":
         live = [
             v
@@ -1132,8 +1143,15 @@ async def stream_watcher_events() -> StreamingResponse:
     watcher_sse_subscribers.add(queue)
 
     async def sse_generator() -> AsyncGenerator[str, None]:
+        store = get_watcher_store()
+        uid = current_user_id.get()
         # Seed with in-memory live history + recent store blocks (survives API restart)
-        live_hist = [v.model_dump() for v in global_watcher_engine.get_history(20)]
+        live_hist = [
+            v.model_dump()
+            for v in global_watcher_engine.get_history(20)
+            if (v.user_id is None and current_user_slug.get() in ("owner", "demo"))
+            or (v.user_id is not None and v.user_id == uid)
+        ]
         if current_user_slug.get() == "demo":
             live_hist = [
                 v
@@ -1154,7 +1172,7 @@ async def stream_watcher_events() -> StreamingResponse:
                 break
         init_data = {
             "status": "connected",
-            "config": global_watcher_engine.config.model_dump(),
+            "config": store.get_user_config().model_dump(),
             "history": history,
         }
         yield f"event: connected\ndata: {json.dumps(init_data)}\n\n"
@@ -1163,8 +1181,12 @@ async def stream_watcher_events() -> StreamingResponse:
             while True:
                 try:
                     payload = await asyncio.wait_for(queue.get(), timeout=15.0)
+                    event_data = payload.get("data", {})
+                    event_uid = event_data.get("user_id")
+                    if event_uid is not None and event_uid != uid:
+                        continue
                     event_type = payload.get("event", "message")
-                    data_str = json.dumps(payload.get("data", {}))
+                    data_str = json.dumps(event_data)
                     yield f"event: {event_type}\ndata: {data_str}\n\n"
                 except TimeoutError:
                     # Ping keep-alive
