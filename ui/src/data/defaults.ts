@@ -27,6 +27,7 @@ export const DEFAULT_MODELS: ModelSpec[] = [
     output_cost_per_m: 0.3,
     capabilities: ['fast', 'agentic', 'tool_use'],
   },
+  /* --- OTHER MODELS COMMENTED OUT (Uncomment when needed) ---
   {
     id: 'gemini-3.7-flash',
     name: 'Gemini 3.7 Flash',
@@ -111,32 +112,30 @@ export const DEFAULT_MODELS: ModelSpec[] = [
     output_cost_per_m: 8.0,
     capabilities: ['agentic', 'coding', 'sandbox_execution', 'reasoning'],
   },
-  /*
-  {
-    id: 'gemma-4-26b-a4b-it',
-    name: 'Gemma 4 26B',
-    provider: 'google',
-    tier: 'fast',
-    description: 'Google open-weight 26B model hosted on AI Studio with high quota 14400 RPD. Supports thinking.',
-    context_window: 128000,
-    max_output_tokens: 8192,
-    input_cost_per_m: 0.05,
-    output_cost_per_m: 0.2,
-    capabilities: ['fast', 'coding', 'open_weights', 'thinking'],
-  },
-  {
-    id: 'gemma-4-31b-it',
-    name: 'Gemma 4 31B',
-    provider: 'google',
-    tier: 'balanced',
-    description: 'Google open-weight 31B instruction-tuned model with high quota 14400 RPD. Supports thinking.',
-    context_window: 128000,
-    max_output_tokens: 8192,
-    input_cost_per_m: 0.07,
-    output_cost_per_m: 0.25,
-    capabilities: ['balanced', 'reasoning', 'open_weights', 'thinking'],
-  },
-  */
+  // {
+  //   id: 'gemma-4-26b-a4b-it',
+  //   name: 'Gemma 4 26B',
+  //   provider: 'google',
+  //   tier: 'fast',
+  //   description: 'Google open-weight 26B model hosted on AI Studio with high quota 14400 RPD. Supports thinking.',
+  //   context_window: 128000,
+  //   max_output_tokens: 8192,
+  //   input_cost_per_m: 0.05,
+  //   output_cost_per_m: 0.2,
+  //   capabilities: ['fast', 'coding', 'open_weights', 'thinking'],
+  // },
+  // {
+  //   id: 'gemma-4-31b-it',
+  //   name: 'Gemma 4 31B',
+  //   provider: 'google',
+  //   tier: 'balanced',
+  //   description: 'Google open-weight 31B instruction-tuned model with high quota 14400 RPD. Supports thinking.',
+  //   context_window: 128000,
+  //   max_output_tokens: 8192,
+  //   input_cost_per_m: 0.07,
+  //   output_cost_per_m: 0.25,
+  //   capabilities: ['balanced', 'reasoning', 'open_weights', 'thinking'],
+  // },
 
   // --- OPENAI FRONTIER ---
   {
@@ -300,6 +299,7 @@ export const DEFAULT_MODELS: ModelSpec[] = [
     output_cost_per_m: 0.0,
     capabilities: ['local', 'lora', 'high_throughput'],
   },
+  */
 ];
 
 export const DEFAULT_TASKS: TaskSummary[] = [

@@ -179,11 +179,12 @@ jobs:
         env:
           TAG: ${{ github.ref_name }}
           GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         with:
           host: ${{ secrets.AWS_EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.AWS_SSH_PRIVATE_KEY }}
-          envs: TAG,GHCR_PULL_TOKEN
+          envs: TAG,GHCR_PULL_TOKEN,GEMINI_API_KEY
           script: |
             set -e
             cd /home/ubuntu/openeval-studio || (git clone https://github.com/unanph/openeval-studio.git /home/ubuntu/openeval-studio && cd /home/ubuntu/openeval-studio)
@@ -192,6 +193,10 @@ jobs:
             echo "IMAGE_TAG=$TAG" > /home/ubuntu/openeval-studio/.release-env
             if [ -n "$GHCR_PULL_TOKEN" ]; then
               echo "$GHCR_PULL_TOKEN" | docker login ghcr.io -u unanph --password-stdin
+            fi
+            if [ -n "$GEMINI_API_KEY" ]; then
+              sudo sed -i '/^GEMINI_API_KEY=/d' /etc/openeval.env || true
+              echo "GEMINI_API_KEY=$GEMINI_API_KEY" | sudo tee -a /etc/openeval.env
             fi
             docker compose --env-file /etc/openeval.env --env-file .release-env -f docker-compose.prod.yml pull
             docker compose --env-file /etc/openeval.env --env-file .release-env -f docker-compose.prod.yml up -d
