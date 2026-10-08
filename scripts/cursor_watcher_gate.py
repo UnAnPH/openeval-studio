@@ -319,7 +319,7 @@ def _handle_pre_tool_use(
                         "thought_context": conversation_id,
                     }
                 ).encode("utf-8"),
-                headers={"Content-Type": "application/json"},
+                headers=_get_headers(),
                 method="POST",
             )
             with urllib.request.urlopen(req, timeout=TIMEOUT_SEC) as resp:

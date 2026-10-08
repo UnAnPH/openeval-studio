@@ -5,7 +5,7 @@ packages:
   - curl
   - awscli
   - docker.io
-  - docker-compose-plugin
+  - docker-compose-v2
 
 groups:
   - docker
@@ -94,14 +94,14 @@ runcmd:
       openssl rand -hex 32 > /var/lib/openeval/session_secret
       chmod 0600 /var/lib/openeval/session_secret
     fi
-    PG_PASS=$$(tr -d '\r\n' < /var/lib/openeval/pg_password)
-    SESS_SEC=$$(tr -d '\r\n' < /var/lib/openeval/session_secret)
+    PG_PASS=$(tr -d '\r\n' < /var/lib/openeval/pg_password)
+    SESS_SEC=$(tr -d '\r\n' < /var/lib/openeval/session_secret)
     cat <<EOF > /etc/openeval.env
     BACKUP_BUCKET=${backup_bucket}
     OPENEVAL_ENV=production
     OPENEVAL_DEMO_SEED=1
-    SESSION_SECRET=$$SESS_SEC
-    DATABASE_URL=postgresql+psycopg://openeval:$$PG_PASS@postgres:5432/openeval
+    SESSION_SECRET=$SESS_SEC
+    DATABASE_URL=postgresql+psycopg://openeval:$PG_PASS@postgres:5432/openeval
     PORT=8000
     EOF
     chmod 0600 /etc/openeval.env

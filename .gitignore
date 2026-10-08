@@ -44,3 +44,4 @@ artifacts/true-evals/traces/
 *.tfstate
 *.tfstate.*
 .terraform.lock.hcl
+*.tfvars
