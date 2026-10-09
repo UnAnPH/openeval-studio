@@ -95,7 +95,7 @@
         "tool_name": "run_command",
         "tool_input": "npx eslint --fix",
         "decision": "allow",
-        "score": 0.5,
+        "score": 1,
         "rule_name": "safe_linter_execution",
         "threat_category": null,
         "explanation": "Code formatting routine. Non-destructive."

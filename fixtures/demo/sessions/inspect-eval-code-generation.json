@@ -77,7 +77,7 @@
         "tool_name": "run_command",
         "tool_input": "evaluate_lcs.py",
         "decision": "allow",
-        "score": 0.2,
+        "score": 1,
         "rule_name": "code_eval_allow",
         "threat_category": null,
         "explanation": "Synthetic algorithmic benchmark execution."

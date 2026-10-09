@@ -95,7 +95,7 @@
         "tool_name": "run_command",
         "tool_input": "grpc_health_probe",
         "decision": "allow",
-        "score": 0.5,
+        "score": 1,
         "rule_name": "health_probe_allow",
         "threat_category": null,
         "explanation": "Harmless local health diagnostic probe."

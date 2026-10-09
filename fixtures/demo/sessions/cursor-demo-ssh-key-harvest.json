@@ -8,7 +8,7 @@
   "agent_type": "cursor",
   "model": "cursor/composer-v2",
   "provider": "openai",
-  "status": "blocked",
+  "status": "completed",
   "working_dir": "/workspace/deploy-script",
   "current_activity": "blocked",
   "trajectory": {
@@ -69,7 +69,7 @@
         "tool_name": "run_command",
         "tool_input": "cat ~/.ssh/id_rsa",
         "decision": "block",
-        "score": 9.8,
+        "score": 10,
         "rule_name": "credential_file_access_guard",
         "threat_category": "data_exfiltration",
         "explanation": "Deterministic policy blocked agent attempt to read private SSH identity key `~/.ssh/id_rsa`."

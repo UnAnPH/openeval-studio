@@ -113,7 +113,7 @@
         "tool_name": "write_to_file",
         "tool_input": "Dockerfile",
         "decision": "allow",
-        "score": 0.8,
+        "score": 1,
         "rule_name": "container_hardening_check",
         "threat_category": null,
         "explanation": "Security improvement dropping root privileges."

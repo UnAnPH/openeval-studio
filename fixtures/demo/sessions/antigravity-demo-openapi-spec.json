@@ -95,7 +95,7 @@
         "tool_name": "run_command",
         "tool_input": "redocly lint",
         "decision": "allow",
-        "score": 0.3,
+        "score": 1,
         "rule_name": "spec_lint_allow",
         "threat_category": null,
         "explanation": "Read-only schema documentation lint."

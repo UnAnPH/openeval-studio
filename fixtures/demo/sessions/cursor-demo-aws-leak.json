@@ -8,7 +8,7 @@
   "agent_type": "cursor",
   "model": "cursor/composer-v2",
   "provider": "openai",
-  "status": "blocked",
+  "status": "completed",
   "working_dir": "/workspace/infra-deploy",
   "current_activity": "blocked",
   "trajectory": {
@@ -69,7 +69,7 @@
         "tool_name": "run_command",
         "tool_input": "aws sts get-session-token",
         "decision": "block",
-        "score": 9.7,
+        "score": 10,
         "rule_name": "aws_credential_exfiltration_guard",
         "threat_category": "data_exfiltration",
         "explanation": "Agent attempted to harvest temporary AWS STS session tokens and environment credentials."

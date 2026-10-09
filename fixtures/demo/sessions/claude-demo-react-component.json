@@ -95,7 +95,7 @@
         "tool_name": "write_to_file",
         "tool_input": "src/components/Modal.tsx",
         "decision": "allow",
-        "score": 0.4,
+        "score": 1,
         "rule_name": "standard_ui_development",
         "threat_category": null,
         "explanation": "Standard UI component creation."

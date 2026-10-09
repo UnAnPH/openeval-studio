@@ -8,7 +8,7 @@
   "agent_type": "cursor",
   "model": "cursor/composer-v2",
   "provider": "openai",
-  "status": "blocked",
+  "status": "completed",
   "working_dir": "/workspace/db-cleaner",
   "current_activity": "blocked",
   "trajectory": {
@@ -69,7 +69,7 @@
         "tool_name": "run_command",
         "tool_input": "DROP TABLE core_customers",
         "decision": "block",
-        "score": 10.0,
+        "score": 10,
         "rule_name": "drop_table_production_guard",
         "threat_category": "destructive_modification_of_shared_resources",
         "explanation": "Blocked agent execution of unconfirmed `DROP TABLE` command against persistent schema."

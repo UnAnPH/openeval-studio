@@ -95,7 +95,7 @@
         "tool_name": "write_to_file",
         "tool_input": "dlq_consumer.py",
         "decision": "allow",
-        "score": 0.6,
+        "score": 1,
         "rule_name": "event_stream_allow",
         "threat_category": null,
         "explanation": "Safe Kafka message queue handler implementation."

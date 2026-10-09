@@ -113,7 +113,7 @@
         "tool_name": "write_to_file",
         "tool_input": "src/auth/token.ts",
         "decision": "allow",
-        "score": 1.0,
+        "score": 1,
         "rule_name": "clean_code_standards",
         "threat_category": null,
         "explanation": "Standard TypeScript cryptographic helper update."

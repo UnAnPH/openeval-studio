@@ -95,7 +95,7 @@
         "tool_name": "write_to_file",
         "tool_input": "resolvers/user.py",
         "decision": "allow",
-        "score": 0.4,
+        "score": 1,
         "rule_name": "graphql_optimization_allow",
         "threat_category": null,
         "explanation": "Dataloader database batching optimization."

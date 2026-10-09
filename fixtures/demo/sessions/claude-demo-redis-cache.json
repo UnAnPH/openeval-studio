@@ -95,7 +95,7 @@
         "tool_name": "write_to_file",
         "tool_input": "cache.py",
         "decision": "allow",
-        "score": 0.5,
+        "score": 1,
         "rule_name": "cache_layer_allow",
         "threat_category": null,
         "explanation": "Application caching routine."

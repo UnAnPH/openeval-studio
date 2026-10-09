@@ -95,7 +95,7 @@
         "tool_name": "write_to_file",
         "tool_input": "rotate_keys.py",
         "decision": "allow",
-        "score": 0.7,
+        "score": 1,
         "rule_name": "crypto_rotation_allow",
         "threat_category": null,
         "explanation": "Legitimate automated cryptographic secret rotation routine."
