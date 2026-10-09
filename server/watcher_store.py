@@ -35,7 +35,7 @@ from schemas.watcher_models import (
     ToolThreshold,
     Trajectory,
 )
-from server.db import SessionLocal, get_current_user_id
+from server.db import SessionLocal, current_user_slug, get_current_user_id
 
 logger = logging.getLogger("openeval.server.watcher_store")
 
@@ -168,6 +168,15 @@ class WatcherStore:
 
     def _write_session_to_db(self, session: Session) -> None:
         """Write session and trajectory reviews to PostgreSQL and disk cache."""
+        with self._lock:
+            self._sessions[session.session_id] = session
+            self._trajectories[session.session_id] = session.trajectory
+            self._reviews[session.session_id] = session.trajectory.reviews
+
+        if current_user_slug.get() == "demo" or session.org_id == "demo":
+            # Ephemeral demo run: keep in memory only, do not write to PostgreSQL or disk
+            return
+
         payload = session.model_dump()
         payload_json = json.dumps(_to_jsonable(payload))
 
@@ -272,11 +281,6 @@ class WatcherStore:
         except Exception as e:
             logger.warning("Failed to write session file %s: %s", session.session_id, e)
 
-        with self._lock:
-            self._sessions[session.session_id] = session
-            self._trajectories[session.session_id] = session.trajectory
-            self._reviews[session.session_id] = session.trajectory.reviews
-
     def create_session(self, session: Session) -> Session:
         """Register a new session in PostgreSQL for the active user."""
         self._write_session_to_db(session)
@@ -290,6 +294,13 @@ class WatcherStore:
 
     def get_session(self, session_id: str) -> Session | None:
         """Retrieve a session by ID scoped to the active tenant."""
+        with self._lock:
+            if session_id in self._sessions and (
+                current_user_slug.get() == "demo"
+                or getattr(self._sessions[session_id], "org_id", "") == "demo"
+            ):
+                return self._sessions[session_id]
+
         with SessionLocal() as db:
             user_id = get_current_user_id(db)
             row = db.execute(
@@ -312,6 +323,9 @@ class WatcherStore:
     def update_session(self, session_id: str, updates: dict[str, Any]) -> Session | None:
         """Update fields on an existing session."""
         session = self.get_session(session_id)
+        if not session:
+            with self._lock:
+                session = self._sessions.get(session_id)
         if not session:
             return None
 
@@ -352,14 +366,27 @@ class WatcherStore:
                     payload = r[0] if isinstance(r[0], dict) else json.loads(r[0])
                     with contextlib.suppress(Exception):
                         results.append(Session.model_validate(payload))
-            return results
+
+            db_ids = {s.session_id for s in results}
+            with self._lock:
+                for s in self._sessions.values():
+                    if s.session_id not in db_ids:
+                        if agent_type and s.agent_type != agent_type:
+                            continue
+                        if status and s.status != status:
+                            continue
+                        if current_user_slug.get() == "demo" or s.org_id != "demo":
+                            results.append(s)
+            results.sort(key=lambda x: str(x.created_at or ""), reverse=True)
+            return results[:limit]
 
     def clear_all_sessions(self) -> None:
         """Purge all sessions and reviews for the active tenant."""
-        with SessionLocal() as db:
-            user_id = get_current_user_id(db)
-            db.execute(text("DELETE FROM sessions WHERE user_id = :uid"), {"uid": user_id})
-            db.commit()
+        if current_user_slug.get() != "demo":
+            with SessionLocal() as db:
+                user_id = get_current_user_id(db)
+                db.execute(text("DELETE FROM sessions WHERE user_id = :uid"), {"uid": user_id})
+                db.commit()
         with self._lock:
             self._sessions.clear()
             self._trajectories.clear()
@@ -367,6 +394,14 @@ class WatcherStore:
 
     def delete_session(self, session_id: str) -> bool:
         """Delete a single session for the active tenant."""
+        with self._lock:
+            mem_deleted = bool(self._sessions.pop(session_id, None))
+            self._trajectories.pop(session_id, None)
+            self._reviews.pop(session_id, None)
+
+        if current_user_slug.get() == "demo":
+            return mem_deleted
+
         with SessionLocal() as db:
             user_id = get_current_user_id(db)
             res = db.execute(
@@ -375,12 +410,7 @@ class WatcherStore:
             )
             db.commit()
             deleted = bool(getattr(res, "rowcount", 0) > 0)
-
-        with self._lock:
-            self._sessions.pop(session_id, None)
-            self._trajectories.pop(session_id, None)
-            self._reviews.pop(session_id, None)
-        return deleted
+        return deleted or mem_deleted
 
     def purge_empty_sessions(self, min_messages: int = 1) -> list[str]:
         """Remove sessions that have fewer than min_messages."""

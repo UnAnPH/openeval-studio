@@ -192,13 +192,20 @@ class _AuthMiddleware(BaseHTTPMiddleware):
         )
 
         # Demo surface read requests strictly view the demo user's rows,
-        # even if the browser has an active session cookie for another account.
-        if is_demo_surface and method in ("GET", "HEAD", "OPTIONS"):
-            with SessionLocal() as db:
-                demo_uid = get_user_id_by_slug(db, "demo")
-            current_user_slug.set("demo")
-            current_user_id.set(demo_uid)
-            return await call_next(request)
+        # Demo surface read requests and ephemeral evaluation launches execute under demo user context
+        if is_demo_surface:
+            is_eval_action = (
+                path in ("/api/eval/run", "/api/eval/launch")
+                or (path.startswith("/api/eval/runs/") and (path.endswith("/stop") or path.endswith("/delete") or method == "DELETE"))
+                or (path == "/api/eval/runs" and method == "DELETE")
+                or path in ("/api/eval/runs/clear",)
+            )
+            if method in ("GET", "HEAD", "OPTIONS") or is_eval_action:
+                with SessionLocal() as db:
+                    demo_uid = get_user_id_by_slug(db, "demo")
+                current_user_slug.set("demo")
+                current_user_id.set(demo_uid)
+                return await call_next(request)
 
         # 1. Valid session cookie or API key sets current_user_id and current_user_slug
         if authenticated_user:

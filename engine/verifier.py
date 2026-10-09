@@ -4,13 +4,19 @@ Executes test suites in isolated sandboxes, enforces anti-cheat held-out verifie
 and computes Oracle vs. Nop benchmark validity audits.
 """
 
+from __future__ import annotations
+
 import logging
 import time
 
+from typing import TYPE_CHECKING
+
 from pydantic import BaseModel, ConfigDict, Field
 
-from sandbox.docker_runner import DockerSandbox
 from schemas.task_spec import TaskSpec
+
+if TYPE_CHECKING:
+    from sandbox.docker_runner import DockerSandbox
 
 logger = logging.getLogger("openeval.engine.verifier")
 

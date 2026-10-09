@@ -217,8 +217,8 @@ class AsyncLLMRunner:
         )
 
         target_model = cfg.model.replace("google/", "")
-        if "2.5-flash" in target_model:
-            target_model = "gemini-2.0-flash"
+        if any(legacy in target_model for legacy in ("2.5-flash", "2.0-flash", "1.5-flash", "1.5-pro")):
+            target_model = "gemini-3.1-flash-lite"
 
         attempt = 0
         while attempt <= cfg.max_retries:
