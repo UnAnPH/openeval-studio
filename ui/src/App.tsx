@@ -147,6 +147,7 @@ export function App() {
   const eventSourceRef = useRef<EventSource | null>(null);
   const watcherSseRef = useRef<EventSource | null>(null);
   const evalSettledRef = useRef<boolean>(false);
+  const demoTimersRef = useRef<number[]>([]);
 
   const [serverConnected, setServerConnected] = useState<boolean>(false);
   const [isDemoSeed, setIsDemoSeed] = useState<boolean>(false);
@@ -668,6 +669,115 @@ export function App() {
     setIsStreaming(false);
   };
 
+  const generateDemoEvaluationSteps = (taskId: string, model: string): AgentStep[] => {
+    const isCancel = taskId.includes('cancel') || taskId.includes('async');
+    const isRegex = taskId.includes('regex') || taskId.includes('log');
+    const isCorrupt = taskId.includes('corrupt') || taskId.includes('archive');
+    const isRag = taskId.includes('rag') || taskId.includes('incident');
+    const isOversight = taskId.includes('oversight') || taskId.includes('subversion');
+
+    let fileToRead = `tasks/${taskId}/instruction.md`;
+    let fileToEdit = `tasks/${taskId}/solution.py`;
+    let thought1 = `Analyzing benchmark task "${taskId}". Inspecting instruction spec and workspace structure with model ${model}.`;
+    let obs1 = `Loaded instructions and environment configuration for ${taskId}.`;
+
+    let thought2 = `Identified root cause. Preparing targeted patch in source module.`;
+    let patchSummary = `Fix logic defect in ${taskId}`;
+    let obs2 = `File patched cleanly. Lint checks passing.`;
+
+    let testCmd = `pytest -v tests/`;
+    let obs3 = `================== 4 passed in 0.38s ==================`;
+
+    if (isCancel) {
+      fileToEdit = `tasks/${taskId}/cancel_pipeline.py`;
+      thought2 = `Detected orphaned background tasks. Wrapping coroutine loop in try/finally with explicit task.cancel().`;
+      patchSummary = `Add graceful async task cancellation and signal traps`;
+      obs2 = `Updated cancel_pipeline.py. Task cleanup handlers active.`;
+      testCmd = `pytest -v tests/test_cancel.py`;
+      obs3 = `tests/test_cancel.py::test_clean_cancellation PASSED\ntests/test_cancel.py::test_no_orphan_tasks PASSED\n================== 2 passed in 0.29s ==================`;
+    } else if (isRegex) {
+      fileToEdit = `tasks/${taskId}/parser.py`;
+      thought2 = `Identified catastrophic backtracking in unanchored timestamp regex. Replaced with linear DFA matcher.`;
+      patchSummary = `Optimize regex pattern and prevent exponential backoff`;
+      obs2 = `Updated parser.py. ReDoS test suite passes.`;
+      testCmd = `python3 tests/benchmark_parser.py`;
+      obs3 = `Processed 100,000 log entries in 42ms (latency reduced 98%). Verification PASSED.`;
+    } else if (isCorrupt) {
+      fileToEdit = `tasks/${taskId}/repair.py`;
+      thought2 = `Header checksum mismatch detected at offset 0x40. Calculating CRC32 and fixing corrupted tar stream.`;
+      patchSummary = `Repair archive magic bytes and CRC32 table`;
+      obs2 = `Archive repaired. All 12 payload files unpacked intact.`;
+      testCmd = `python3 tests/verify_archive.py`;
+      obs3 = `Integrity check: 100% matched sha256 checksums. Verification PASSED.`;
+    } else if (isRag) {
+      fileToEdit = `tasks/${taskId}/query_engine.py`;
+      thought2 = `Embedding cosine threshold was discarding high-relevance incident logs. Calibrating similarity cutoff.`;
+      patchSummary = `Recalibrate RAG retrieval threshold and re-ranker weights`;
+      obs2 = `Updated query_engine.py. Precision@5 increased to 0.94.`;
+      testCmd = `pytest -v tests/test_rag.py`;
+      obs3 = `tests/test_rag.py::test_incident_retrieval PASSED\n================== 3 passed in 0.44s ==================`;
+    } else if (isOversight) {
+      fileToEdit = `tasks/${taskId}/agent_guard.py`;
+      thought2 = `Evaluating agent prompt against adversarial subversion probe. Verifying compliance with safety boundary.`;
+      patchSummary = `Reinforce system prompt boundary and tool argument filter`;
+      obs2 = `Safety guardrails verified. Disallowed tool invocations blocked.`;
+      testCmd = `pytest -v tests/test_subversion.py`;
+      obs3 = `0 adversarial exploits succeeded. Firewall gate intact. PASSED.`;
+    }
+
+    return [
+      {
+        step_number: 1,
+        thought: thought1,
+        action: {
+          thought: `Read task specification for ${taskId}`,
+          tool: 'view_file',
+          path: fileToRead,
+        },
+        observation: obs1,
+        latency_ms: 380,
+        tokens_used: 280,
+      },
+      {
+        step_number: 2,
+        thought: thought2,
+        action: {
+          thought: `Apply patch to ${fileToEdit}`,
+          tool: 'replace_file_content',
+          path: fileToEdit,
+          summary: patchSummary,
+        },
+        observation: obs2,
+        latency_ms: 540,
+        tokens_used: 420,
+      },
+      {
+        step_number: 3,
+        thought: `Running verification suite to ensure all assertions pass.`,
+        action: {
+          thought: `Run automated verification tests`,
+          tool: 'execute_bash',
+          command: testCmd,
+        },
+        observation: obs3,
+        latency_ms: 680,
+        tokens_used: 310,
+      },
+      {
+        step_number: 4,
+        thought: `All verification tests passed cleanly with 1.0 reward. Concluding autonomous ReAct evaluation run.`,
+        action: {
+          thought: `Conclude evaluation run`,
+          tool: 'finish',
+          summary: `Verification completed successfully`,
+        },
+        observation: `Verification complete. Final reward: 1.0. Zero safety violations.`,
+        latency_ms: 190,
+        tokens_used: 110,
+      },
+    ];
+  };
+
   const handleLaunchEval = async (taskIdToRun?: string) => {
     const targetTaskId = taskIdToRun || selectedTaskId || tasks[0]?.task_id || DEFAULT_TASKS[0].task_id;
     const targetModelId = selectedModelId || models[0]?.id || DEFAULT_MODELS[0].id;
@@ -690,84 +800,98 @@ export function App() {
 
     // Ephemeral in-memory launch for demo surface (never persists to external database)
     if (isDemo) {
-      const simSteps: AgentStep[] = [
-        {
-          step_number: 1,
-          thought: `Analyzing benchmark task "${targetTaskId}". Inspecting workspace files and specification.`,
-          action: {
-            thought: `Inspect workspace files and specification for ${targetTaskId}`,
-            tool: 'view_file',
-            path: `tasks/${targetTaskId}/instruction.md`,
-          },
-          observation: 'Loaded task instructions. Identified required fix in source module.',
-          latency_ms: 380,
-          tokens_used: 240,
-        },
-        {
-          step_number: 2,
-          thought: 'Applying code patch to address requirements and fix failing assertion.',
-          action: {
-            thought: 'Apply code patch to satisfy assertion',
-            tool: 'replace_file_content',
-            summary: 'Apply code patch',
-          },
-          observation: 'File patched successfully. Preparing verifier run.',
-          latency_ms: 540,
-          tokens_used: 380,
-        },
-        {
-          step_number: 3,
-          thought: 'Running held-out test suite and verifier assertions.',
-          action: {
-            thought: 'Run pytest test suite',
-            tool: 'execute_bash',
-            command: 'pytest -v tests/',
-          },
-          observation: '================== 3 passed in 0.42s ==================',
-          latency_ms: 710,
-          tokens_used: 290,
-        },
-        {
-          step_number: 4,
-          thought: 'Verification passed cleanly with reward 1.0. Concluding evaluation run.',
-          action: {
-            thought: 'All checks passed cleanly',
-            tool: 'finish',
-            summary: 'Task completed',
-          },
-          observation: 'Evaluation complete. All verifier assertions passed.',
-          latency_ms: 180,
-          tokens_used: 110,
-        },
-      ];
+      demoTimersRef.current.forEach((t) => clearTimeout(t));
+      demoTimersRef.current = [];
 
-      setTimeout(() => {
-        setLiveSteps([simSteps[0]]);
+      const simSteps = generateDemoEvaluationSteps(targetTaskId, targetModelId);
+      const provider = targetModelId.includes('gpt') || targetModelId.includes('o1') ? 'openai' : 'google';
+
+      const initialRun: RunRecord = {
+        run_id: canonicalRunId,
+        task_id: targetTaskId,
+        agent_type: 'inspect_eval',
+        model: targetModelId,
+        provider,
+        status: 'running',
+        passed: null,
+        reward: null,
+        failure_reason: null,
+        total_tokens: 0,
+        total_duration_sec: 0,
+        estimated_cost_usd: 0,
+        steps: [],
+        total_steps: 0,
+        created_at: new Date().toISOString(),
+        final_summary: null,
+      };
+      setActiveRun(initialRun);
+
+      const t1 = window.setTimeout(() => {
+        const s = [simSteps[0]];
+        setLiveSteps(s);
+        setActiveRun((prev) =>
+          prev
+            ? {
+                ...prev,
+                steps: s,
+                total_steps: 1,
+                total_tokens: 280,
+                total_duration_sec: 0.8,
+                estimated_cost_usd: 0.0004,
+              }
+            : null
+        );
       }, 700);
 
-      setTimeout(() => {
-        setLiveSteps([simSteps[0], simSteps[1]]);
+      const t2 = window.setTimeout(() => {
+        const s = [simSteps[0], simSteps[1]];
+        setLiveSteps(s);
+        setActiveRun((prev) =>
+          prev
+            ? {
+                ...prev,
+                steps: s,
+                total_steps: 2,
+                total_tokens: 700,
+                total_duration_sec: 1.7,
+                estimated_cost_usd: 0.001,
+              }
+            : null
+        );
       }, 1600);
 
-      setTimeout(() => {
-        setLiveSteps([simSteps[0], simSteps[1], simSteps[2]]);
-      }, 2600);
+      const t3 = window.setTimeout(() => {
+        const s = [simSteps[0], simSteps[1], simSteps[2]];
+        setLiveSteps(s);
+        setActiveRun((prev) =>
+          prev
+            ? {
+                ...prev,
+                steps: s,
+                total_steps: 3,
+                total_tokens: 1010,
+                total_duration_sec: 2.6,
+                estimated_cost_usd: 0.0015,
+              }
+            : null
+        );
+      }, 2500);
 
-      setTimeout(() => {
+      const t4 = window.setTimeout(() => {
         setLiveSteps(simSteps);
         const demoRecord: RunRecord = {
           run_id: canonicalRunId,
           task_id: targetTaskId,
           agent_type: 'inspect_eval',
           model: targetModelId,
-          provider: targetModelId.includes('gpt') || targetModelId.includes('o1') ? 'openai' : 'google',
+          provider,
           status: 'completed',
           passed: true,
           reward: 1.0,
           failure_reason: null,
-          total_tokens: 1020,
+          total_tokens: 1120,
           total_duration_sec: 3.5,
-          estimated_cost_usd: 0.0015,
+          estimated_cost_usd: 0.0018,
           steps: simSteps,
           total_steps: simSteps.length,
           created_at: new Date().toISOString(),
@@ -790,10 +914,13 @@ export function App() {
           ],
         };
 
-        setRunsHistory((prev) => [demoRecord, ...prev]);
+        setActiveRun(demoRecord);
+        setRunsHistory((prev) => [demoRecord, ...prev.filter((r) => r.run_id !== canonicalRunId)]);
         settleEvalRun('completed', demoRecord);
+        demoTimersRef.current = [];
       }, 3500);
 
+      demoTimersRef.current = [t1, t2, t3, t4];
       return;
     }
 
@@ -916,6 +1043,9 @@ export function App() {
 
   const handleStopEval = async () => {
     evalSettledRef.current = true;
+    demoTimersRef.current.forEach((t) => clearTimeout(t));
+    demoTimersRef.current = [];
+
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
       eventSourceRef.current = null;
@@ -923,7 +1053,17 @@ export function App() {
     setIsStreaming(false);
     setRunStatus('cancelled');
 
-    if (activeRunId) {
+    if (activeRun && activeRun.status === 'running') {
+      const cancelledRun: RunRecord = {
+        ...activeRun,
+        status: 'cancelled',
+        failure_reason: 'Evaluation run was stopped by user.',
+      };
+      setActiveRun(cancelledRun);
+      setRunsHistory((prev) => [cancelledRun, ...prev.filter((r) => r.run_id !== cancelledRun.run_id)]);
+    }
+
+    if (activeRunId && !isDemo) {
       try {
         await fetch(`/api/eval/runs/${activeRunId}/stop`, { method: 'POST' }).catch(() => null);
         await fetchInitialData();
