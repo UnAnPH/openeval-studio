@@ -255,6 +255,8 @@ class LaunchEvalRequest(BaseModel):
     task_id: str = Field(..., description="Task directory identifier (e.g. cancel-async-tasks)")
     model: str | None = Field(default=None, description="Target model ID (defaults to primary)")
     api_key: str | None = Field(default=None, description="Optional explicit API key override")
+    run_id: str | None = Field(default=None, description="Optional canonical evaluation run ID")
+    chaos_mode: bool = Field(default=False, description="Enable chaos injection")
 
 
 class LaunchEvalResponse(BaseModel):
@@ -2399,7 +2401,12 @@ async def launch_eval(req: LaunchEvalRequest) -> LaunchEvalResponse:
             status_code=404, detail=f"Task '{req.task_id}' not found in tasks/ or catalog"
         )
 
-    record = global_run_store.create_run(task_id=req.task_id, model=model_id, provider=provider)
+    record = global_run_store.create_run(
+        task_id=req.task_id,
+        model=model_id,
+        provider=provider,
+        run_id=req.run_id,
+    )
 
     if not has_local_task and is_catalog_task:
         eval_task = asyncio.create_task(

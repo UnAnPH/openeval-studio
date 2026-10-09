@@ -42,6 +42,7 @@ def test_run_store_lifecycle_and_pubsub() -> None:
 
     assert record.status == "pending"
     assert record.task_id == "test-task"
+    assert record.run_id.startswith("eval-test-task-")
 
     # Test query
     fetched = store.get_run(record.run_id)

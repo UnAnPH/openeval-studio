@@ -672,6 +672,13 @@ export function App() {
     const targetTaskId = taskIdToRun || selectedTaskId || tasks[0]?.task_id || DEFAULT_TASKS[0].task_id;
     const targetModelId = selectedModelId || models[0]?.id || DEFAULT_MODELS[0].id;
 
+    // Canonical run ID: eval-{task_id}-{YYYYMMDD-HHmmss}-{shortHex}
+    const d = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const timestamp = `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}-${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}`;
+    const shortHex = Math.random().toString(36).substring(2, 8);
+    const canonicalRunId = `eval-${targetTaskId}-${timestamp}-${shortHex}`;
+
     setSelectedTaskId(targetTaskId);
     evalSettledRef.current = false;
     setIsStreaming(true);
@@ -679,6 +686,116 @@ export function App() {
     setLiveSteps([]);
     setActiveRun(null);
     setNavTab('studio');
+    setActiveRunId(canonicalRunId);
+
+    // Ephemeral in-memory launch for demo surface (never persists to external database)
+    if (isDemo) {
+      const simSteps: AgentStep[] = [
+        {
+          step_number: 1,
+          thought: `Analyzing benchmark task "${targetTaskId}". Inspecting workspace files and specification.`,
+          action: {
+            thought: `Inspect workspace files and specification for ${targetTaskId}`,
+            tool: 'view_file',
+            path: `tasks/${targetTaskId}/instruction.md`,
+          },
+          observation: 'Loaded task instructions. Identified required fix in source module.',
+          latency_ms: 380,
+          tokens_used: 240,
+        },
+        {
+          step_number: 2,
+          thought: 'Applying code patch to address requirements and fix failing assertion.',
+          action: {
+            thought: 'Apply code patch to satisfy assertion',
+            tool: 'replace_file_content',
+            summary: 'Apply code patch',
+          },
+          observation: 'File patched successfully. Preparing verifier run.',
+          latency_ms: 540,
+          tokens_used: 380,
+        },
+        {
+          step_number: 3,
+          thought: 'Running held-out test suite and verifier assertions.',
+          action: {
+            thought: 'Run pytest test suite',
+            tool: 'execute_bash',
+            command: 'pytest -v tests/',
+          },
+          observation: '================== 3 passed in 0.42s ==================',
+          latency_ms: 710,
+          tokens_used: 290,
+        },
+        {
+          step_number: 4,
+          thought: 'Verification passed cleanly with reward 1.0. Concluding evaluation run.',
+          action: {
+            thought: 'All checks passed cleanly',
+            tool: 'finish',
+            summary: 'Task completed',
+          },
+          observation: 'Evaluation complete. All verifier assertions passed.',
+          latency_ms: 180,
+          tokens_used: 110,
+        },
+      ];
+
+      setTimeout(() => {
+        setLiveSteps([simSteps[0]]);
+      }, 700);
+
+      setTimeout(() => {
+        setLiveSteps([simSteps[0], simSteps[1]]);
+      }, 1600);
+
+      setTimeout(() => {
+        setLiveSteps([simSteps[0], simSteps[1], simSteps[2]]);
+      }, 2600);
+
+      setTimeout(() => {
+        setLiveSteps(simSteps);
+        const demoRecord: RunRecord = {
+          run_id: canonicalRunId,
+          task_id: targetTaskId,
+          agent_type: 'inspect_eval',
+          model: targetModelId,
+          provider: targetModelId.includes('gpt') || targetModelId.includes('o1') ? 'openai' : 'google',
+          status: 'completed',
+          passed: true,
+          reward: 1.0,
+          failure_reason: null,
+          total_tokens: 1020,
+          total_duration_sec: 3.5,
+          estimated_cost_usd: 0.0015,
+          steps: simSteps,
+          total_steps: simSteps.length,
+          created_at: new Date().toISOString(),
+          final_summary: `Autonomous ReAct agent resolved benchmark task '${targetTaskId}' with 1.0 verifier score.`,
+          audit_verdicts: [
+            {
+              metric_name: 'plan_adherence',
+              score: 1.0,
+              passed: true,
+              reasoning: 'Agent strictly followed initial execution plan.',
+              flagged_steps: [],
+            },
+            {
+              metric_name: 'hallucination_detection',
+              score: 1.0,
+              passed: true,
+              reasoning: 'All file paths and API calls ground in real workspace state.',
+              flagged_steps: [],
+            },
+          ],
+        };
+
+        setRunsHistory((prev) => [demoRecord, ...prev]);
+        settleEvalRun('completed', demoRecord);
+      }, 3500);
+
+      return;
+    }
 
     if (!serverConnected) {
       failEvalLaunch('Backend offline — cannot launch evaluation. Start the API on port 8000.');
@@ -698,6 +815,7 @@ export function App() {
           task_id: targetTaskId,
           model: targetModelId,
           chaos_mode: chaosMode,
+          run_id: canonicalRunId,
         }),
       }).catch(() => null);
 
@@ -722,7 +840,7 @@ export function App() {
       }
 
       const launchData = await launchRes.json();
-      const currentRunId = launchData.run_id || `inspect_${Date.now()}`;
+      const currentRunId = launchData.run_id || canonicalRunId;
       setActiveRunId(currentRunId);
 
       // Connect to real-time Server-Sent Events stream

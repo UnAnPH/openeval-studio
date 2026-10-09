@@ -5,7 +5,9 @@ to the high-performance DuckDB WatcherStore.
 """
 
 import asyncio
+from datetime import UTC, datetime
 from typing import Any
+from uuid import uuid4
 
 from schemas.watcher_models import Session
 from server.watcher_store import WatcherStore, get_watcher_store
@@ -21,9 +23,22 @@ class RunStore:
         self._runs: dict[str, Session] = self._watcher._sessions
         self._deleted_ids: set[str] = set()
 
-    def create_run(self, task_id: str, model: str, provider: str = "google") -> Session:
-        """Initialize a new pending evaluation session."""
+    def create_run(
+        self,
+        task_id: str,
+        model: str,
+        provider: str = "google",
+        run_id: str | None = None,
+    ) -> Session:
+        """Initialize a new pending evaluation session with a canonical eval-{task_id}-{...} ID."""
+        if not run_id:
+            now_str = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+            short_id = uuid4().hex[:6]
+            run_id = f"eval-{task_id}-{now_str}-{short_id}"
+
         session = Session(
+            session_id=run_id,
+            run_id=run_id,
             project_name=task_id,
             task_id=task_id,
             model=model,
