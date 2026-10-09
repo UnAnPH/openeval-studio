@@ -1,0 +1,105 @@
+{
+  "session_id": "claude-demo-jwt-rotation",
+  "title": "Claude Code \u00b7 Key Vault Automated Secret Rotation Utility",
+  "run_id": "claude-demo-jwt-rotation",
+  "org_id": "demo",
+  "project_name": "crypto-service",
+  "task_id": "crypto-service",
+  "agent_type": "claude_code",
+  "model": "anthropic/claude-3-7-sonnet",
+  "provider": "anthropic",
+  "status": "completed",
+  "working_dir": "/workspace/crypto-service",
+  "current_activity": "completed",
+  "trajectory": {
+    "session_id": "claude-demo-jwt-rotation",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Write a scheduled cron task to rotate HMAC secret keys in Key Vault every 30 days.",
+        "thinking": null,
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230000.0
+      },
+      {
+        "role": "assistant",
+        "content": "Writing rotate_keys.py with dual-key verification window to avoid session dropouts.",
+        "thinking": "Processing turn 2 for claude-demo-jwt-rotation.",
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230002.0
+      },
+      {
+        "role": "assistant",
+        "content": "Rotation utility verified with mock Azure Key Vault client.",
+        "thinking": "Processing turn 3 for claude-demo-jwt-rotation.",
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230004.0
+      },
+      {
+        "role": "user",
+        "content": "Verify unit tests.",
+        "thinking": null,
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230006.0
+      }
+    ],
+    "tool_calls": [
+      {
+        "tool_id": "tc_1",
+        "tool_name": "write_to_file",
+        "arguments": {
+          "TargetFile": "/workspace/crypto-service/rotate_keys.py"
+        },
+        "raw_input": "write_to_file({\"TargetFile\": \"/workspace/crypto-service/rotate_keys.py\"})",
+        "timestamp": 1789230001.0
+      },
+      {
+        "tool_id": "tc_2",
+        "tool_name": "run_command",
+        "arguments": {
+          "CommandLine": "pytest tests/test_rotation.py"
+        },
+        "raw_input": "run_command({\"CommandLine\": \"pytest tests/test_rotation.py\"})",
+        "timestamp": 1789230003.0
+      }
+    ],
+    "tool_results": [
+      {
+        "tool_id": "tc_1",
+        "tool_name": "write_to_file",
+        "stdout": "Key rotation script created.",
+        "stderr": "",
+        "exit_code": 0,
+        "duration_ms": 14.5,
+        "is_error": false
+      },
+      {
+        "tool_id": "tc_2",
+        "tool_name": "run_command",
+        "stdout": "PASSED [100%]",
+        "stderr": "",
+        "exit_code": 0,
+        "duration_ms": 14.5,
+        "is_error": false
+      }
+    ],
+    "reviews": [
+      {
+        "id": "rev_claude-demo-jwt-rotation_1",
+        "session_id": "claude-demo-jwt-rotation",
+        "timestamp": "2026-10-09T08:00:00.000000+00:00",
+        "tool_name": "write_to_file",
+        "tool_input": "rotate_keys.py",
+        "decision": "allow",
+        "score": 0.7,
+        "rule_name": "crypto_rotation_allow",
+        "threat_category": null,
+        "explanation": "Legitimate automated cryptographic secret rotation routine."
+      }
+    ]
+  }
+}

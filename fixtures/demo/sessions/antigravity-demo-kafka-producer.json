@@ -1,0 +1,105 @@
+{
+  "session_id": "antigravity-demo-kafka-producer",
+  "title": "Antigravity \u00b7 Kafka Event Stream Dead-Letter Queue Worker",
+  "run_id": "antigravity-demo-kafka-producer",
+  "org_id": "demo",
+  "project_name": "event-bus",
+  "task_id": "event-bus",
+  "agent_type": "antigravity",
+  "model": "google/gemini-3.5-flash-lite",
+  "provider": "google",
+  "status": "completed",
+  "working_dir": "/workspace/event-bus",
+  "current_activity": "completed",
+  "trajectory": {
+    "session_id": "antigravity-demo-kafka-producer",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Configure an exponential backoff dead-letter queue (DLQ) for unprocessable Kafka events.",
+        "thinking": null,
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230000.0
+      },
+      {
+        "role": "assistant",
+        "content": "Inspecting consumer error handling and creating topic producer for 'events.dlq'.",
+        "thinking": "Processing turn 2 for antigravity-demo-kafka-producer.",
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230002.0
+      },
+      {
+        "role": "assistant",
+        "content": "Added retry count headers and exponential backoff retry policy.",
+        "thinking": "Processing turn 3 for antigravity-demo-kafka-producer.",
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230004.0
+      },
+      {
+        "role": "user",
+        "content": "Run integration tests.",
+        "thinking": null,
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230006.0
+      }
+    ],
+    "tool_calls": [
+      {
+        "tool_id": "tc_1",
+        "tool_name": "write_to_file",
+        "arguments": {
+          "TargetFile": "/workspace/event-bus/dlq_consumer.py"
+        },
+        "raw_input": "write_to_file({\"TargetFile\": \"/workspace/event-bus/dlq_consumer.py\"})",
+        "timestamp": 1789230001.0
+      },
+      {
+        "tool_id": "tc_2",
+        "tool_name": "run_command",
+        "arguments": {
+          "CommandLine": "pytest tests/test_dlq.py"
+        },
+        "raw_input": "run_command({\"CommandLine\": \"pytest tests/test_dlq.py\"})",
+        "timestamp": 1789230003.0
+      }
+    ],
+    "tool_results": [
+      {
+        "tool_id": "tc_1",
+        "tool_name": "write_to_file",
+        "stdout": "DLQ retry handler written.",
+        "stderr": "",
+        "exit_code": 0,
+        "duration_ms": 14.5,
+        "is_error": false
+      },
+      {
+        "tool_id": "tc_2",
+        "tool_name": "run_command",
+        "stdout": "PASSED [100%]",
+        "stderr": "",
+        "exit_code": 0,
+        "duration_ms": 14.5,
+        "is_error": false
+      }
+    ],
+    "reviews": [
+      {
+        "id": "rev_antigravity-demo-kafka-producer_1",
+        "session_id": "antigravity-demo-kafka-producer",
+        "timestamp": "2026-10-09T08:00:00.000000+00:00",
+        "tool_name": "write_to_file",
+        "tool_input": "dlq_consumer.py",
+        "decision": "allow",
+        "score": 0.6,
+        "rule_name": "event_stream_allow",
+        "threat_category": null,
+        "explanation": "Safe Kafka message queue handler implementation."
+      }
+    ]
+  }
+}

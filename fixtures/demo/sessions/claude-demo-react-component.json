@@ -1,0 +1,105 @@
+{
+  "session_id": "claude-demo-react-component",
+  "title": "Claude Code \u00b7 Accessible Tailwind Modal & Focus Trap",
+  "run_id": "claude-demo-react-component",
+  "org_id": "demo",
+  "project_name": "web-console",
+  "task_id": "web-console",
+  "agent_type": "claude_code",
+  "model": "anthropic/claude-3-7-sonnet",
+  "provider": "anthropic",
+  "status": "completed",
+  "working_dir": "/workspace/web-console",
+  "current_activity": "completed",
+  "trajectory": {
+    "session_id": "claude-demo-react-component",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Create an accessible confirmation modal in src/components/Modal.tsx with keyboard Escape listeners.",
+        "thinking": null,
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230000.0
+      },
+      {
+        "role": "assistant",
+        "content": "Implementing dialog element with aria-modal='true' and focus trap on mount.",
+        "thinking": "Processing turn 2 for claude-demo-react-component.",
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230002.0
+      },
+      {
+        "role": "assistant",
+        "content": "Completed Modal.tsx with automated cleanup on unmount.",
+        "thinking": "Processing turn 3 for claude-demo-react-component.",
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230004.0
+      },
+      {
+        "role": "user",
+        "content": "Run Cypress component tests.",
+        "thinking": null,
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230006.0
+      }
+    ],
+    "tool_calls": [
+      {
+        "tool_id": "tc_1",
+        "tool_name": "write_to_file",
+        "arguments": {
+          "TargetFile": "/workspace/web-console/src/components/Modal.tsx"
+        },
+        "raw_input": "write_to_file({\"TargetFile\": \"/workspace/web-console/src/components/Modal.tsx\"})",
+        "timestamp": 1789230001.0
+      },
+      {
+        "tool_id": "tc_2",
+        "tool_name": "run_command",
+        "arguments": {
+          "CommandLine": "npm run test:components"
+        },
+        "raw_input": "run_command({\"CommandLine\": \"npm run test:components\"})",
+        "timestamp": 1789230003.0
+      }
+    ],
+    "tool_results": [
+      {
+        "tool_id": "tc_1",
+        "tool_name": "write_to_file",
+        "stdout": "Created Modal component.",
+        "stderr": "",
+        "exit_code": 0,
+        "duration_ms": 14.5,
+        "is_error": false
+      },
+      {
+        "tool_id": "tc_2",
+        "tool_name": "run_command",
+        "stdout": "All 12 component specs passed.",
+        "stderr": "",
+        "exit_code": 0,
+        "duration_ms": 14.5,
+        "is_error": false
+      }
+    ],
+    "reviews": [
+      {
+        "id": "rev_claude-demo-react-component_1",
+        "session_id": "claude-demo-react-component",
+        "timestamp": "2026-10-09T08:00:00.000000+00:00",
+        "tool_name": "write_to_file",
+        "tool_input": "src/components/Modal.tsx",
+        "decision": "allow",
+        "score": 0.4,
+        "rule_name": "standard_ui_development",
+        "threat_category": null,
+        "explanation": "Standard UI component creation."
+      }
+    ]
+  }
+}

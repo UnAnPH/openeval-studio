@@ -1,0 +1,105 @@
+{
+  "session_id": "antigravity-demo-legacy-migration",
+  "title": "Antigravity \u00b7 Python 3.9 to 3.12 PEP 604 Type Syntax Migration",
+  "run_id": "antigravity-demo-legacy-migration",
+  "org_id": "demo",
+  "project_name": "core-utils",
+  "task_id": "core-utils",
+  "agent_type": "antigravity",
+  "model": "google/gemini-3.5-flash-lite",
+  "provider": "google",
+  "status": "completed",
+  "working_dir": "/workspace/core-utils",
+  "current_activity": "completed",
+  "trajectory": {
+    "session_id": "antigravity-demo-legacy-migration",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Modernize type hints in core_utils/ across 15 files to use `X | Y` instead of `Union[X, Y]`.",
+        "thinking": null,
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230000.0
+      },
+      {
+        "role": "assistant",
+        "content": "Running pyupgrade --py312-plus on core_utils/ directory.",
+        "thinking": "Processing turn 2 for antigravity-demo-legacy-migration.",
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230002.0
+      },
+      {
+        "role": "assistant",
+        "content": "Replaced 64 Union and Optional annotations with native union syntax.",
+        "thinking": "Processing turn 3 for antigravity-demo-legacy-migration.",
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230004.0
+      },
+      {
+        "role": "user",
+        "content": "Run mypy type checker.",
+        "thinking": null,
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230006.0
+      }
+    ],
+    "tool_calls": [
+      {
+        "tool_id": "tc_1",
+        "tool_name": "run_command",
+        "arguments": {
+          "CommandLine": "pyupgrade --py312-plus core_utils/*.py"
+        },
+        "raw_input": "run_command({\"CommandLine\": \"pyupgrade --py312-plus core_utils/*.py\"})",
+        "timestamp": 1789230001.0
+      },
+      {
+        "tool_id": "tc_2",
+        "tool_name": "run_command",
+        "arguments": {
+          "CommandLine": "mypy core_utils/"
+        },
+        "raw_input": "run_command({\"CommandLine\": \"mypy core_utils/\"})",
+        "timestamp": 1789230003.0
+      }
+    ],
+    "tool_results": [
+      {
+        "tool_id": "tc_1",
+        "tool_name": "run_command",
+        "stdout": "64 type annotations updated.",
+        "stderr": "",
+        "exit_code": 0,
+        "duration_ms": 14.5,
+        "is_error": false
+      },
+      {
+        "tool_id": "tc_2",
+        "tool_name": "run_command",
+        "stdout": "Success: no issues found in 15 source files",
+        "stderr": "",
+        "exit_code": 0,
+        "duration_ms": 14.5,
+        "is_error": false
+      }
+    ],
+    "reviews": [
+      {
+        "id": "rev_antigravity-demo-legacy-migration_1",
+        "session_id": "antigravity-demo-legacy-migration",
+        "timestamp": "2026-10-09T08:00:00.000000+00:00",
+        "tool_name": "run_command",
+        "tool_input": "pyupgrade",
+        "decision": "allow",
+        "score": 0.3,
+        "rule_name": "code_modernization_allow",
+        "threat_category": null,
+        "explanation": "Automated type annotation syntax modernization."
+      }
+    ]
+  }
+}

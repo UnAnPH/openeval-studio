@@ -27,6 +27,89 @@ def is_demo_seed_enabled() -> bool:
     return os.getenv("OPENEVAL_DEMO_SEED", "0").lower() in ("1", "true", "yes")
 
 
+from datetime import UTC, datetime, timedelta
+
+
+def generate_rolling_timeline(now: datetime | None = None) -> list[datetime]:
+    """Generate dynamic relative timestamps so demo data covers today, this week, last week, this month, and last month."""
+    if now is None:
+        now = datetime.now(UTC)
+
+    # 1. Today (5 sessions)
+    today_slots = [
+        now - timedelta(hours=1, minutes=15),
+        now - timedelta(hours=3, minutes=20),
+        now - timedelta(hours=5, minutes=45),
+        now - timedelta(hours=7, minutes=30),
+        now - timedelta(hours=9, minutes=50),
+    ]
+
+    # 2. This week (prior days)
+    js_day = (now.weekday() + 1) % 7
+    curr_week_start = datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=UTC) - timedelta(days=js_day)
+    this_week_slots: list[datetime] = []
+    if js_day > 0:
+        for d in range(1, min(js_day + 1, 7)):
+            this_week_slots.append(now - timedelta(days=d, hours=3))
+    while len(this_week_slots) < 6:
+        this_week_slots.append(now - timedelta(hours=12 + len(this_week_slots) * 2))
+
+    # 3. Last week (strictly inside last week)
+    last_week_end = curr_week_start - timedelta(microseconds=1)
+    last_week_slots = [
+        last_week_end - timedelta(days=0, hours=5),
+        last_week_end - timedelta(days=1, hours=8),
+        last_week_end - timedelta(days=2, hours=4),
+        last_week_end - timedelta(days=3, hours=9),
+        last_week_end - timedelta(days=4, hours=6),
+        last_week_end - timedelta(days=5, hours=3),
+    ]
+
+    # 4. Earlier this month
+    first_of_month = datetime(now.year, now.month, 1, 0, 0, 0, tzinfo=UTC)
+    if now.day > 7:
+        this_month_early_slots = [
+            datetime(now.year, now.month, 2, 14, 0, tzinfo=UTC),
+            datetime(now.year, now.month, 4, 11, 30, tzinfo=UTC),
+            datetime(now.year, now.month, 6, 16, 45, tzinfo=UTC),
+        ]
+    else:
+        this_month_early_slots = [
+            curr_week_start + timedelta(hours=2),
+            curr_week_start + timedelta(hours=6),
+            curr_week_start + timedelta(hours=10),
+        ]
+
+    # 5. Last month (strictly inside last month)
+    last_month_end = first_of_month - timedelta(microseconds=1)
+    first_of_last_month = datetime(last_month_end.year, last_month_end.month, 1, 0, 0, 0, tzinfo=UTC)
+    last_month_slots = [
+        datetime(first_of_last_month.year, first_of_last_month.month, 5, 14, 0, tzinfo=UTC),
+        datetime(first_of_last_month.year, first_of_last_month.month, 10, 10, 15, tzinfo=UTC),
+        datetime(first_of_last_month.year, first_of_last_month.month, 15, 16, 30, tzinfo=UTC),
+        datetime(first_of_last_month.year, first_of_last_month.month, 20, 12, 45, tzinfo=UTC),
+        datetime(first_of_last_month.year, first_of_last_month.month, 25, 9, 20, tzinfo=UTC),
+        datetime(first_of_last_month.year, first_of_last_month.month, 28, 17, 10, tzinfo=UTC),
+    ]
+
+    # 6. Two months ago (comparison baseline)
+    two_months_end = first_of_last_month - timedelta(microseconds=1)
+    first_of_two_months = datetime(two_months_end.year, two_months_end.month, 1, 0, 0, 0, tzinfo=UTC)
+    two_months_slots = [
+        datetime(first_of_two_months.year, first_of_two_months.month, 10, 11, 0, tzinfo=UTC),
+        datetime(first_of_two_months.year, first_of_two_months.month, 20, 15, 30, tzinfo=UTC),
+    ]
+
+    return (
+        today_slots
+        + this_week_slots
+        + last_week_slots
+        + this_month_early_slots
+        + last_month_slots
+        + two_months_slots
+    )
+
+
 def seed_demo_data(
     watcher_store: "WatcherStore | None" = None,
     run_store: "RunStore | None" = None,
@@ -66,12 +149,25 @@ def seed_demo_data(
     seeded_interceptions = 0
     seeded_evals = 0
 
-    # 1. Seed sessions into WatcherStore under demo user
+    timeline = generate_rolling_timeline()
+
+    # 1. Seed sessions into WatcherStore under demo user with rolling timestamps
     if sessions_dir.exists():
-        for f in sorted(sessions_dir.glob("*.json")):
+        session_files = sorted(sessions_dir.glob("*.json"))
+        for idx, f in enumerate(session_files):
             try:
                 data = json.loads(f.read_text(encoding="utf-8"))
                 session = Session.model_validate(data)
+
+                # Assign rolling dynamic timestamp so sessions populate Today, This week, Last week, This month, and Last month
+                target_dt = timeline[idx % len(timeline)]
+                session.created_at = target_dt.isoformat()
+                session.updated_at = (target_dt + timedelta(minutes=5)).isoformat()
+                for m_idx, msg in enumerate(session.trajectory.messages):
+                    msg.timestamp = target_dt.timestamp() + m_idx * 2.0
+                for r_idx, rev in enumerate(session.trajectory.reviews):
+                    rev.timestamp = (target_dt + timedelta(seconds=r_idx * 2 + 1)).isoformat()
+
                 ws.record_session(session)
                 seeded_sessions += 1
 
@@ -102,12 +198,16 @@ def seed_demo_data(
             except Exception as exc:
                 logger.error("Failed to seed session from %s: %s", f, exc)
 
-    # 2. Seed evaluations into RunStore
+    # 2. Seed evaluations into RunStore with rolling timestamps
     if evals_dir.exists():
-        for f in sorted(evals_dir.glob("*.json")):
+        eval_files = sorted(evals_dir.glob("*.json"))
+        for idx, f in enumerate(eval_files):
             try:
                 data = json.loads(f.read_text(encoding="utf-8"))
                 session = Session.model_validate(data)
+                target_dt = timeline[idx % len(timeline)]
+                session.created_at = target_dt.isoformat()
+                session.updated_at = (target_dt + timedelta(minutes=5)).isoformat()
                 rs.save_run(session)
                 seeded_evals += 1
             except Exception as exc:

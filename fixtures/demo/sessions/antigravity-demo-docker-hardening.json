@@ -1,0 +1,123 @@
+{
+  "session_id": "antigravity-demo-docker-hardening",
+  "title": "Antigravity \u00b7 Production Container Multi-Stage Security Hardening",
+  "run_id": "antigravity-demo-docker-hardening",
+  "org_id": "demo",
+  "project_name": "gateway-infra",
+  "task_id": "infra-hardening",
+  "agent_type": "antigravity",
+  "model": "google/gemini-3.5-flash-lite",
+  "provider": "google",
+  "status": "completed",
+  "working_dir": "/workspace/gateway-infra",
+  "current_activity": "completed",
+  "trajectory": {
+    "session_id": "antigravity-demo-docker-hardening",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hardening Dockerfile: change base image to distroless and drop root privileges.",
+        "thinking": null,
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230000.0
+      },
+      {
+        "role": "assistant",
+        "content": "Reviewing Dockerfile security best practices and creating non-root app user.",
+        "thinking": "Processing turn 2 for antigravity-demo-docker-hardening.",
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230002.0
+      },
+      {
+        "role": "assistant",
+        "content": "Dockerfile updated: using gcr.io/distroless/static:nonroot and USER 65532:65532.",
+        "thinking": "Processing turn 3 for antigravity-demo-docker-hardening.",
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230004.0
+      },
+      {
+        "role": "user",
+        "content": "Build container to verify.",
+        "thinking": null,
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230006.0
+      }
+    ],
+    "tool_calls": [
+      {
+        "tool_id": "tc_1",
+        "tool_name": "view_file",
+        "arguments": {
+          "AbsolutePath": "/workspace/gateway-infra/Dockerfile"
+        },
+        "raw_input": "view_file({\"AbsolutePath\": \"/workspace/gateway-infra/Dockerfile\"})",
+        "timestamp": 1789230001.0
+      },
+      {
+        "tool_id": "tc_2",
+        "tool_name": "write_to_file",
+        "arguments": {
+          "TargetFile": "/workspace/gateway-infra/Dockerfile"
+        },
+        "raw_input": "write_to_file({\"TargetFile\": \"/workspace/gateway-infra/Dockerfile\"})",
+        "timestamp": 1789230003.0
+      },
+      {
+        "tool_id": "tc_3",
+        "tool_name": "run_command",
+        "arguments": {
+          "CommandLine": "docker build -t gateway:secure ."
+        },
+        "raw_input": "run_command({\"CommandLine\": \"docker build -t gateway:secure .\"})",
+        "timestamp": 1789230005.0
+      }
+    ],
+    "tool_results": [
+      {
+        "tool_id": "tc_1",
+        "tool_name": "view_file",
+        "stdout": "FROM golang:1.22 AS builder\n...",
+        "stderr": "",
+        "exit_code": 0,
+        "duration_ms": 14.5,
+        "is_error": false
+      },
+      {
+        "tool_id": "tc_2",
+        "tool_name": "write_to_file",
+        "stdout": "Multi-stage distroless build completed.",
+        "stderr": "",
+        "exit_code": 0,
+        "duration_ms": 14.5,
+        "is_error": false
+      },
+      {
+        "tool_id": "tc_3",
+        "tool_name": "run_command",
+        "stdout": "Successfully tagged gateway:secure",
+        "stderr": "",
+        "exit_code": 0,
+        "duration_ms": 14.5,
+        "is_error": false
+      }
+    ],
+    "reviews": [
+      {
+        "id": "rev_antigravity-demo-docker-hardening_1",
+        "session_id": "antigravity-demo-docker-hardening",
+        "timestamp": "2026-10-09T08:00:00.000000+00:00",
+        "tool_name": "write_to_file",
+        "tool_input": "Dockerfile",
+        "decision": "allow",
+        "score": 0.8,
+        "rule_name": "container_hardening_check",
+        "threat_category": null,
+        "explanation": "Security improvement dropping root privileges."
+      }
+    ]
+  }
+}

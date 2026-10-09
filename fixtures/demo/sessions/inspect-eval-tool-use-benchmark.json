@@ -1,0 +1,87 @@
+{
+  "session_id": "inspect-eval-tool-use-benchmark",
+  "title": "Inspect Eval \u00b7 Tool Calling Calibration & JSON Argument Parsing",
+  "run_id": "inspect-eval-tool-use-benchmark",
+  "org_id": "demo",
+  "project_name": "benchmark-harness",
+  "task_id": "tool-calibration-40",
+  "agent_type": "inspect_eval",
+  "model": "google/gemini-3.1-flash-lite",
+  "provider": "google",
+  "status": "completed",
+  "working_dir": "/bench/tools",
+  "current_activity": "completed",
+  "trajectory": {
+    "session_id": "inspect-eval-tool-use-benchmark",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Benchmark: invoke search_database with complex filter predicates and date bounds.",
+        "thinking": null,
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230000.0
+      },
+      {
+        "role": "assistant",
+        "content": "Parsing search criteria and formatting arguments as strict JSON.",
+        "thinking": "Processing turn 2 for inspect-eval-tool-use-benchmark.",
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230002.0
+      },
+      {
+        "role": "assistant",
+        "content": "Tool call executed. Query completed in 18ms.",
+        "thinking": "Processing turn 3 for inspect-eval-tool-use-benchmark.",
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230004.0
+      },
+      {
+        "role": "system",
+        "content": "Test passed: 100% precision on arguments.",
+        "thinking": null,
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230006.0
+      }
+    ],
+    "tool_calls": [
+      {
+        "tool_id": "tc_1",
+        "tool_name": "run_command",
+        "arguments": {
+          "CommandLine": "python3 eval_tool_call.py --test-id=c40"
+        },
+        "raw_input": "run_command({\"CommandLine\": \"python3 eval_tool_call.py --test-id=c40\"})",
+        "timestamp": 1789230001.0
+      }
+    ],
+    "tool_results": [
+      {
+        "tool_id": "tc_1",
+        "tool_name": "run_command",
+        "stdout": "Assertion PASS: exact argument match",
+        "stderr": "",
+        "exit_code": 0,
+        "duration_ms": 14.5,
+        "is_error": false
+      }
+    ],
+    "reviews": [
+      {
+        "id": "rev_inspect-eval-tool-use-benchmark_1",
+        "session_id": "inspect-eval-tool-use-benchmark",
+        "timestamp": "2026-10-09T08:00:00.000000+00:00",
+        "tool_name": "run_command",
+        "tool_input": "eval_tool_call.py",
+        "decision": "allow",
+        "score": 0.4,
+        "rule_name": "eval_harness_allow",
+        "threat_category": null,
+        "explanation": "Synthetic tool call calibration benchmark."
+      }
+    ]
+  }
+}

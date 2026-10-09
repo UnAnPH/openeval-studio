@@ -1,0 +1,105 @@
+{
+  "session_id": "antigravity-demo-openapi-spec",
+  "title": "Antigravity \u00b7 OpenAPI 3.1 Spec Generation & Swagger Validation",
+  "run_id": "antigravity-demo-openapi-spec",
+  "org_id": "demo",
+  "project_name": "billing-api",
+  "task_id": "billing-api",
+  "agent_type": "antigravity",
+  "model": "google/gemini-3.5-flash-lite",
+  "provider": "google",
+  "status": "completed",
+  "working_dir": "/workspace/billing-api",
+  "current_activity": "completed",
+  "trajectory": {
+    "session_id": "antigravity-demo-openapi-spec",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Generate OpenAPI 3.1 schema documentation for /v1/invoices and /v1/customers.",
+        "thinking": null,
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230000.0
+      },
+      {
+        "role": "assistant",
+        "content": "Inspecting FastAPI Pydantic response models and generating openapi.json.",
+        "thinking": "Processing turn 2 for antigravity-demo-openapi-spec.",
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230002.0
+      },
+      {
+        "role": "assistant",
+        "content": "OpenAPI spec generated and validated against Swagger CLI.",
+        "thinking": "Processing turn 3 for antigravity-demo-openapi-spec.",
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230004.0
+      },
+      {
+        "role": "user",
+        "content": "Check swagger lint.",
+        "thinking": null,
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230006.0
+      }
+    ],
+    "tool_calls": [
+      {
+        "tool_id": "tc_1",
+        "tool_name": "run_command",
+        "arguments": {
+          "CommandLine": "python3 -c 'import app; print(app.get_openapi())' > openapi.json"
+        },
+        "raw_input": "run_command({\"CommandLine\": \"python3 -c 'import app; print(app.get_openapi())' > openapi.json\"})",
+        "timestamp": 1789230001.0
+      },
+      {
+        "tool_id": "tc_2",
+        "tool_name": "run_command",
+        "arguments": {
+          "CommandLine": "npx @redocly/cli lint openapi.json"
+        },
+        "raw_input": "run_command({\"CommandLine\": \"npx @redocly/cli lint openapi.json\"})",
+        "timestamp": 1789230003.0
+      }
+    ],
+    "tool_results": [
+      {
+        "tool_id": "tc_1",
+        "tool_name": "run_command",
+        "stdout": "",
+        "stderr": "",
+        "exit_code": 0,
+        "duration_ms": 14.5,
+        "is_error": false
+      },
+      {
+        "tool_id": "tc_2",
+        "tool_name": "run_command",
+        "stdout": "Woohoo! Spec is valid.",
+        "stderr": "",
+        "exit_code": 0,
+        "duration_ms": 14.5,
+        "is_error": false
+      }
+    ],
+    "reviews": [
+      {
+        "id": "rev_antigravity-demo-openapi-spec_1",
+        "session_id": "antigravity-demo-openapi-spec",
+        "timestamp": "2026-10-09T08:00:00.000000+00:00",
+        "tool_name": "run_command",
+        "tool_input": "redocly lint",
+        "decision": "allow",
+        "score": 0.3,
+        "rule_name": "spec_lint_allow",
+        "threat_category": null,
+        "explanation": "Read-only schema documentation lint."
+      }
+    ]
+  }
+}

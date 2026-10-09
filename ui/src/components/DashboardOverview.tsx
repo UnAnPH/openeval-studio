@@ -52,7 +52,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   onSelectIncident,
   isDemoSeed,
 }) => {
-  const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'this_week' | 'last_week' | 'this_month' | 'last_month'>('all');
+  const [dateFilter, setDateFilter] = useState<'today' | 'this_week' | 'last_week' | 'this_month' | 'last_month'>('this_month');
   const isDemo = Boolean(isDemoSeed || (typeof window !== 'undefined' && (window.location.pathname.startsWith('/demo') || window.location.hash.startsWith('#/demo'))));
   const [watcherSessions, setWatcherSessions] = useState<RawSession[]>(() =>
     isDemo ? (DEMO_SESSIONS as unknown as RawSession[]) : []
@@ -233,24 +233,19 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   };
 
   const dateRangeSubtitle =
-    dateFilter === 'all'
-      ? 'All historical sessions'
-      : dateFilter === 'today'
-        ? formatDate(rangeConfig.start)
-        : `${formatDate(rangeConfig.start)} - ${formatDate(rangeConfig.end)}`;
+    dateFilter === 'today'
+      ? formatDate(rangeConfig.start)
+      : `${formatDate(rangeConfig.start)} - ${formatDate(rangeConfig.end)}`;
   const prevRangeLabel =
-    dateFilter === 'all'
-      ? 'Previous baseline'
-      : dateFilter === 'today'
-        ? `Yesterday (${formatShortRange(rangeConfig.prevStart, rangeConfig.prevEnd)})`
-        : formatShortRange(rangeConfig.prevStart, rangeConfig.prevEnd);
+    dateFilter === 'today'
+      ? `Yesterday (${formatShortRange(rangeConfig.prevStart, rangeConfig.prevEnd)})`
+      : formatShortRange(rangeConfig.prevStart, rangeConfig.prevEnd);
 
   // Filter sessions in current and prior windows
   const startMs = rangeConfig.start.getTime();
   const endMs = rangeConfig.end.getTime();
 
   const currentSessions = allSessions.filter((s) => {
-    if (dateFilter === 'all') return true;
     const t = parseTimestamp(sessionObservedAt(s));
     // Include sessions with no usable timestamp in the current window so the KPI
     // matches WatcherStore totals when ingest timestamps are missing.
@@ -374,7 +369,6 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         {/* Date Selector Tabs */}
         <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/60 text-xs font-medium overflow-x-auto">
           {[
-            { id: 'all', label: 'All time' },
             { id: 'today', label: 'Today' },
             { id: 'this_week', label: 'This week' },
             { id: 'last_week', label: 'Last week' },

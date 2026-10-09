@@ -1,0 +1,87 @@
+{
+  "session_id": "inspect-eval-code-generation",
+  "title": "Inspect Eval \u00b7 HumanEval+ Correctness & Edge-Case Benchmark",
+  "run_id": "inspect-eval-code-generation",
+  "org_id": "demo",
+  "project_name": "eval-humaneval",
+  "task_id": "humaneval-plus",
+  "agent_type": "inspect_eval",
+  "model": "google/gemini-3.5-flash-lite",
+  "provider": "google",
+  "status": "completed",
+  "working_dir": "/bench/humaneval",
+  "current_activity": "completed",
+  "trajectory": {
+    "session_id": "inspect-eval-code-generation",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Task: implement longest_common_subsequence(a, b) with optimal memory complexity.",
+        "thinking": null,
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230000.0
+      },
+      {
+        "role": "assistant",
+        "content": "Implementing dynamic programming table with two row rolling buffer.",
+        "thinking": "Processing turn 2 for inspect-eval-code-generation.",
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230002.0
+      },
+      {
+        "role": "assistant",
+        "content": "Verified solution against 80 edge-case test vectors including empty strings.",
+        "thinking": "Processing turn 3 for inspect-eval-code-generation.",
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230004.0
+      },
+      {
+        "role": "system",
+        "content": "Benchmark passed: 100% test coverage.",
+        "thinking": null,
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230006.0
+      }
+    ],
+    "tool_calls": [
+      {
+        "tool_id": "tc_1",
+        "tool_name": "run_command",
+        "arguments": {
+          "CommandLine": "python3 evaluate_lcs.py"
+        },
+        "raw_input": "run_command({\"CommandLine\": \"python3 evaluate_lcs.py\"})",
+        "timestamp": 1789230001.0
+      }
+    ],
+    "tool_results": [
+      {
+        "tool_id": "tc_1",
+        "tool_name": "run_command",
+        "stdout": "All 80 assertions passed in 0.04s.",
+        "stderr": "",
+        "exit_code": 0,
+        "duration_ms": 14.5,
+        "is_error": false
+      }
+    ],
+    "reviews": [
+      {
+        "id": "rev_inspect-eval-code-generation_1",
+        "session_id": "inspect-eval-code-generation",
+        "timestamp": "2026-10-09T08:00:00.000000+00:00",
+        "tool_name": "run_command",
+        "tool_input": "evaluate_lcs.py",
+        "decision": "allow",
+        "score": 0.2,
+        "rule_name": "code_eval_allow",
+        "threat_category": null,
+        "explanation": "Synthetic algorithmic benchmark execution."
+      }
+    ]
+  }
+}

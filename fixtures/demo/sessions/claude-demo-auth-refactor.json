@@ -1,0 +1,123 @@
+{
+  "session_id": "claude-demo-auth-refactor",
+  "title": "Claude Code \u00b7 Auth Token Refresh & Secret Rotation Middleware",
+  "run_id": "claude-demo-auth-refactor",
+  "org_id": "demo",
+  "project_name": "identity-gateway",
+  "task_id": "identity-gateway",
+  "agent_type": "claude_code",
+  "model": "anthropic/claude-3-7-sonnet",
+  "provider": "anthropic",
+  "status": "completed",
+  "working_dir": "/workspace/identity-gateway",
+  "current_activity": "completed",
+  "trajectory": {
+    "session_id": "claude-demo-auth-refactor",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Refactor session refresh middleware in src/auth/token.ts to support asymmetric RSA verification.",
+        "thinking": null,
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230000.0
+      },
+      {
+        "role": "assistant",
+        "content": "Inspecting src/auth/token.ts and updating algorithm to RS256.",
+        "thinking": "Processing turn 2 for claude-demo-auth-refactor.",
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230002.0
+      },
+      {
+        "role": "assistant",
+        "content": "Updated token verification to RS256. Running tests.",
+        "thinking": "Processing turn 3 for claude-demo-auth-refactor.",
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230004.0
+      },
+      {
+        "role": "user",
+        "content": "Verify build.",
+        "thinking": null,
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230006.0
+      }
+    ],
+    "tool_calls": [
+      {
+        "tool_id": "tc_1",
+        "tool_name": "view_file",
+        "arguments": {
+          "AbsolutePath": "/workspace/identity-gateway/src/auth/token.ts"
+        },
+        "raw_input": "view_file({\"AbsolutePath\": \"/workspace/identity-gateway/src/auth/token.ts\"})",
+        "timestamp": 1789230001.0
+      },
+      {
+        "tool_id": "tc_2",
+        "tool_name": "write_to_file",
+        "arguments": {
+          "TargetFile": "/workspace/identity-gateway/src/auth/token.ts"
+        },
+        "raw_input": "write_to_file({\"TargetFile\": \"/workspace/identity-gateway/src/auth/token.ts\"})",
+        "timestamp": 1789230003.0
+      },
+      {
+        "tool_id": "tc_3",
+        "tool_name": "run_command",
+        "arguments": {
+          "CommandLine": "npm test src/auth/token.test.ts"
+        },
+        "raw_input": "run_command({\"CommandLine\": \"npm test src/auth/token.test.ts\"})",
+        "timestamp": 1789230005.0
+      }
+    ],
+    "tool_results": [
+      {
+        "tool_id": "tc_1",
+        "tool_name": "view_file",
+        "stdout": "export function verifyToken(t: string) { return jwt.verify(t, SECRET); }",
+        "stderr": "",
+        "exit_code": 0,
+        "duration_ms": 14.5,
+        "is_error": false
+      },
+      {
+        "tool_id": "tc_2",
+        "tool_name": "write_to_file",
+        "stdout": "Updated token verification to RS256.",
+        "stderr": "",
+        "exit_code": 0,
+        "duration_ms": 14.5,
+        "is_error": false
+      },
+      {
+        "tool_id": "tc_3",
+        "tool_name": "run_command",
+        "stdout": "PASS src/auth/token.test.ts (8 tests)",
+        "stderr": "",
+        "exit_code": 0,
+        "duration_ms": 14.5,
+        "is_error": false
+      }
+    ],
+    "reviews": [
+      {
+        "id": "rev_claude-demo-auth-refactor_1",
+        "session_id": "claude-demo-auth-refactor",
+        "timestamp": "2026-10-09T08:00:00.000000+00:00",
+        "tool_name": "write_to_file",
+        "tool_input": "src/auth/token.ts",
+        "decision": "allow",
+        "score": 1.0,
+        "rule_name": "clean_code_standards",
+        "threat_category": null,
+        "explanation": "Standard TypeScript cryptographic helper update."
+      }
+    ]
+  }
+}

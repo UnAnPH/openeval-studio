@@ -1,0 +1,123 @@
+{
+  "session_id": "inspect-eval-swe-bench-204",
+  "title": "Inspect Eval \u00b7 SWE-bench Automated Defect Regression #204",
+  "run_id": "inspect-eval-swe-bench-204",
+  "org_id": "demo",
+  "project_name": "django-orm-benchmarks",
+  "task_id": "swe-bench-django-204",
+  "agent_type": "inspect_eval",
+  "model": "google/gemini-3.5-flash-lite",
+  "provider": "google",
+  "status": "completed",
+  "working_dir": "/bench/django",
+  "current_activity": "completed",
+  "trajectory": {
+    "session_id": "inspect-eval-swe-bench-204",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Resolve issue #204: QuerySet.filter() fails when handling nested F() expressions in subqueries.",
+        "thinking": null,
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230000.0
+      },
+      {
+        "role": "assistant",
+        "content": "Reproducing bug in tests/queries/test_expressions.py with failing assertion.",
+        "thinking": "Processing turn 2 for inspect-eval-swe-bench-204.",
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230002.0
+      },
+      {
+        "role": "assistant",
+        "content": "Patch applied to django/db/models/sql/query.py. Verifying full test suite passes.",
+        "thinking": "Processing turn 3 for inspect-eval-swe-bench-204.",
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230004.0
+      },
+      {
+        "role": "system",
+        "content": "Regression tests passed: 14 assertions verified.",
+        "thinking": null,
+        "tool_calls": [],
+        "tool_results": [],
+        "timestamp": 1789230006.0
+      }
+    ],
+    "tool_calls": [
+      {
+        "tool_id": "tc_1",
+        "tool_name": "view_file",
+        "arguments": {
+          "AbsolutePath": "/bench/django/django/db/models/sql/query.py"
+        },
+        "raw_input": "view_file({\"AbsolutePath\": \"/bench/django/django/db/models/sql/query.py\"})",
+        "timestamp": 1789230001.0
+      },
+      {
+        "tool_id": "tc_2",
+        "tool_name": "write_to_file",
+        "arguments": {
+          "TargetFile": "/bench/django/django/db/models/sql/query.py"
+        },
+        "raw_input": "write_to_file({\"TargetFile\": \"/bench/django/django/db/models/sql/query.py\"})",
+        "timestamp": 1789230003.0
+      },
+      {
+        "tool_id": "tc_3",
+        "tool_name": "run_command",
+        "arguments": {
+          "CommandLine": "./runtests.py queries.test_expressions"
+        },
+        "raw_input": "run_command({\"CommandLine\": \"./runtests.py queries.test_expressions\"})",
+        "timestamp": 1789230005.0
+      }
+    ],
+    "tool_results": [
+      {
+        "tool_id": "tc_1",
+        "tool_name": "view_file",
+        "stdout": "class Query:\n    def resolve_expression(self): ...",
+        "stderr": "",
+        "exit_code": 0,
+        "duration_ms": 14.5,
+        "is_error": false
+      },
+      {
+        "tool_id": "tc_2",
+        "tool_name": "write_to_file",
+        "stdout": "Patch resolved subquery nesting expression.",
+        "stderr": "",
+        "exit_code": 0,
+        "duration_ms": 14.5,
+        "is_error": false
+      },
+      {
+        "tool_id": "tc_3",
+        "tool_name": "run_command",
+        "stdout": "Ran 42 tests in 3.12s. OK.",
+        "stderr": "",
+        "exit_code": 0,
+        "duration_ms": 14.5,
+        "is_error": false
+      }
+    ],
+    "reviews": [
+      {
+        "id": "rev_inspect-eval-swe-bench-204_1",
+        "session_id": "inspect-eval-swe-bench-204",
+        "timestamp": "2026-10-09T08:00:00.000000+00:00",
+        "tool_name": "write_to_file",
+        "tool_input": "django/db/models/sql/query.py",
+        "decision": "allow",
+        "score": 1.2,
+        "rule_name": "harness_patch_audit",
+        "threat_category": null,
+        "explanation": "Legitimate benchmark bug fix verified against ground truth."
+      }
+    ]
+  }
+}
