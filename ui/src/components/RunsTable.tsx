@@ -459,9 +459,8 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                   <th className="py-3 px-4">Run ID</th>
                   <th className="py-3 px-4">Benchmark Task</th>
                   <th className="py-3 px-4">Model</th>
-                  <th className="py-3 px-4">Duration & Turns</th>
-                  <th className="py-3 px-4">Tokens & Cost</th>
-                  <th className="py-3 px-4">Score</th>
+                  <th className="py-3 px-4">Duration</th>
+                  <th className="py-3 px-4">Cost</th>
                   <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
@@ -471,7 +470,6 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                   const isFailed = run.passed === false;
                   const isRunning = run.status === 'running' || run.status === 'pending';
                   const isSelected = selectedRunIds.includes(run.run_id);
-                  const matchedTask = tasks.find((t) => t.task_id === run.task_id);
 
                   return (
                     <tr
@@ -548,25 +546,9 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                         </div>
                       </td>
 
-                      {/* Task ID */}
-                      <td className="py-3.5 px-4 font-sans">
-                        <div className="space-y-0.5">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="font-bold text-text-primary text-xs font-mono">{run.task_id}</span>
-                            {run.agent_type === 'red_team' && (
-                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 uppercase tracking-wider">
-                                Red Team
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-[10px] text-text-secondary flex items-center gap-1.5">
-                            <span className="capitalize">{run.agent_type === 'red_team' ? 'Adversarial Probe' : (matchedTask?.category || 'General')}</span>
-                            <span>•</span>
-                            <span className="uppercase text-[9px] px-1.5 py-0.2 rounded bg-canvas border border-border-subtle">
-                              {run.agent_type === 'red_team' ? 'Red Team' : (matchedTask?.difficulty || 'Medium')}
-                            </span>
-                          </div>
-                        </div>
+                      {/* Benchmark Task */}
+                      <td className="py-3.5 px-4 font-mono font-medium text-text-primary text-xs">
+                        {run.task_id}
                       </td>
 
                       {/* Model */}
@@ -576,66 +558,15 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                         </div>
                       </td>
 
-                      {/* Duration & Turns */}
+                      {/* Duration */}
                       <td className="py-3.5 px-4 whitespace-nowrap text-text-secondary text-xs font-mono">
-                        <div>{run.total_duration_sec.toFixed(1)}s</div>
-                        <div className="text-[10px] text-text-muted">{run.total_steps || run.steps?.length || 0} turns</div>
+                        {run.total_duration_sec.toFixed(1)}s
                       </td>
 
-                      {/* Tokens & Cost */}
-                      <td className="py-3.5 px-4 whitespace-nowrap text-xs font-mono">
-                        <div className="text-emerald-700 font-bold">${run.estimated_cost_usd?.toFixed(4) || '0.0000'}</div>
-                        <div className="text-[10px] text-text-secondary font-mono">{totalTokens.toLocaleString()} tok</div>
+                      {/* Cost */}
+                      <td className="py-3.5 px-4 whitespace-nowrap text-emerald-700 font-mono text-xs font-semibold">
+                        ${run.estimated_cost_usd?.toFixed(4) || '0.0000'}
                       </td>
-
-                      {/* Score */}
-                      <td className="py-3.5 px-4 whitespace-nowrap font-bold text-xs">
-                        <span className={isPassed ? 'text-emerald-700' : isFailed ? 'text-rose-700' : 'text-text-primary'}>
-                          {run.reward !== null ? `${run.reward.toFixed(1)}/1.0` : '—'}
-                        </span>
-                      </td>
-
-                      {/* Safety Audits */}
-                      {/* <td className="py-3.5 px-4 whitespace-nowrap">
-                        <div className="flex items-center gap-1">
-                          <span
-                            title={`Plan Adherence: ${planAudit ? Math.round(planAudit.score * 100) + '%' : 'N/A'}`}
-                            className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
-                              planAudit?.passed
-                                ? 'bg-emerald-50 text-emerald-700'
-                                : planAudit
-                                ? 'bg-rose-50 text-rose-700'
-                                : 'bg-canvas text-text-muted'
-                            }`}
-                          >
-                            Plan
-                          </span>
-                          <span
-                            title={`Hallucination Filter: ${halluAudit ? Math.round(halluAudit.score * 100) + '%' : 'N/A'}`}
-                            className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
-                              halluAudit?.passed
-                                ? 'bg-emerald-50 text-emerald-700'
-                                : halluAudit
-                                ? 'bg-rose-50 text-rose-700'
-                                : 'bg-canvas text-text-muted'
-                            }`}
-                          >
-                            Ground
-                          </span>
-                          <span
-                            title={`Reward Tampering: ${tamperAudit ? (tamperAudit.passed ? 'Clean' : 'Tampered') : 'N/A'}`}
-                            className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
-                              tamperAudit?.passed
-                                ? 'bg-emerald-50 text-emerald-700'
-                                : tamperAudit
-                                ? 'bg-rose-50 text-rose-700'
-                                : 'bg-canvas text-text-muted'
-                            }`}
-                          >
-                            Safety
-                          </span>
-                        </div>
-                      </td> */}
 
                       {/* Actions */}
                       <td className="py-3.5 px-4 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
