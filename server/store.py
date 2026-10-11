@@ -31,10 +31,13 @@ class RunStore:
         run_id: str | None = None,
     ) -> Session:
         """Initialize a new pending evaluation session with a canonical eval-{task_id}-{...} ID."""
+        safe_task_id = task_id.replace("/", "--").replace(" ", "-")
         if not run_id:
             now_str = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
             short_id = uuid4().hex[:6]
-            run_id = f"eval-{task_id}-{now_str}-{short_id}"
+            run_id = f"eval-{safe_task_id}-{now_str}-{short_id}"
+        else:
+            run_id = run_id.replace("/", "--").replace(" ", "-")
 
         session = Session(
             session_id=run_id,
@@ -56,25 +59,35 @@ class RunStore:
             session.agent_type = "inspect_eval"
         return self._watcher.record_session(session)
 
+    def _candidates(self, run_id: str) -> list[str]:
+        cands = [run_id]
+        if "/" in run_id:
+            cands.append(run_id.replace("/", "--"))
+        if "--" in run_id:
+            cands.append(run_id.replace("--", "/"))
+        return cands
+
     def get_run(self, run_id: str) -> Session | None:
         """Look up a run/session by its ID (session_id or run_id field)."""
-        if run_id in self._deleted_ids:
-            return None
-        if run_id in self._runs:
-            return self._runs[run_id]
-        # First try by session_id (fastest path)
-        session = self._watcher.get_session(run_id)
-        if session and session.agent_type not in ("antigravity", "claude_code", "cursor"):
-            return session
-        # Fall back: linear scan for run_id field (fixture records may differ from session_id)
+        candidates = self._candidates(run_id)
+        for cid in candidates:
+            if cid in self._deleted_ids:
+                return None
+            if cid in self._runs:
+                return self._runs[cid]
+            session = self._watcher.get_session(cid)
+            if session and session.agent_type not in ("antigravity", "claude_code", "cursor"):
+                return session
+
+        # Fall back: linear scan for run_id or session_id field
         for s in self._watcher.list_sessions():
-            if s.run_id == run_id and s.agent_type not in ("antigravity", "claude_code", "cursor"):
+            if (s.run_id in candidates or s.session_id in candidates) and s.agent_type not in ("antigravity", "claude_code", "cursor"):
                 return s
         return None
 
     def is_deleted(self, run_id: str) -> bool:
         """Check if a run ID (by session_id or run_id field) has been deleted."""
-        return run_id in self._deleted_ids
+        return any(cid in self._deleted_ids for cid in self._candidates(run_id))
 
     def list_runs(self) -> list[Session]:
         """Return all historical evaluation runs sorted by created_at descending."""
@@ -95,9 +108,13 @@ class RunStore:
 
     def update_run(self, run_id: str, **kwargs: Any) -> Session | None:
         """Update fields on an existing session record."""
-        if run_id in self._deleted_ids:
-            return None
-        return self._watcher.update_session(run_id, kwargs)
+        for cid in self._candidates(run_id):
+            if cid in self._deleted_ids:
+                return None
+            updated = self._watcher.update_session(cid, kwargs)
+            if updated:
+                return updated
+        return None
 
     def subscribe(self, run_id: str) -> asyncio.Queue[dict[str, Any]]:
         """Register a subscriber queue for real-time SSE streaming."""
@@ -109,16 +126,20 @@ class RunStore:
 
     def publish_event(self, run_id: str, event_type: str, data: dict[str, Any]) -> None:
         """Broadcast an event payload to all active SSE subscribers."""
-        self._watcher.broadcast_sync(run_id, event_type, data)
+        for cid in self._candidates(run_id):
+            self._watcher.broadcast_sync(cid, event_type, data)
 
     def delete_run(self, run_id: str) -> bool:
         """Delete a run from the store and record tombstone."""
-        self._deleted_ids.add(run_id)
-        session = self._watcher.get_session(run_id)
-        if session:
-            session.status = "cancelled"
-            return True
-        return False
+        found = False
+        for cid in self._candidates(run_id):
+            self._deleted_ids.add(cid)
+            self._runs.pop(cid, None)
+            session = self._watcher.get_session(cid)
+            if session:
+                session.status = "cancelled"
+                found = True
+        return found
 
     def clear_runs(self) -> None:
         """Clear all runs from the store and record tombstones."""

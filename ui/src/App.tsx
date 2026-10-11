@@ -523,7 +523,7 @@ export function App() {
         setSelectedDetailRunId(runId);
         setActiveRunId(runId);
         try {
-          const res = await fetch(`/api/eval/runs/${runId}`).catch(() => null);
+          const res = await fetch(`/api/eval/runs/${encodeURIComponent(runId)}`).catch(() => null);
           if (res && res.ok) {
             const record: RunRecord = await res.json();
             setActiveRun(record);
@@ -638,7 +638,7 @@ export function App() {
         return; // settled or a newer stream took over
       }
       try {
-        const res = await fetch(`/api/eval/runs/${runId}`);
+        const res = await fetch(`/api/eval/runs/${encodeURIComponent(runId)}`);
         if (res.ok) {
           const record: RunRecord = await res.json();
           setActiveRun(record);
@@ -670,12 +670,13 @@ export function App() {
     const targetTaskId = taskIdToRun || selectedTaskId || tasks[0]?.task_id || DEFAULT_TASKS[0].task_id;
     const targetModelId = selectedModelId || models[0]?.id || DEFAULT_MODELS[0].id;
 
-    // Canonical run ID: eval-{task_id}-{YYYYMMDD-HHmmss}-{shortHex}
+    // Canonical run ID: eval-{safe_task_id}-{YYYYMMDD-HHmmss}-{shortHex}
+    const safeTaskId = targetTaskId.replace(/\//g, '--').replace(/\s+/g, '-');
     const d = new Date();
     const pad = (n: number) => String(n).padStart(2, '0');
     const timestamp = `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}-${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}`;
     const shortHex = Math.random().toString(36).substring(2, 8);
-    const canonicalRunId = `eval-${targetTaskId}-${timestamp}-${shortHex}`;
+    const canonicalRunId = `eval-${safeTaskId}-${timestamp}-${shortHex}`;
 
     setSelectedTaskId(targetTaskId);
     evalSettledRef.current = false;
@@ -733,7 +734,7 @@ export function App() {
       setActiveRunId(currentRunId);
 
       // Connect to real-time Server-Sent Events stream
-      const eventSource = new EventSource(`/api/eval/stream/${currentRunId}`);
+      const eventSource = new EventSource(`/api/eval/stream/${encodeURIComponent(currentRunId)}`);
       eventSourceRef.current = eventSource;
 
       eventSource.addEventListener('snapshot', (e) => {
@@ -766,7 +767,7 @@ export function App() {
       eventSource.addEventListener('completed', async (e) => {
         try {
           const result = JSON.parse(e.data);
-          const detailsRes = await fetch(`/api/eval/runs/${currentRunId}`).catch(() => null);
+          const detailsRes = await fetch(`/api/eval/runs/${encodeURIComponent(currentRunId)}`).catch(() => null);
           let fullRecord: RunRecord | null = null;
           if (detailsRes && detailsRes.ok) {
             fullRecord = await detailsRes.json();
@@ -827,7 +828,7 @@ export function App() {
 
     if (activeRunId && !isDemo) {
       try {
-        await fetch(`/api/eval/runs/${activeRunId}/stop`, { method: 'POST' }).catch(() => null);
+        await fetch(`/api/eval/runs/${encodeURIComponent(activeRunId)}/stop`, { method: 'POST' }).catch(() => null);
         await fetchInitialData();
       } catch (err) {
         console.error('Failed to stop run:', err);
@@ -902,7 +903,7 @@ export function App() {
     setNavTab('run_detail');
     setRoute(`runs/${encodeURIComponent(runId)}`);
     try {
-      const res = await fetch(`/api/eval/runs/${runId}`).catch(() => null);
+      const res = await fetch(`/api/eval/runs/${encodeURIComponent(runId)}`).catch(() => null);
       if (res && res.ok) {
         const record: RunRecord = await res.json();
         setActiveRun(record);
@@ -952,8 +953,8 @@ export function App() {
 
     // 3. Call backend delete (supports both POST and DELETE verbs)
     try {
-      await fetch(`/api/eval/runs/${runId}/delete`, { method: 'POST' }).catch(() => null);
-      await fetch(`/api/eval/runs/${runId}`, { method: 'DELETE' }).catch(() => null);
+      await fetch(`/api/eval/runs/${encodeURIComponent(runId)}/delete`, { method: 'POST' }).catch(() => null);
+      await fetch(`/api/eval/runs/${encodeURIComponent(runId)}`, { method: 'DELETE' }).catch(() => null);
     } catch (err) {
       console.warn('Backend delete notification completed with offline state preserved:', err);
     }

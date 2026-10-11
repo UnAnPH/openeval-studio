@@ -83,3 +83,42 @@ def test_delete_run_endpoints() -> None:
     assert res_all.status_code == 200
     assert res_all.json()["status"] == "all_deleted"
     assert len(global_run_store.list_runs()) == 0
+
+
+def test_run_with_slash_in_task_id_and_legacy_slash_lookup() -> None:
+    """Verify that benchmark task IDs with slashes produce safe run IDs, and legacy slash IDs resolve."""
+    from server.store import global_run_store
+
+    # 1. Normal creation with task containing slash
+    run = global_run_store.create_run(task_id="inspect_evals/agentharm", model="gemini-3.7-flash")
+    assert "/" not in run.run_id
+    assert "inspect_evals--agentharm" in run.run_id
+
+    client = TestClient(app)
+    res = client.get(f"/api/eval/runs/{run.run_id}")
+    assert res.status_code == 200
+    assert res.json()["run_id"] == run.run_id
+
+    # 2. Existing/legacy run containing literal slash in ID
+    legacy_run_id = "eval-inspect_evals/agentharm-20261011-085213-sym8r6"
+    global_run_store._runs[legacy_run_id] = run.model_copy(update={"run_id": legacy_run_id, "session_id": legacy_run_id})
+
+    # Test GET run detail with literal slash in path
+    res_legacy = client.get(f"/api/eval/runs/{legacy_run_id}")
+    assert res_legacy.status_code == 200
+    assert res_legacy.json()["run_id"] == legacy_run_id
+
+    # Test GET report with literal slash in path
+    res_report = client.get(f"/api/eval/runs/{legacy_run_id}/report")
+    assert res_report.status_code == 200
+
+    # Test POST stop with literal slash in path
+    res_stop = client.post(f"/api/eval/runs/{legacy_run_id}/stop")
+    assert res_stop.status_code == 200
+    assert res_stop.json()["status"] == "stopped"
+
+    # Test bidirectional resolution: query with '--' also finds '/' run
+    dash_id = legacy_run_id.replace("/", "--")
+    res_dash = client.get(f"/api/eval/runs/{dash_id}")
+    assert res_dash.status_code == 200
+

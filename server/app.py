@@ -2448,8 +2448,8 @@ async def launch_eval(req: LaunchEvalRequest) -> LaunchEvalResponse:
     )
 
 
-@app.post("/api/eval/runs/{run_id}/stop")
-@app.post("/api/eval/stop/{run_id}")
+@app.post("/api/eval/runs/{run_id:path}/stop")
+@app.post("/api/eval/stop/{run_id:path}")
 async def stop_eval_run(run_id: str) -> dict[str, str]:
     """Cancel a running evaluation and stop its Docker sandbox immediately."""
     task = active_run_tasks.get(run_id)
@@ -2578,9 +2578,22 @@ async def list_runs() -> list[RunRecord]:
     return combined
 
 
-@app.get("/api/eval/runs/{run_id}", response_model=RunRecord)
-async def get_run_details(run_id: str) -> RunRecord:
-    """Retrieve details and complete step trajectory for a specific run."""
+@app.delete("/api/eval/runs")
+@app.post("/api/eval/runs/clear")
+async def clear_all_runs_endpoint() -> dict[str, str]:
+    """Delete all evaluation runs from memory store and disk logs."""
+    global_run_store.clear_runs()
+    for eval_file in LOGS_DIR.rglob("*"):
+        if eval_file.is_file():
+            with contextlib.suppress(Exception):
+                eval_file.unlink()
+    return {"status": "all_deleted"}
+
+
+run_audit_revisions: dict[str, Any] = {}
+
+
+def _resolve_run_record(run_id: str) -> RunRecord:
     if global_run_store.is_deleted(run_id):
         raise HTTPException(status_code=404, detail=f"Run '{run_id}' has been deleted")
 
@@ -2589,15 +2602,98 @@ async def get_run_details(run_id: str) -> RunRecord:
         return record
 
     inspect_runs = list_inspect_run_records(LOGS_DIR)
+    candidates = [run_id]
+    if "/" in run_id:
+        candidates.append(run_id.replace("/", "--"))
+    if "--" in run_id:
+        candidates.append(run_id.replace("--", "/"))
     for r in inspect_runs:
-        if r.run_id == run_id:
+        if r.run_id in candidates:
             return r
 
     raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found")
 
 
-@app.delete("/api/eval/runs/{run_id}")
-@app.post("/api/eval/runs/{run_id}/delete")
+class ReviseReportRequest(BaseModel):
+    """Request payload to save human audit review & sign-off."""
+
+    reviewer_name: str
+    sign_off_status: str
+    reviewer_notes: str
+    overridden_verdicts: dict[str, bool] = Field(default_factory=dict)
+    passed_override: bool | None = None
+
+
+@app.get("/api/eval/runs/{run_id:path}/report")
+async def get_safety_audit_report(run_id: str) -> dict[str, Any]:
+    """Generate an automated & revisable safety audit report for a specific run."""
+    from engine.audit_report import SafetyAuditReportGenerator
+
+    record = _resolve_run_record(run_id)
+    revision = run_audit_revisions.get(run_id)
+    if not revision:
+        for cid in [run_id.replace("/", "--"), run_id.replace("--", "/")]:
+            if cid in run_audit_revisions:
+                revision = run_audit_revisions[cid]
+                break
+    return SafetyAuditReportGenerator.generate_report(record, revision)
+
+
+@app.post("/api/eval/runs/{run_id:path}/report/revise")
+async def revise_safety_audit_report(run_id: str, req: ReviseReportRequest) -> dict[str, Any]:
+    """Save human reviewer sign-off, mutate stored run record, and update safety report."""
+    from engine.audit_report import HumanAuditRevision, SafetyAuditReportGenerator
+
+    record = _resolve_run_record(run_id)
+    rev = HumanAuditRevision(
+        reviewer_name=req.reviewer_name,
+        sign_off_status=req.sign_off_status,
+        reviewer_notes=req.reviewer_notes,
+        overridden_verdicts=req.overridden_verdicts,
+    )
+    run_audit_revisions[run_id] = rev
+
+    # Mutate stored run in global_run_store
+    existing = global_run_store.get_run(run_id)
+    if existing is None:
+        global_run_store._runs[run_id] = record.model_copy()
+        existing = global_run_store.get_run(run_id)
+
+    if existing:
+        updated_verdicts = list(existing.audit_verdicts)
+        for idx, v in enumerate(updated_verdicts):
+            if v.metric_name in req.overridden_verdicts:
+                ov_val = req.overridden_verdicts[v.metric_name]
+                updated_verdicts[idx] = v.model_copy(
+                    update={"passed": ov_val, "score": 1.0 if ov_val else 0.0}
+                )
+
+        update_kwargs: dict[str, Any] = {
+            "human_reviewer": req.reviewer_name,
+            "human_review_notes": req.reviewer_notes,
+            "audit_overrides": req.overridden_verdicts,
+            "audit_verdicts": updated_verdicts,
+        }
+        if req.passed_override is not None:
+            update_kwargs["passed"] = req.passed_override
+            update_kwargs["reward"] = 1.0 if req.passed_override else 0.0
+            update_kwargs["status"] = "completed" if req.passed_override else "error"
+            if req.passed_override:
+                update_kwargs["failure_reason"] = None
+
+        record = global_run_store.update_run(run_id, **update_kwargs) or record
+
+    return SafetyAuditReportGenerator.generate_report(record, rev)
+
+
+@app.get("/api/eval/runs/{run_id:path}", response_model=RunRecord)
+async def get_run_details(run_id: str) -> RunRecord:
+    """Retrieve details and complete step trajectory for a specific run."""
+    return _resolve_run_record(run_id)
+
+
+@app.delete("/api/eval/runs/{run_id:path}")
+@app.post("/api/eval/runs/{run_id:path}/delete")
 async def delete_single_run(run_id: str) -> dict[str, str]:
     """Delete a specific evaluation run from memory store and disk logs."""
     # 1. Remove from in-memory run store & tombstone it
@@ -2618,18 +2714,6 @@ async def delete_single_run(run_id: str) -> dict[str, str]:
                 eval_file.unlink()
 
     return {"status": "deleted", "run_id": run_id}
-
-
-@app.delete("/api/eval/runs")
-@app.post("/api/eval/runs/clear")
-async def clear_all_runs_endpoint() -> dict[str, str]:
-    """Delete all evaluation runs from memory store and disk logs."""
-    global_run_store.clear_runs()
-    for eval_file in LOGS_DIR.rglob("*"):
-        if eval_file.is_file():
-            with contextlib.suppress(Exception):
-                eval_file.unlink()
-    return {"status": "all_deleted"}
 
 
 @app.get("/api/eval/diff")
@@ -2734,108 +2818,14 @@ async def search_transcripts(req: SearchRequest) -> list[dict[str, Any]]:
     )
 
 
-run_audit_revisions: dict[str, Any] = {}
-
-
-@app.get("/api/eval/runs/{run_id}/report")
-async def get_safety_audit_report(run_id: str) -> dict[str, Any]:
-    """Generate an automated & revisable safety audit report for a specific run."""
-    from engine.audit_report import SafetyAuditReportGenerator
-
-    record = await get_run_details(run_id)
-    revision = run_audit_revisions.get(run_id)
-    return SafetyAuditReportGenerator.generate_report(record, revision)
-
-
-class ReviseReportRequest(BaseModel):
-    """Request payload to save human audit review & sign-off."""
-
-    reviewer_name: str
-    sign_off_status: str
-    reviewer_notes: str
-    overridden_verdicts: dict[str, bool] = Field(default_factory=dict)
-    passed_override: bool | None = None
-
-
-@app.post("/api/eval/runs/{run_id}/report/revise")
-async def revise_safety_audit_report(run_id: str, req: ReviseReportRequest) -> dict[str, Any]:
-    """Save human reviewer sign-off, mutate stored run record, and update safety report."""
-    from engine.audit_report import HumanAuditRevision, SafetyAuditReportGenerator
-
-    record = await get_run_details(run_id)
-    rev = HumanAuditRevision(
-        reviewer_name=req.reviewer_name,
-        sign_off_status=req.sign_off_status,
-        reviewer_notes=req.reviewer_notes,
-        overridden_verdicts=req.overridden_verdicts,
-    )
-    run_audit_revisions[run_id] = rev
-
-    # Mutate stored run in global_run_store
-    existing = global_run_store.get_run(run_id)
-    if existing is None:
-        global_run_store._runs[run_id] = record.model_copy()
-        existing = global_run_store.get_run(run_id)
-
-    if existing:
-        updated_verdicts = list(existing.audit_verdicts)
-        for idx, v in enumerate(updated_verdicts):
-            if v.metric_name in req.overridden_verdicts:
-                ov_val = req.overridden_verdicts[v.metric_name]
-                updated_verdicts[idx] = v.model_copy(
-                    update={"passed": ov_val, "score": 1.0 if ov_val else 0.0}
-                )
-
-        update_kwargs: dict[str, Any] = {
-            "human_reviewer": req.reviewer_name,
-            "human_review_notes": req.reviewer_notes,
-            "audit_overrides": req.overridden_verdicts,
-            "audit_verdicts": updated_verdicts,
-        }
-        if req.passed_override is not None:
-            update_kwargs["passed"] = req.passed_override
-            update_kwargs["reward"] = 1.0 if req.passed_override else 0.0
-            update_kwargs["status"] = "completed" if req.passed_override else "error"
-            if req.passed_override:
-                update_kwargs["failure_reason"] = None
-
-        record = global_run_store.update_run(run_id, **update_kwargs) or record
-
-    return SafetyAuditReportGenerator.generate_report(record, rev)
-
-
-@app.get("/api/eval/export/sft")
-async def export_sft_dataset(
-    format: str = Query(
-        default="openai_chat", description="Export format: openai_chat, sharegpt, dpo_pairs"
-    ),
-    only_passed: bool = Query(default=True, description="Filter only passing trajectories"),
-    task_id: str | None = Query(default=None, description="Optional task filter"),
-) -> dict[str, Any]:
-    """Export evaluation trajectories formatted as SFT / DPO training datasets."""
-    from engine.sft_exporter import SFTDatasetExporter
-
-    data = SFTDatasetExporter.export_runs(
-        logs_dir=LOGS_DIR,
-        format_type=format,  # type: ignore[arg-type]
-        only_passed=only_passed,
-        task_id=task_id,
-    )
-    return {
-        "format": format,
-        "total_records": len(data),
-        "dataset": data,
-    }
-
-
-@app.get("/api/eval/stream/{run_id}")
+@app.get("/api/eval/stream/{run_id:path}")
 async def stream_run_events(run_id: str) -> StreamingResponse:
     """Server-Sent Events (SSE) endpoint streaming real-time ReAct thoughts and actions."""
     record = global_run_store.get_run(run_id)
     if not record:
         raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found")
 
-    queue = global_run_store.subscribe(run_id)
+    queue = global_run_store.subscribe(record.run_id)
 
     def _sse_dumps(data: Any) -> str:
         def _default(obj: Any) -> Any:

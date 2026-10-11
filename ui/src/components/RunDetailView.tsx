@@ -216,7 +216,7 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
     }
 
     try {
-      await fetch(`/api/eval/runs/${run.run_id}/report/revise`, {
+      await fetch(`/api/eval/runs/${encodeURIComponent(run.run_id)}/report/revise`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -253,7 +253,7 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
     }
 
     try {
-      await fetch(`/api/eval/runs/${run.run_id}/report/revise`, {
+      await fetch(`/api/eval/runs/${encodeURIComponent(run.run_id)}/report/revise`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -829,7 +829,7 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
             setHumanReviewer(reviewer);
             setHumanReviewNotes(notes);
             try {
-              await fetch(`/api/eval/runs/${run.run_id}/report/revise`, {
+              await fetch(`/api/eval/runs/${encodeURIComponent(run.run_id)}/report/revise`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
