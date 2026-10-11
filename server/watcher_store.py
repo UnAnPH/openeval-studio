@@ -35,7 +35,7 @@ from schemas.watcher_models import (
     ToolThreshold,
     Trajectory,
 )
-from server.db import SessionLocal, current_user_slug, get_current_user_id
+from server.db import SessionLocal, current_user_id, current_user_slug, get_current_user_id
 
 logger = logging.getLogger("openeval.server.watcher_store")
 
@@ -97,10 +97,12 @@ class WatcherStore:
         self.storage_dir = storage_dir or Path(os.getenv("WATCHER_STORAGE_DIR", ".runs/watcher"))
         self.storage_dir.mkdir(parents=True, exist_ok=True)
 
-        # In-memory cache dictionaries for fast access and backward compatibility
+        # In-memory cache. Keys are "{user_id}:{session_id}" when a tenant is bound,
+        # and the bare session id only for unbound contexts (eval runs, unit tests).
         self._sessions: dict[str, Session] = {}
         self._trajectories: dict[str, Trajectory] = {}
         self._reviews: dict[str, list[ReviewRecord]] = {}
+        self._session_owners: dict[str, int | None] = {}
 
         # Multi-tenant Policy, WatcherConfig, and Grader Prompt registries
         self._user_policies: dict[int, Policy] = {}
@@ -130,6 +132,47 @@ class WatcherStore:
     # -------------------------------------------------------------------------
     # Sessions
     # -------------------------------------------------------------------------
+
+    def memory_key(self, session_id: str) -> str:
+        """Cache key scoped to the active tenant so session ids cannot collide."""
+        uid = current_user_id.get()
+        if uid is None:
+            return session_id
+        return f"{uid}:{session_id}"
+
+    def _cache_visible(self, key: str, session: Session) -> bool:
+        """Whether the active tenant may read this in-memory session."""
+        uid = current_user_id.get()
+        owner = self._session_owners.get(key)
+        if uid is not None:
+            return owner == uid
+        if current_user_slug.get() == "demo":
+            return session.org_id == "demo"
+        return owner is None
+
+    def _cache_session(self, session: Session) -> str:
+        key = self.memory_key(session.session_id)
+        self._sessions[key] = session
+        self._trajectories[key] = session.trajectory
+        self._reviews[key] = session.trajectory.reviews
+        self._session_owners[key] = current_user_id.get()
+        return key
+
+    def _cached_session(self, session_id: str) -> Session | None:
+        key = self.memory_key(session_id)
+        session = self._sessions.get(key)
+        if session is not None and self._cache_visible(key, session):
+            return session
+        return None
+
+    def _drop_cached_session(self, session_id: str) -> bool:
+        key = self.memory_key(session_id)
+        existed = key in self._sessions
+        self._sessions.pop(key, None)
+        self._trajectories.pop(key, None)
+        self._reviews.pop(key, None)
+        self._session_owners.pop(key, None)
+        return existed
 
     def ensure_live_session(
         self,
@@ -169,9 +212,7 @@ class WatcherStore:
     def _write_session_to_db(self, session: Session) -> None:
         """Write session and trajectory reviews to PostgreSQL and disk cache."""
         with self._lock:
-            self._sessions[session.session_id] = session
-            self._trajectories[session.session_id] = session.trajectory
-            self._reviews[session.session_id] = session.trajectory.reviews
+            self._cache_session(session)
 
         if current_user_slug.get() == "demo" or session.org_id == "demo":
             # Ephemeral demo run: keep in memory only, do not write to PostgreSQL or disk
@@ -196,7 +237,7 @@ class WatcherStore:
                         :passed, :reward, :total_tokens, :total_duration_sec,
                         :estimated_cost_usd, CAST(:payload AS jsonb), NOW(), NOW()
                     )
-                    ON CONFLICT (id) DO UPDATE SET
+                    ON CONFLICT (user_id, id) DO UPDATE SET
                         status = EXCLUDED.status,
                         project_name = EXCLUDED.project_name,
                         model = EXCLUDED.model,
@@ -211,7 +252,8 @@ class WatcherStore:
                         total_duration_sec = EXCLUDED.total_duration_sec,
                         estimated_cost_usd = EXCLUDED.estimated_cost_usd,
                         payload = EXCLUDED.payload,
-                        updated_at = NOW();
+                        updated_at = NOW()
+                    WHERE sessions.user_id = EXCLUDED.user_id;
                     """
                 ),
                 {
@@ -295,11 +337,11 @@ class WatcherStore:
     def get_session(self, session_id: str) -> Session | None:
         """Retrieve a session by ID scoped to the active tenant."""
         with self._lock:
-            if session_id in self._sessions and (
-                current_user_slug.get() == "demo"
-                or getattr(self._sessions[session_id], "org_id", "") == "demo"
+            cached = self._cached_session(session_id)
+            if cached is not None and (
+                current_user_slug.get() == "demo" or getattr(cached, "org_id", "") == "demo"
             ):
-                return self._sessions[session_id]
+                return cached
 
         with SessionLocal() as db:
             user_id = get_current_user_id(db)
@@ -325,7 +367,7 @@ class WatcherStore:
         session = self.get_session(session_id)
         if not session:
             with self._lock:
-                session = self._sessions.get(session_id)
+                session = self._cached_session(session_id)
         if not session:
             return None
 
@@ -373,14 +415,15 @@ class WatcherStore:
 
             db_ids = {s.session_id for s in results}
             with self._lock:
-                for s in self._sessions.values():
+                for key, s in self._sessions.items():
+                    if not self._cache_visible(key, s):
+                        continue
                     if s.session_id not in db_ids:
                         if agent_type and s.agent_type != agent_type:
                             continue
                         if status and s.status != status:
                             continue
-                        if current_user_slug.get() == "demo" or s.org_id != "demo":
-                            results.append(s)
+                        results.append(s)
             results.sort(key=lambda x: str(x.created_at or ""), reverse=True)
             return results[:limit]
 

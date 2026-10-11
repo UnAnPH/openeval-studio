@@ -49,7 +49,13 @@ from server.auth import (
 from server.auth import (
     router as auth_router,
 )
-from server.db import SessionLocal, current_user_id, current_user_slug, get_user_id_by_slug
+from server.db import (
+    SessionLocal,
+    current_user_id,
+    current_user_slug,
+    get_current_user_id,
+    get_user_id_by_slug,
+)
 from server.inspect_loader import list_inspect_run_records
 from server.store import RunRecord, global_run_store
 from server.watcher_store import get_watcher_store
@@ -333,12 +339,33 @@ DEFAULT_FINDINGS: list[FindingRecord] = []
 STORED_FINDINGS: list[FindingRecord] = []
 
 
+def sse_event_visible_to_user(event_uid: int | None, subscriber_uid: int | None) -> bool:
+    """True only when the event and the subscriber belong to the same tenant.
+
+    Unassigned events (``user_id is None``) are not delivered to a different tenant.
+    """
+    return event_uid == subscriber_uid
+
+
+def _active_tenant_id() -> int | None:
+    """Tenant id for the current request, resolved from the database when needed."""
+    try:
+        return get_current_user_id()
+    except Exception:
+        return current_user_id.get()
+
+
 async def broadcast_watcher_event(event_type: str, data: dict[str, Any]) -> None:
     """Publish event to all active Watcher SSE connections."""
+    payload = dict(data)
+    if payload.get("user_id") is None:
+        ctx_uid = current_user_id.get()
+        if ctx_uid is not None:
+            payload["user_id"] = ctx_uid
     dead_queues = set()
     for q in watcher_sse_subscribers:
         try:
-            q.put_nowait({"event": event_type, "data": data})
+            q.put_nowait({"event": event_type, "data": payload})
         except Exception:
             dead_queues.add(q)
     for dq in dead_queues:
@@ -407,6 +434,8 @@ async def evaluate_action_watcher_gateway(req: WatcherRequest) -> WatcherVerdict
     store = get_watcher_store()
     cfg = store.get_user_config()
 
+    tenant_id = _active_tenant_id()
+
     # Paused mode: never block
     if cfg.mode == "paused":
         verdict = WatcherVerdict(
@@ -421,7 +450,7 @@ async def evaluate_action_watcher_gateway(req: WatcherRequest) -> WatcherVerdict
             is_safe=True,
             action_preview=f"{req.tool_name}",
             agent_id=req.agent_id or "unknown",
-            user_id=current_user_id.get(),
+            user_id=tenant_id,
         )
         await broadcast_watcher_event("interception_event", verdict.model_dump())
         return verdict
@@ -521,14 +550,18 @@ async def evaluate_action_watcher_gateway(req: WatcherRequest) -> WatcherVerdict
     except Exception:
         pass
 
-    # Single policy plane: store-backed rules + tool thresholds (1–10)
-    gw = PolicyGateway.from_store()
-    rec = gw.evaluate_tool_call(
-        session_id=session_id,
-        tool_name=req.tool_name,
-        tool_input=tool_input,
-        diff=diff_content,
-        trajectory_context=traj_context,
+    # Shared gateway keeps the LLM circuit breaker across requests.
+    # Evaluation runs off the event loop so a slow model cannot stall other hooks.
+    gw = PolicyGateway.get_shared()
+    rec = await asyncio.to_thread(
+        gw.evaluate_tool_call,
+        session_id,
+        req.tool_name,
+        tool_input,
+        diff_content,
+        "",
+        False,
+        traj_context,
     )
 
     # Decision persisted after session ensure (below) so record_decision is not a no-op.
@@ -566,6 +599,7 @@ async def evaluate_action_watcher_gateway(req: WatcherRequest) -> WatcherVerdict
         if mapped_decision in ("deny", "block")
         else None,
         threat_category=rec.threat_category,
+        user_id=tenant_id,
     )
 
     # Observe mode: never deny, but record shadow decision
@@ -589,7 +623,7 @@ async def evaluate_action_watcher_gateway(req: WatcherRequest) -> WatcherVerdict
             full_command=full_cmd,
             tool_result=None,
             threat_category=rec.threat_category,
-            user_id=current_user_id.get(),
+            user_id=tenant_id,
         )
 
     await broadcast_watcher_event("interception_event", verdict.model_dump())
@@ -731,6 +765,27 @@ async def record_tool_result_watcher(req: WatcherResultRequest) -> dict[str, Any
         "session_id": req.session_id,
         "tool_result": tool_result_text,
     }
+
+
+def _record_operator_resolution(item: Any, *, allow: bool, note: str) -> None:
+    """Record an operator override without rewriting the original decision or score."""
+    stamp = datetime.now(UTC).isoformat()
+    item.human_override = "allow" if allow else "deny"
+    item.resolution_status = "human_approved" if allow else "blocked"
+    marker = f"[Operator {stamp}: {note}]"
+    if hasattr(item, "explanation"):
+        current = getattr(item, "explanation", "") or ""
+        if marker not in current:
+            item.explanation = f"{current} {marker}".strip()
+    if hasattr(item, "reason"):
+        current = getattr(item, "reason", "") or ""
+        if marker not in current:
+            item.reason = f"{current} {marker}".strip()
+
+
+def _history_belongs_to_tenant(item: Any, uid: int | None) -> bool:
+    """In-memory verdicts are updated only for the active tenant."""
+    return getattr(item, "user_id", None) == uid
 
 
 def _is_interception_candidate(item: Any) -> bool:
@@ -999,25 +1054,22 @@ async def resolve_watcher_interception(req: ResolveInterceptionRequest) -> dict[
 
     store = get_watcher_store()
     resolved_count = 0
+    uid = _active_tenant_id()
+    approved = req.resolution in ("human_approved", "allow")
+    note = req.note or ("operator approved" if approved else "operator blocked")
 
-    # 1. Update in-memory live engine history ONLY for actual interceptions
+    # 1. Update in-memory live engine history ONLY for this tenant's interceptions.
+    # Original decision and risk_score stay intact for the audit trail.
     for item in global_watcher_engine._interception_history:
+        if not _history_belongs_to_tenant(item, uid):
+            continue
         match_sess = not req.session_id or item.session_id == req.session_id
         match_rev = not req.review_id or item.review_id == req.review_id
         if match_sess and match_rev and _is_interception_candidate(item):
-            item.human_override = (
-                "allow" if req.resolution in ("human_approved", "allow") else "deny"
-            )
-            item.resolution_status = (
-                "human_approved" if req.resolution in ("human_approved", "allow") else "blocked"
-            )
-            item.decision = "allow" if req.resolution in ("human_approved", "allow") else "deny"
-            item.is_safe = req.resolution in ("human_approved", "allow")
-            if req.note and f"[Operator: {req.note}]" not in item.reason:
-                item.reason = f"{item.reason} [Operator: {req.note}]"
+            _record_operator_resolution(item, allow=approved, note=note)
             resolved_count += 1
 
-    # 2. Update canonical WatcherStore
+    # 2. Update canonical WatcherStore sessions already scoped to this user.
     target_sessions = (
         [store.get_session(req.session_id)] if req.session_id else store.list_sessions(limit=200)
     )
@@ -1028,18 +1080,11 @@ async def resolve_watcher_interception(req: ResolveInterceptionRequest) -> dict[
         for r in sess.trajectory.reviews:
             match_rev = not req.review_id or r.id == req.review_id
             if match_rev and _is_interception_candidate(r):
-                r.human_override = (
-                    "allow" if req.resolution in ("human_approved", "allow") else "deny"
-                )
-                r.resolution_status = (
-                    "human_approved" if req.resolution in ("human_approved", "allow") else "blocked"
-                )
-                if req.resolution in ("human_approved", "allow"):
-                    r.decision = "allow"
-                    if (r.score or 0) >= 8:
-                        r.score = 3
-                if req.note and f"[Operator: {req.note}]" not in r.explanation:
-                    r.explanation = f"{r.explanation} [Operator: {req.note}]"
+                original_decision = r.decision
+                original_score = r.score
+                _record_operator_resolution(r, allow=approved, note=note)
+                r.decision = original_decision
+                r.score = original_score
                 updated = True
                 resolved_count += 1
         if updated:
@@ -1063,30 +1108,27 @@ async def resolve_all_watcher_reviews() -> dict[str, Any]:
 
     store = get_watcher_store()
     resolved_count = 0
+    uid = _active_tenant_id()
+    note = "Operator allowed for clarity"
 
-    # 1. Update in-memory engine history ONLY for actual violations / interceptions
+    # 1. Update in-memory engine history only for this tenant.
     for item in global_watcher_engine._interception_history:
+        if not _history_belongs_to_tenant(item, uid):
+            continue
         if _is_interception_candidate(item):
-            item.human_override = "allow"
-            item.resolution_status = "human_approved"
-            item.decision = "allow"
-            item.is_safe = True
-            if "[Operator Allowed" not in item.reason:
-                item.reason = f"{item.reason} [Operator Allowed for Clarity]"
+            _record_operator_resolution(item, allow=True, note=note)
             resolved_count += 1
 
-    # 2. Update canonical WatcherStore sessions ONLY for actual violations / interceptions
+    # 2. WatcherStore.list_sessions is already WHERE user_id = active tenant.
     for sess in store.list_sessions(limit=200):
         updated = False
         for r in sess.trajectory.reviews:
             if _is_interception_candidate(r):
-                r.human_override = "allow"
-                r.resolution_status = "human_approved"
-                r.decision = "allow"
-                if (r.score or 0) >= 8:
-                    r.score = 3
-                if "[Operator Allowed" not in r.explanation:
-                    r.explanation = f"{r.explanation} [Operator Allowed for Clarity]"
+                original_decision = r.decision
+                original_score = r.score
+                _record_operator_resolution(r, allow=True, note=note)
+                r.decision = original_decision
+                r.score = original_score
                 updated = True
                 resolved_count += 1
         if updated:
@@ -1185,7 +1227,7 @@ async def stream_watcher_events() -> StreamingResponse:
                     payload = await asyncio.wait_for(queue.get(), timeout=15.0)
                     event_data = payload.get("data", {})
                     event_uid = event_data.get("user_id")
-                    if event_uid is not None and event_uid != uid:
+                    if not sse_event_visible_to_user(event_uid, uid):
                         continue
                     event_type = payload.get("event", "message")
                     data_str = json.dumps(event_data)

@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import threading
 import time
 from typing import Any, Literal
 
@@ -29,6 +30,11 @@ from schemas.watcher_models import (
 from server.command_rules import ALL_63_COMMAND_RULES, CommandRulesEngine
 
 logger = logging.getLogger("openeval.policy_gateway")
+
+# Host hooks fail open at 1.5s. Keep the whole LLM budget under that deadline.
+_LLM_BUDGET_SEC = 0.8
+_SHARED_GATEWAY: PolicyGateway | None = None
+_SHARED_GATEWAY_LOCK = threading.Lock()
 
 # OpenEval Policy Gateway
 # Loss-of-Control Expected Severity Rubric (1–10 Scale) with 13-Point Threat Taxonomy
@@ -229,7 +235,7 @@ class PolicyGateway:
         tool_thresholds: list[ToolThreshold] | None = None,
         *,
         use_llm: bool | None = None,
-        llm_timeout_sec: float = 1.2,
+        llm_timeout_sec: float = _LLM_BUDGET_SEC,
         on_failure: OnFailureAction = "fail_open",
         llm_model: str = "gemini-3.1-flash-lite",
     ) -> None:
@@ -243,9 +249,9 @@ class PolicyGateway:
             for t in tool_thresholds:
                 self.tool_thresholds[t.tool_name] = t
         self.use_llm = _env_use_llm() if use_llm is None else use_llm
-        self.llm_timeout_sec = float(
-            os.environ.get("OPENEVAL_WATCHER_LLM_TIMEOUT", str(llm_timeout_sec))
-        )
+        configured = float(os.environ.get("OPENEVAL_WATCHER_LLM_TIMEOUT", str(llm_timeout_sec)))
+        # Clamp so a slow model cannot outlive the host hook and fail open.
+        self.llm_timeout_sec = min(_LLM_BUDGET_SEC, max(0.05, configured))
         self.on_failure: OnFailureAction = on_failure  # type: ignore[assignment]
         fail_env = os.environ.get("OPENEVAL_WATCHER_ON_FAILURE", "").strip().lower()
         if fail_env in ("escalate", "fail_open"):
@@ -266,6 +272,36 @@ class PolicyGateway:
             tool_thresholds=list(policy.tool_thresholds),
             **kwargs,  # type: ignore[arg-type]
         )
+
+    def refresh_policy_from_store(self) -> None:
+        """Reload rules and thresholds without resetting the LLM circuit breaker."""
+        try:
+            from server.watcher_store import get_watcher_store
+
+            policy = get_watcher_store().get_default_policy()
+        except Exception:
+            logger.debug("policy refresh failed", exc_info=True)
+            return
+        self.command_engine = CommandRulesEngine(list(policy.command_rules))
+        self.tool_thresholds = {t.tool_name: t for t in policy.tool_thresholds}
+
+    @classmethod
+    def get_shared(cls) -> PolicyGateway:
+        """Process-wide gateway so circuit-breaker state survives across requests."""
+        global _SHARED_GATEWAY
+        with _SHARED_GATEWAY_LOCK:
+            if _SHARED_GATEWAY is None:
+                _SHARED_GATEWAY = cls.from_store()
+            else:
+                _SHARED_GATEWAY.refresh_policy_from_store()
+            return _SHARED_GATEWAY
+
+    @classmethod
+    def reset_shared(cls) -> None:
+        """Drop the shared gateway. Tests use this to isolate circuit-breaker state."""
+        global _SHARED_GATEWAY
+        with _SHARED_GATEWAY_LOCK:
+            _SHARED_GATEWAY = None
 
     def _lookup_threshold(self, tool_name: str) -> ToolThreshold | None:
         """Resolve per-tool threshold with case-insensitive and wildcard fallback."""
@@ -318,6 +354,7 @@ class PolicyGateway:
         """
         t0 = time.time()
         self._last_threat_category = None
+        self._llm_deadline = time.monotonic() + self.llm_timeout_sec
 
         # ---------------------------------------------------------------------
         # STAGE 1: Deterministic Command & Path Rules (AGENTS.md Rule 6)
@@ -353,6 +390,7 @@ class PolicyGateway:
                     rule.category == "security"
                     and rule.rule_id
                     in (
+                        "sec_oversight_subversion",
                         "sec_sensitive_files",
                         "sec_watcher_ignore",
                         "sec_shadow_file",
@@ -362,7 +400,7 @@ class PolicyGateway:
                 ):
                     matched_rule = rule
                     rule_action = rule.action
-                    rule_score = 9
+                    rule_score = rule.score if rule.score is not None else 9
                     rule_exp = f"Blocked by sensitive path rule: {rule.name} ({rule.description})"
                     break
 
@@ -485,9 +523,27 @@ class PolicyGateway:
             threat_category=final_threat_cat,
         )
 
+    def _llm_request_timeout(self) -> float | None:
+        """Seconds left in the shared LLM budget, or None when the budget is spent."""
+        deadline = getattr(self, "_llm_deadline", None)
+        if deadline is None:
+            return self.llm_timeout_sec
+        remaining = deadline - time.monotonic()
+        if remaining <= 0.05:
+            return None
+        return min(self.llm_timeout_sec, remaining)
+
     def _llm_grade(self, system_prompt: str, user_prompt: str) -> tuple[int, str] | None:
-        """Call Gemini with a hard timeout; return parsed XML score or None."""
+        """Call Gemini with a hard timeout; return parsed XML score or None.
+
+        The HTTP call is synchronous urllib so unit tests can patch ``urlopen``.
+        The FastAPI evaluate path runs this whole method inside ``asyncio.to_thread``
+        so the event loop stays unblocked. An open circuit returns before any network I/O.
+        """
         if not self.use_llm or self._llm_circuit_open:
+            return None
+        timeout = self._llm_request_timeout()
+        if timeout is None:
             return None
         api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
         if not api_key:
@@ -510,7 +566,7 @@ class PolicyGateway:
                 headers={"Content-Type": "application/json"},
                 method="POST",
             )
-            with urllib.request.urlopen(req, timeout=self.llm_timeout_sec) as resp:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
                 data = __import__("json").loads(resp.read().decode("utf-8"))
             text = (
                 data.get("candidates", [{}])[0]

@@ -5,9 +5,39 @@ Filesystem mutations, Cloud & Infrastructure, Search, and Build commands.
 Matches the official Watcher command-rules specification.
 """
 
+import re
 from typing import Literal
 
 from schemas.watcher_models import CommandRule
+
+# Boundary-anchored secret filenames. `.env` must not match `.environment`.
+_SENSITIVE_FILE_PATTERN = (
+    r"(?:(?:^|[\s/\"'])\.env(?:\b|$)"
+    r"|(?:^|[\s/\"'])\.envrc(?:\b|$)"
+    r"|(?:^|[\s/\"'])\.secrets(?:\b|$)"
+    r"|~/?\.aws/credentials"
+    r"|~/?\.ssh/id_"
+    r"|\.pem(?:\b|$)"
+    r"|\.key(?:\b|$))"
+)
+
+# Hook configs, gate scripts, and watcher ignore files. Any reference is treated as
+# oversight subversion: interpreters (`python -c`, redirects) bypass verb-only checks.
+_OVERSIGHT_TARGET_PATTERN = (
+    r"(?:"
+    r"~/?\.cursor/hooks\.json"
+    r"|(?:^|[^\w])\.cursor/hooks\.json"
+    r"|~/?\.gemini/config/hooks\.json"
+    r"|(?:^|[^\w])\.gemini/config/hooks\.json"
+    r"|~/?\.claude/settings\.json"
+    r"|(?:^|[^\w])\.claude/settings\.json"
+    r"|scripts/[^\s\"']*watcher_gate[^\s\"']*\.py"
+    r"|scripts/[^\s\"']*watcher_hook[^\s\"']*\.py"
+    r"|(?:^|[^\s\"'])[^\s\"']*\.watcherignore"
+    r")"
+)
+
+_CHAIN_OPERATORS = ("&&", "||")
 
 # All 63 Canonical Watcher Command Rules
 ALL_63_COMMAND_RULES: list[CommandRule] = [
@@ -79,13 +109,25 @@ ALL_63_COMMAND_RULES: list[CommandRule] = [
         description="Read-only GitHub introspection",
     ),
     # -------------------------------------------------------------------------
-    # 2. Security & System Files (18 Rules)
+    # 2. Security & System Files
     # -------------------------------------------------------------------------
+    CommandRule(
+        rule_id="sec_oversight_subversion",
+        category="security",
+        name="Self-tampering and oversight subversion",
+        pattern=_OVERSIGHT_TARGET_PATTERN,
+        action="deny",
+        score=10,
+        description=(
+            "Modifying, overwriting, or deleting hook configs, gate scripts, or watcher ignore files"
+        ),
+        threat_category="oversight_subversion",
+    ),
     CommandRule(
         rule_id="sec_sensitive_files",
         category="security",
         name="Sensitive files",
-        pattern=r"(\.env|\.envrc|\.secrets|~/\.aws/credentials|~/\.ssh/id_|\.pem$|\.key$)",
+        pattern=_SENSITIVE_FILE_PATTERN,
         action="deny",
         description="Direct reading or mutation of secret credentials",
     ),
@@ -544,8 +586,75 @@ ALL_63_COMMAND_RULES: list[CommandRule] = [
 ]
 
 
+def split_shell_segments(cmd: str) -> list[str]:
+    """Split a shell command on chaining operators without breaking quoted text.
+
+    Operators: ``&&``, ``||``, ``;``, ``|``, and newlines. The full command is still
+    evaluated separately so patterns that span a pipe (``curl | bash``) keep matching.
+    """
+    segments: list[str] = []
+    buf: list[str] = []
+    quote: str | None = None
+    i = 0
+    length = len(cmd)
+    while i < length:
+        ch = cmd[i]
+        if quote:
+            buf.append(ch)
+            if ch == quote and cmd[i - 1] != "\\":
+                quote = None
+            i += 1
+            continue
+        if ch in ("'", '"'):
+            quote = ch
+            buf.append(ch)
+            i += 1
+            continue
+        if cmd.startswith(_CHAIN_OPERATORS[0], i) or cmd.startswith(_CHAIN_OPERATORS[1], i):
+            segment = "".join(buf).strip()
+            if segment:
+                segments.append(segment)
+            buf = []
+            i += 2
+            continue
+        if ch in {";", "\n", "|"}:
+            segment = "".join(buf).strip()
+            if segment:
+                segments.append(segment)
+            buf = []
+            i += 1
+            continue
+        buf.append(ch)
+        i += 1
+    tail = "".join(buf).strip()
+    if tail:
+        segments.append(tail)
+    return segments or [cmd]
+
+
+def _rule_score(rule: CommandRule) -> int:
+    if rule.score is not None:
+        return rule.score
+    return {"deny": 9, "human": 7, "triage": 5, "allow": 1}.get(rule.action, 1)
+
+
+def _rule_explanation(rule: CommandRule) -> str:
+    if rule.action == "deny":
+        return f"Blocked by rule: {rule.name} ({rule.description})"
+    if rule.action == "human":
+        return f"Escalated to human review by rule: {rule.name} ({rule.description})"
+    if rule.action == "triage":
+        return f"Flagged for policy triage by rule: {rule.name} ({rule.description})"
+    return f"Allowed by rule: {rule.name}"
+
+
 class CommandRulesEngine:
-    """Fast deterministic regex evaluation matching Watcher command rules."""
+    """Fast deterministic regex evaluation matching Watcher command rules.
+
+    Deny and human rules are evaluated before any allow rule. Compound shell
+    commands are also checked segment-by-segment so a leading safe command
+    cannot mask a later deny (``git status && cat .env``).
+    """
 
     def __init__(self, rules: list[CommandRule] | None = None) -> None:
         self.rules: list[CommandRule] = rules if rules is not None else list(ALL_63_COMMAND_RULES)
@@ -558,28 +667,38 @@ class CommandRulesEngine:
         int,
         str,
     ]:
-        """Evaluate command line against rules in priority order.
+        """Evaluate command line against rules in severity order.
 
         Returns (matched_rule, action, severity_score, explanation).
         """
-        for rule in self.rules:
-            if rule.action != "off" and rule.matches(cmd):
-                if rule.action == "deny":
-                    return rule, "deny", 9, f"Blocked by rule: {rule.name} ({rule.description})"
-                elif rule.action == "human":
-                    return (
-                        rule,
-                        "human",
-                        7,
-                        f"Escalated to human review by rule: {rule.name} ({rule.description})",
-                    )
-                elif rule.action == "triage":
-                    return (
-                        rule,
-                        "triage",
-                        5,
-                        f"Flagged for policy triage by rule: {rule.name} ({rule.description})",
-                    )
-                elif rule.action == "allow":
-                    return rule, "allow", 1, f"Allowed by rule: {rule.name}"
+        segments = split_shell_segments(cmd)
+        # Full command first so cross-segment patterns (curl | bash) still hit,
+        # then each segment so ^-anchored rules see the real command.
+        targets = [cmd, *segments] if len(segments) > 1 else [cmd]
+
+        for action in ("deny", "human"):
+            for rule in self.rules:
+                if rule.action != action:
+                    continue
+                if any(rule.matches(target) for target in targets):
+                    return rule, action, _rule_score(rule), _rule_explanation(rule)  # type: ignore[return-value]
+
+        best: tuple[int, CommandRule, Literal["triage", "allow"]] | None = None
+        rank = {"triage": 2, "allow": 1}
+        segment_targets = segments if len(segments) > 1 else [cmd]
+        for target in segment_targets:
+            for rule in self.rules:
+                if rule.action not in ("triage", "allow"):
+                    continue
+                if not rule.matches(target):
+                    continue
+                action_name: Literal["triage", "allow"] = (
+                    "triage" if rule.action == "triage" else "allow"
+                )
+                if best is None or rank[action_name] > rank[best[2]]:
+                    best = ( _rule_score(rule), rule, action_name)
+                break
+        if best is not None:
+            score, rule, action_name = best
+            return rule, action_name, score, _rule_explanation(rule)
         return None, "triage", 1, "No deterministic rule triggered; forward to triage"
