@@ -100,7 +100,7 @@ export const LiveTrajectory: React.FC<LiveTrajectoryProps> = ({
     ? run?.passed === false
       ? status === 'cancelled'
         ? 'cancelled'
-        : 'error'
+        : 'failed'
       : status === 'cancelled'
         ? 'cancelled'
         : 'completed'

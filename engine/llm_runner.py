@@ -233,17 +233,22 @@ class AsyncLLMRunner:
                 elapsed_ms = (time.perf_counter() - start_time) * 1000.0
 
                 # For thinking models the SDK may return thought parts + answer parts.
-                # Extract only the non-thought (answer) text; fall back to response.text.
+                # Extract only the non-thought (answer) text or function calls; fall back to response.text.
                 raw_text = ""
                 if response.candidates:
                     candidate = response.candidates[0]
                     if candidate.content and candidate.content.parts:
-                        non_thought = [
-                            p.text
-                            for p in candidate.content.parts
-                            if p.text and not getattr(p, "thought", False)
-                        ]
-                        raw_text = "".join(non_thought)
+                        parts_list: list[str] = []
+                        for p in candidate.content.parts:
+                            if getattr(p, "thought", False):
+                                continue
+                            if p.text:
+                                parts_list.append(p.text)
+                            elif getattr(p, "function_call", None):
+                                fc = p.function_call
+                                args_repr = str(dict(fc.args)) if getattr(fc, "args", None) else ""
+                                parts_list.append(f"Tool Call: {fc.name}({args_repr})")
+                        raw_text = "".join(parts_list)
                 if not raw_text:
                     raw_text = response.text or ""
 
