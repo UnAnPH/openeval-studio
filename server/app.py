@@ -1982,6 +1982,12 @@ async def _run_catalog_eval_worker(
                 task_instance = inspect_task_fn(refusal_judge=judge_model, semantic_judge=judge_model)
             except Exception:
                 task_instance = inspect_task_fn()
+        elif task_id == "inspect_evals/sycophancy":
+            judge_model = "google/gemini-2.5-flash" if provider == "google" else "openai/gpt-4o-mini"
+            try:
+                task_instance = inspect_task_fn(scorer_model=judge_model)
+            except Exception:
+                task_instance = inspect_task_fn()
         else:
             task_instance = inspect_task_fn()
     except Exception as exc:

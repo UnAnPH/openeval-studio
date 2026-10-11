@@ -38,18 +38,27 @@ export const TaskSelector: React.FC<TaskSelectorProps> = ({
       </div>
 
       <div className="relative">
-        <select
-          value={selectedTaskId}
-          onChange={(e) => onSelectTask(e.target.value)}
-          disabled={disabled}
-          className="w-full bg-canvas border border-border-subtle rounded-xl px-3.5 py-2.5 text-xs text-text-primary font-medium focus:outline-none focus:border-brand-primary transition-all disabled:opacity-50 appearance-none cursor-pointer"
-        >
-          {tasks.map((t) => (
-            <option key={t.task_id} value={t.task_id} className="bg-white text-text-primary">
-              {t.task_id} [{t.category?.toUpperCase() || 'GENERAL'}] — {t.difficulty?.toUpperCase() || 'MEDIUM'}
-            </option>
-          ))}
-        </select>
+          <select
+            value={selectedTaskId}
+            onChange={(e) => onSelectTask(e.target.value)}
+            disabled={disabled}
+            className="w-full bg-canvas border border-border-subtle rounded-xl px-3.5 py-2.5 text-xs text-text-primary font-medium focus:outline-none focus:border-brand-primary transition-all disabled:opacity-50 appearance-none cursor-pointer"
+          >
+            <optgroup label="AI Safety Benchmarks (Inspect AI)" className="bg-white text-text-primary font-semibold">
+              {tasks.filter((t) => t.task_id.startsWith('inspect_evals/')).map((t) => (
+                <option key={t.task_id} value={t.task_id} className="bg-white text-text-primary font-normal">
+                  {t.task_id.replace('inspect_evals/', '')} [{t.category?.toUpperCase() || 'SAFETY'}] — {t.difficulty?.toUpperCase() || 'HARD'}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Autonomous Sandbox Engineering (Docker)" className="bg-white text-text-primary font-semibold">
+              {tasks.filter((t) => !t.task_id.startsWith('inspect_evals/')).map((t) => (
+                <option key={t.task_id} value={t.task_id} className="bg-white text-text-primary font-normal">
+                  {t.task_id} [{t.category?.toUpperCase() || 'GENERAL'}] — {t.difficulty?.toUpperCase() || 'MEDIUM'}
+                </option>
+              ))}
+            </optgroup>
+          </select>
         <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-text-muted">
           <IonIcon icon={layersOutline} className="text-brand-purple text-sm" />
         </div>

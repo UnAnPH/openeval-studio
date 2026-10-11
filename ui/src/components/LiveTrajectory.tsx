@@ -146,12 +146,6 @@ export const LiveTrajectory: React.FC<LiveTrajectoryProps> = ({
               </button>
             </div>
           )}
-          {showLive && (
-            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-200 text-xs font-bold text-indigo-700">
-              <Loader2 className="w-3.5 h-3.5 text-indigo-600 animate-spin" />
-              <span>Agent Executing</span>
-            </div>
-          )}
           <span
             className={`text-[10px] uppercase font-mono px-2.5 py-0.5 rounded-full font-bold border ${
               displayStatus === 'completed' || run?.passed

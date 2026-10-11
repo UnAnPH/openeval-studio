@@ -1247,11 +1247,20 @@ export function App() {
                         disabled={isStreaming}
                         className="bg-[#f9fafb] border border-[#e5e7eb] rounded-xl px-3 py-1.5 text-xs text-[#111827] font-medium focus:outline-none focus:border-indigo-500 cursor-pointer max-w-xs"
                       >
-                        {tasks.map((t) => (
-                          <option key={t.task_id} value={t.task_id}>
-                            {t.task_id}
-                          </option>
-                        ))}
+                        <optgroup label="AI Safety Benchmarks (Inspect AI)">
+                          {tasks.filter((t) => t.task_id.startsWith('inspect_evals/')).map((t) => (
+                            <option key={t.task_id} value={t.task_id}>
+                              {t.task_id.replace('inspect_evals/', '')}
+                            </option>
+                          ))}
+                        </optgroup>
+                        <optgroup label="Autonomous Sandbox Engineering (Docker)">
+                          {tasks.filter((t) => !t.task_id.startsWith('inspect_evals/')).map((t) => (
+                            <option key={t.task_id} value={t.task_id}>
+                              {t.task_id}
+                            </option>
+                          ))}
+                        </optgroup>
                       </select>
                     </div>
 
