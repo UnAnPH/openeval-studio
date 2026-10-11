@@ -7,6 +7,7 @@ when OPENEVAL_DEMO_SEED=1.
 import json
 import logging
 import os
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -25,9 +26,6 @@ DEMO_FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures" / "demo"
 def is_demo_seed_enabled() -> bool:
     """Check if OPENEVAL_DEMO_SEED is active."""
     return os.getenv("OPENEVAL_DEMO_SEED", "0").lower() in ("1", "true", "yes")
-
-
-from datetime import UTC, datetime, timedelta
 
 
 _last_demo_refresh: float = 0.0
@@ -51,7 +49,7 @@ def generate_rolling_timeline(now: datetime | None = None) -> list[datetime]:
         today_start + timedelta(hours=min(6.0, max(0.2, hours_since_start * 0.45))),
         today_start + timedelta(hours=min(2.5, max(0.1, hours_since_start * 0.2))),
     ]
-    today_slots = sorted(list(set(today_slots)), reverse=True)
+    today_slots = sorted(set(today_slots), reverse=True)
 
     # 2. This week (prior days) - ISO week (Monday = 0, Sunday = 6)
     iso_day = now.weekday()  # 0 = Mon, ..., 6 = Sun
@@ -94,7 +92,9 @@ def generate_rolling_timeline(now: datetime | None = None) -> list[datetime]:
 
     # 5. Last month (strictly inside last month)
     last_month_end = first_of_month - timedelta(microseconds=1)
-    first_of_last_month = datetime(last_month_end.year, last_month_end.month, 1, 0, 0, 0, tzinfo=UTC)
+    first_of_last_month = datetime(
+        last_month_end.year, last_month_end.month, 1, 0, 0, 0, tzinfo=UTC
+    )
     last_month_slots = [
         datetime(first_of_last_month.year, first_of_last_month.month, 5, 14, 0, tzinfo=UTC),
         datetime(first_of_last_month.year, first_of_last_month.month, 10, 10, 15, tzinfo=UTC),
@@ -106,7 +106,9 @@ def generate_rolling_timeline(now: datetime | None = None) -> list[datetime]:
 
     # 6. Two months ago (comparison baseline)
     two_months_end = first_of_last_month - timedelta(microseconds=1)
-    first_of_two_months = datetime(two_months_end.year, two_months_end.month, 1, 0, 0, 0, tzinfo=UTC)
+    first_of_two_months = datetime(
+        two_months_end.year, two_months_end.month, 1, 0, 0, 0, tzinfo=UTC
+    )
     two_months_slots = [
         datetime(first_of_two_months.year, first_of_two_months.month, 10, 11, 0, tzinfo=UTC),
         datetime(first_of_two_months.year, first_of_two_months.month, 20, 15, 30, tzinfo=UTC),
@@ -140,7 +142,8 @@ def refresh_demo_timeline(
 
     with ws._lock:
         demo_sessions = [
-            s for s in ws._sessions.values()
+            s
+            for s in ws._sessions.values()
             if s.org_id == "demo" or (s.session_id and not s.session_id.startswith("eval-"))
         ]
     if not demo_sessions:
@@ -157,8 +160,12 @@ def refresh_demo_timeline(
                     msg.timestamp = target_dt.timestamp() + m_idx * 2.0
                 for r_idx, rev in enumerate(session.trajectory.reviews):
                     rev.timestamp = (target_dt + timedelta(seconds=r_idx * 2 + 1)).isoformat()
-                ws._trajectories[session.session_id] = session.trajectory
-                ws._reviews[session.session_id] = session.trajectory.reviews
+                cache_key = next(
+                    (key for key, cached in ws._sessions.items() if cached is session),
+                    ws.memory_key(session.session_id),
+                )
+                ws._trajectories[cache_key] = session.trajectory
+                ws._reviews[cache_key] = session.trajectory.reviews
 
     for idx, run in enumerate(rs._runs.values()):
         if run.org_id == "demo" or (run.session_id and not run.session_id.startswith("eval-")):
@@ -167,8 +174,11 @@ def refresh_demo_timeline(
             run.updated_at = (target_dt + timedelta(minutes=5)).isoformat()
 
     non_demo_verdicts = [
-        v for v in global_watcher_engine._interception_history
-        if getattr(v, "user_id", None) != 1 and getattr(v, "agent_id", "") not in ("inspect_eval", "antigravity", "claude_code", "cursor")
+        v
+        for v in global_watcher_engine._interception_history
+        if getattr(v, "user_id", None) != 1
+        and getattr(v, "agent_id", "")
+        not in ("inspect_eval", "antigravity", "claude_code", "cursor")
     ]
     global_watcher_engine._interception_history.clear()
     global_watcher_engine._interception_history.extend(non_demo_verdicts)
@@ -209,9 +219,8 @@ def ensure_demo_timeline_fresh(
     global _last_demo_refresh
     now = datetime.now(UTC)
     now_ts = now.timestamp()
-    if not force and _last_demo_refresh > 0:
-        if now_ts - _last_demo_refresh < 300:  # 5 minutes
-            return
+    if not force and _last_demo_refresh > 0 and now_ts - _last_demo_refresh < 300:
+        return
     refresh_demo_timeline(watcher_store=watcher_store, run_store=run_store, now=now)
     _last_demo_refresh = now_ts
 

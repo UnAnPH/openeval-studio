@@ -335,6 +335,12 @@ class WatcherVerdict(BaseModel):
     threat_category: str | None = Field(
         default=None, description="Apollo 13-point threat taxonomy category"
     )
+    client_decision: str | None = Field(
+        default=None, description="Client hook decision mapping (e.g., 'force_ask')"
+    )
+    terminal_reason: str | None = Field(
+        default=None, description="Terminal lockout reason code (e.g., 'lockout')"
+    )
 
 
 class WatcherEngine:

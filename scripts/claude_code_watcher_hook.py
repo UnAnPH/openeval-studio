@@ -78,6 +78,51 @@ def _emit(permission: str, reason: str = "") -> None:
     _log("emit", permission=permission, reason=reason[:240])
 
 
+def _claude_session_id(raw: str) -> str | None:
+    """Same session id for PreToolUse and PostToolUse so results attach in the UI."""
+    cleaned = re.sub(r"[^a-zA-Z0-9_-]", "", (raw or "").strip())
+    if not cleaned:
+        return None
+    if cleaned.startswith("claude-"):
+        return cleaned
+    return f"claude-{cleaned[:12]}"
+
+
+def _report_to_watcher(
+    *,
+    tool_name: str,
+    args: dict,
+    session_id: str | None,
+    cmd: str,
+) -> None:
+    """Best-effort POST so local blacklist hits show up on the live dashboard."""
+    try:
+        req = urllib.request.Request(
+            WATCHER_URL,
+            data=json.dumps(
+                {
+                    "agent_id": "claude_code",
+                    "tool_name": tool_name,
+                    "arguments": args if args else ({"command": cmd} if cmd else {}),
+                    "session_id": session_id,
+                    "thought_context": session_id,
+                }
+            ).encode("utf-8"),
+            headers=_get_headers(),
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=TIMEOUT_SEC) as resp:
+            verdict = json.loads(resp.read().decode("utf-8"))
+            _log(
+                "server_verdict",
+                decision=str(verdict.get("decision", "")).lower(),
+                source="local_blacklist_report",
+                session_id=session_id,
+            )
+    except Exception as err:
+        _log("server_unreachable", error=str(err), source="local_blacklist_report")
+
+
 def _cmd_from_input(tool_name: str, tool_input: dict) -> str:
     if tool_name.lower() in ("bash", "shell", "powershell"):
         return str(tool_input.get("command") or tool_input.get("cmd") or "").strip()
@@ -93,7 +138,8 @@ def _report_tool_result(payload: dict) -> None:
     )
     hook_input = payload.get("hookSpecificInput") or payload
     tool_name = str(payload.get("tool_name") or hook_input.get("toolName") or "unknown")
-    session_id = str(payload.get("session_id") or hook_input.get("sessionId") or "")
+    raw_session = str(payload.get("session_id") or hook_input.get("sessionId") or "")
+    session_id = _claude_session_id(raw_session) or ""
 
     tool_response = (
         hook_input.get("toolResponse")
@@ -124,9 +170,7 @@ def _report_tool_result(payload: dict) -> None:
         stderr = err
 
     req_body = {
-        "session_id": f"claude-{session_id[:12]}"
-        if session_id and not session_id.startswith("claude-")
-        else session_id,
+        "session_id": session_id or None,
         "agent_id": "claude_code",
         "tool_name": tool_name,
         "stdout": stdout,
@@ -176,11 +220,23 @@ def main() -> None:
         tool_input = {"raw": str(tool_input)}
 
     cmd = _cmd_from_input(tool_name, tool_input)
-    session_id = str(payload.get("session_id") or payload.get("sessionId") or "")
-    _log("pretool", tool_name=tool_name, cmd=cmd[:200], session_id=session_id[:64])
+    session_id = _claude_session_id(
+        str(payload.get("session_id") or payload.get("sessionId") or "")
+    )
+    _log("pretool", tool_name=tool_name, cmd=cmd[:200], session_id=(session_id or "")[:64])
+
+    args = dict(tool_input)
+    if cmd and "command" not in args:
+        args["command"] = cmd
 
     for pattern, reason in LOCAL_BLACKLIST:
         if cmd and re.search(pattern, cmd, re.IGNORECASE):
+            _report_to_watcher(
+                tool_name=tool_name,
+                args=args,
+                session_id=session_id,
+                cmd=cmd,
+            )
             _emit(
                 LOCKOUT_PERMISSION,
                 f"[OPENEVAL INTERACTIVE LOCKOUT]: {reason}. Execution frozen pending human operator approval.",
@@ -190,15 +246,17 @@ def main() -> None:
     # Sensitive path writes
     path = str(tool_input.get("file_path") or tool_input.get("path") or "")
     if path.endswith(".env") or "id_rsa" in path or "/.aws/credentials" in path:
+        _report_to_watcher(
+            tool_name=tool_name,
+            args=args,
+            session_id=session_id,
+            cmd=path,
+        )
         _emit(
             LOCKOUT_PERMISSION,
             "[OPENEVAL INTERACTIVE LOCKOUT]: Sensitive file path. Execution frozen pending human operator approval.",
         )
         return
-
-    args = dict(tool_input)
-    if cmd and "command" not in args:
-        args["command"] = cmd
 
     try:
         req = urllib.request.Request(

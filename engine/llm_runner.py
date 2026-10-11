@@ -217,7 +217,9 @@ class AsyncLLMRunner:
         )
 
         target_model = cfg.model.replace("google/", "")
-        if any(legacy in target_model for legacy in ("2.5-flash", "2.0-flash", "1.5-flash", "1.5-pro")):
+        if any(
+            legacy in target_model for legacy in ("2.5-flash", "2.0-flash", "1.5-flash", "1.5-pro")
+        ):
             target_model = "gemini-3.1-flash-lite"
 
         attempt = 0
@@ -244,10 +246,11 @@ class AsyncLLMRunner:
                                 continue
                             if p.text:
                                 parts_list.append(p.text)
-                            elif getattr(p, "function_call", None):
-                                fc = p.function_call
-                                args_repr = str(dict(fc.args)) if getattr(fc, "args", None) else ""
-                                parts_list.append(f"Tool Call: {fc.name}({args_repr})")
+                            elif (fc := getattr(p, "function_call", None)) is not None:
+                                fc_args = getattr(fc, "args", None)
+                                args_repr = str(fc_args) if fc_args else ""
+                                fc_name = getattr(fc, "name", "") or "unknown"
+                                parts_list.append(f"Tool Call: {fc_name}({args_repr})")
                         raw_text = "".join(parts_list)
                 if not raw_text:
                     raw_text = response.text or ""

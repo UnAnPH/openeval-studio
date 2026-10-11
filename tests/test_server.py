@@ -101,7 +101,9 @@ def test_run_with_slash_in_task_id_and_legacy_slash_lookup() -> None:
 
     # 2. Existing/legacy run containing literal slash in ID
     legacy_run_id = "eval-inspect_evals/agentharm-20261011-085213-sym8r6"
-    global_run_store._runs[legacy_run_id] = run.model_copy(update={"run_id": legacy_run_id, "session_id": legacy_run_id})
+    global_run_store._runs[legacy_run_id] = run.model_copy(
+        update={"run_id": legacy_run_id, "session_id": legacy_run_id}
+    )
 
     # Test GET run detail with literal slash in path
     res_legacy = client.get(f"/api/eval/runs/{legacy_run_id}")
@@ -121,4 +123,3 @@ def test_run_with_slash_in_task_id_and_legacy_slash_lookup() -> None:
     dash_id = legacy_run_id.replace("/", "--")
     res_dash = client.get(f"/api/eval/runs/{dash_id}")
     assert res_dash.status_code == 200
-

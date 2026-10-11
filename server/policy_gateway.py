@@ -33,7 +33,7 @@ logger = logging.getLogger("openeval.policy_gateway")
 
 # Host hooks fail open at 1.5s. Keep the whole LLM budget under that deadline.
 _LLM_BUDGET_SEC = 0.8
-_SHARED_GATEWAY: PolicyGateway | None = None
+_SHARED_GATEWAY = None
 _SHARED_GATEWAY_LOCK = threading.Lock()
 
 # OpenEval Policy Gateway
@@ -259,6 +259,7 @@ class PolicyGateway:
         self.llm_model = os.environ.get("OPENEVAL_WATCHER_LLM_MODEL", llm_model)
         self._llm_fail_streak = 0
         self._llm_circuit_open = False
+        self._llm_deadline: float | None = None
         self._last_threat_category: ThreatCategory | None = None
 
     @classmethod
@@ -409,48 +410,37 @@ class PolicyGateway:
             rule_cat = getattr(matched_rule, "threat_category", None) or infer_threat_category(
                 matched_rule.name, tool_input
             )
+            decision: ReviewDecision
             if rule_action == "deny":
-                return ReviewRecord(
-                    session_id=session_id,
-                    tool_name=tool_name,
-                    tool_input=tool_input,
-                    decision="block",
-                    score=rule_score,
-                    stage="rule",
-                    rule_name=matched_rule.name,
-                    explanation=rule_exp,
-                    diff=diff,
-                    latency_ms=latency_ms,
-                    threat_category=rule_cat,
-                )
+                decision = "block"
             elif rule_action == "human":
-                return ReviewRecord(
-                    session_id=session_id,
-                    tool_name=tool_name,
-                    tool_input=tool_input,
-                    decision="escalate",
-                    score=rule_score,
-                    stage="rule",
-                    rule_name=matched_rule.name,
-                    explanation=rule_exp,
-                    diff=diff,
-                    latency_ms=latency_ms,
-                    threat_category=rule_cat,
-                )
+                decision = "escalate"
             elif rule_action == "allow":
-                return ReviewRecord(
-                    session_id=session_id,
-                    tool_name=tool_name,
-                    tool_input=tool_input,
-                    decision="allow",
-                    score=rule_score,
-                    stage="rule",
-                    rule_name=matched_rule.name,
-                    explanation=rule_exp,
-                    diff=diff,
-                    latency_ms=latency_ms,
-                    threat_category=rule_cat,
-                )
+                decision = "allow"
+            else:
+                decision = "escalate"
+
+            record = ReviewRecord(
+                session_id=session_id,
+                tool_name=tool_name,
+                tool_input=tool_input,
+                decision=decision,
+                score=rule_score,
+                stage="rule",
+                rule_name=matched_rule.name,
+                explanation=rule_exp,
+                diff=diff,
+                latency_ms=latency_ms,
+                threat_category=rule_cat,
+            )
+            logger.info(
+                "tool=%s stage=%s decision=%s elapsed_ms=%.2f",
+                record.tool_name,
+                record.stage,
+                record.decision,
+                record.latency_ms,
+            )
+            return record
 
         # ---------------------------------------------------------------------
         # STAGE 2: Fast Triage Evaluation (Enforcing Secret Reading Law)
@@ -509,7 +499,7 @@ class PolicyGateway:
         final_threat_cat = self._last_threat_category or infer_threat_category(
             matched_rule.name if matched_rule else None, tool_input
         )
-        return ReviewRecord(
+        record = ReviewRecord(
             session_id=session_id,
             tool_name=tool_name,
             tool_input=tool_input,
@@ -522,6 +512,14 @@ class PolicyGateway:
             latency_ms=latency_ms,
             threat_category=final_threat_cat,
         )
+        logger.info(
+            "tool=%s stage=%s decision=%s elapsed_ms=%.2f",
+            record.tool_name,
+            record.stage,
+            record.decision,
+            record.latency_ms,
+        )
+        return record
 
     def _llm_request_timeout(self) -> float | None:
         """Seconds left in the shared LLM budget, or None when the budget is spent."""

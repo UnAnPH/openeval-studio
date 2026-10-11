@@ -7,7 +7,7 @@ command rules, tool thresholds, and MDM security policies.
 import re
 import time
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -438,12 +438,19 @@ class Organization(BaseModel):
 # Imported lazily so this module can define CommandRule without a circular import.
 
 
-def __getattr__(name: str) -> object:
+if TYPE_CHECKING:
+    from server.command_rules import ALL_63_COMMAND_RULES as ALL_63_COMMAND_RULES
+
+    DEFAULT_COMMAND_RULES: list[CommandRule]
+    ALL_63_COMMAND_RULES: list[CommandRule]
+
+
+def __getattr__(name: str) -> Any:
     """Resolve DEFAULT_COMMAND_RULES / ALL_63_COMMAND_RULES from the rules engine."""
     if name in {"DEFAULT_COMMAND_RULES", "ALL_63_COMMAND_RULES"}:
-        from server.command_rules import ALL_63_COMMAND_RULES as rules
+        from server.command_rules import ALL_63_COMMAND_RULES
 
-        return rules
+        return ALL_63_COMMAND_RULES
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 

@@ -73,7 +73,10 @@ class RunStore:
         for cid in candidates:
             if cid in self._deleted_ids:
                 return None
-            if cid in self._runs:
+            scoped = self._watcher.memory_key(cid)
+            if scoped in self._runs and self._watcher._cache_visible(scoped, self._runs[scoped]):
+                return self._runs[scoped]
+            if cid in self._runs and self._watcher._cache_visible(cid, self._runs[cid]):
                 return self._runs[cid]
             session = self._watcher.get_session(cid)
             if session and session.agent_type not in ("antigravity", "claude_code", "cursor"):
@@ -81,7 +84,11 @@ class RunStore:
 
         # Fall back: linear scan for run_id or session_id field
         for s in self._watcher.list_sessions():
-            if (s.run_id in candidates or s.session_id in candidates) and s.agent_type not in ("antigravity", "claude_code", "cursor"):
+            if (s.run_id in candidates or s.session_id in candidates) and s.agent_type not in (
+                "antigravity",
+                "claude_code",
+                "cursor",
+            ):
                 return s
         return None
 
@@ -94,7 +101,9 @@ class RunStore:
         db_sessions = self._watcher.list_sessions()
         seen = {s.session_id for s in db_sessions}
         all_sessions = list(db_sessions)
-        for s in self._runs.values():
+        for key, s in self._runs.items():
+            if not self._watcher._cache_visible(key, s):
+                continue
             if s.session_id not in seen:
                 all_sessions.append(s)
                 seen.add(s.session_id)

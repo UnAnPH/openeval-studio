@@ -14,13 +14,17 @@ mkdir -p "$ROOT/.cursor" "${HOME}/.cursor" "${HOME}/.openeval" "$INSTALL_DIR"
 
 if [ -f "$GATE" ]; then
   chmod +x "$GATE"
-  INSTALL_GATE="$GATE"
+  cp "$GATE" "$INSTALL_GATE"
 else
   SERVER_URL="${OPENEVAL_WATCHER_URL:-https://openeval.studio}"
   SERVER_URL="${SERVER_URL%/api/watcher/evaluate}"
   echo "Downloading cursor_watcher_gate.py from ${SERVER_URL}..."
   curl -fsSL "${SERVER_URL}/api/scripts/cursor_watcher_gate.py" -o "$INSTALL_GATE"
-  chmod +x "$INSTALL_GATE"
+fi
+chmod +x "$INSTALL_GATE"
+if ! grep -q "OPENEVAL_API_KEY" "$INSTALL_GATE"; then
+  echo "Installed gate is missing OPENEVAL_API_KEY auth headers: $INSTALL_GATE" >&2
+  exit 1
 fi
 
 python3 - <<PY

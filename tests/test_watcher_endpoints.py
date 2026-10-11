@@ -308,4 +308,6 @@ def test_resolve_all_watcher_reviews_endpoint(client: TestClient) -> None:
     assert len(updated.trajectory.reviews) >= 1
     review = updated.trajectory.reviews[-1]
     assert review.resolution_status == "human_approved"
-    assert review.decision == "allow"
+    assert review.human_override == "allow"
+    assert review.decision in ("deny", "block")
+    assert review.score >= 8

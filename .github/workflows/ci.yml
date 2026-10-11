@@ -41,6 +41,15 @@ jobs:
       - name: Install dependencies
         run: uv sync --extra dev
 
+      - name: Lint with ruff
+        run: uv run ruff check .
+
+      - name: Check formatting with ruff
+        run: uv run ruff format --check .
+
+      - name: Type check with pyright
+        run: uv run pyright
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:

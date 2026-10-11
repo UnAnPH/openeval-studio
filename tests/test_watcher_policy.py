@@ -254,8 +254,8 @@ def test_watcher_rest_gateway_and_config(client: TestClient):
 
 def test_per_user_policy_and_config_isolation() -> None:
     """Verify that policies and configs are strictly isolated between different user accounts."""
-    from server.watcher_store import get_watcher_store
     from engine.approval_policy import WatcherConfig
+    from server.watcher_store import get_watcher_store
 
     store = get_watcher_store()
 
@@ -286,4 +286,3 @@ def test_per_user_policy_and_config_isolation() -> None:
     store.update_user_config(WatcherConfig(mode="paused"), user_id=101)
     assert store.get_user_config(user_id=101).mode == "paused"
     assert store.get_user_config(user_id=102).mode == "enforce"
-

@@ -12,8 +12,33 @@ os.environ["WATCHER_STORAGE_DIR"] = _TEST_STORAGE
 # Keep unit tests deterministic (no live LLM calls in PolicyGateway)
 os.environ["OPENEVAL_WATCHER_USE_LLM"] = "0"
 os.environ.setdefault(
-    "DATABASE_URL", "postgresql+psycopg://openeval:openeval@127.0.0.1:5432/openeval"
+    "DATABASE_URL", "postgresql+psycopg://openeval:openeval@127.0.0.1:5432/openeval_test"
 )
+
+
+def _test_db_truncate_allowed() -> bool:
+    """Refuse to wipe a developer database that is not an explicit test database."""
+    if os.environ.get("ALLOW_TEST_DB_TRUNCATE", "").strip() == "1":
+        return True
+    return "test" in os.environ.get("DATABASE_URL", "").lower()
+
+
+def _truncate_watcher_tables() -> None:
+    from sqlalchemy import text
+
+    from server.db import SessionLocal
+
+    if not _test_db_truncate_allowed():
+        raise RuntimeError(
+            "Refusing to TRUNCATE sessions, reviews, and trajectory_events. "
+            "DATABASE_URL does not contain 'test'. Set ALLOW_TEST_DB_TRUNCATE=1 "
+            "only when this database is disposable."
+        )
+    with SessionLocal() as db:
+        db.execute(text("TRUNCATE TABLE sessions, reviews, trajectory_events CASCADE"))
+        db.commit()
+
+
 os.environ.setdefault("OPENEVAL_AUTH_DISABLED", "1")
 
 
@@ -37,32 +62,28 @@ def test_watcher_storage():
 @pytest.fixture(autouse=True)
 def reset_tenant_context():
     """Ensure every test runs under the 'owner' tenant context with a clean state."""
-    from sqlalchemy import text
-
     from server.app import app
-    from server.db import SessionLocal, current_user_id, current_user_slug
+    from server.db import current_user_id, current_user_slug
     from server.watcher_store import get_watcher_store
 
     app.state.db_ready = True
     current_user_slug.set("owner")
     current_user_id.set(None)
-    with SessionLocal() as db:
-        db.execute(text("TRUNCATE TABLE sessions, reviews, trajectory_events CASCADE"))
-        db.commit()
+    _truncate_watcher_tables()
     store = get_watcher_store()
     with store._lock:
         store._sessions.clear()
         store._trajectories.clear()
         store._reviews.clear()
+        store._session_owners.clear()
 
     yield
 
-    with SessionLocal() as db:
-        db.execute(text("TRUNCATE TABLE sessions, reviews, trajectory_events CASCADE"))
-        db.commit()
+    _truncate_watcher_tables()
     with store._lock:
         store._sessions.clear()
         store._trajectories.clear()
         store._reviews.clear()
+        store._session_owners.clear()
     current_user_slug.set("owner")
     current_user_id.set(None)

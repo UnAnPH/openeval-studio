@@ -454,13 +454,13 @@ def test_production_env_refuses_default_session_secret(client, monkeypatch):
 
 
 def test_get_user_api_key_endpoint(client):
-    """GET /api/auth/key returns the active raw API key for authenticated user."""
+    """Raw API keys are shown once and are not readable back from the database."""
     # 1. Unauthenticated or demo returns fallback demo key
     demo_resp = client.get("/api/auth/key", headers={"X-OpenEval-Surface": "demo"})
     assert demo_resp.status_code == 200
     assert "oe_live_demo" in demo_resp.json()["api_key"]
 
-    # 2. Authenticated user receives their real active API key
+    # 2. Registration returns the raw key once; GET must not echo it back.
     reg = client.post(
         "/api/auth/register",
         json={"username": "key_user", "password": "password123"},
@@ -469,6 +469,5 @@ def test_get_user_api_key_endpoint(client):
     expected_key = reg.json()["api_key"]
 
     key_resp = client.get("/api/auth/key")
-    assert key_resp.status_code == 200
-    assert key_resp.json()["api_key"] == expected_key
-
+    assert key_resp.status_code == 404
+    assert expected_key not in key_resp.text

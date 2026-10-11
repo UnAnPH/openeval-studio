@@ -11,6 +11,7 @@ deterministic checks. Local blacklist still blocks high-severity commands offlin
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -122,15 +123,49 @@ def _log(event: str, **fields: object) -> None:
         pass
 
 
-def _emit(decision: str, reason: str = "", conversation_id: str = "") -> None:
+def _force_ask_flag(conversation_id: str) -> Path | None:
+    cid = re.sub(r"[^a-zA-Z0-9_-]", "", conversation_id)[:32]
+    if not cid:
+        return None
+    return Path(f"/tmp/openeval_force_ask_{cid}.flag")
+
+
+def _mark_force_ask(conversation_id: str) -> None:
+    """Atomically publish the lockout flag (replace, not a check-then-write race)."""
+    flag = _force_ask_flag(conversation_id)
+    if flag is None:
+        return
+    tmp = flag.with_name(f"{flag.name}.{os.getpid()}.tmp")
+    tmp.write_text(str(time.time()), encoding="utf-8")
+    os.replace(tmp, flag)
+
+
+def _consume_force_ask(conversation_id: str) -> bool:
+    """Unlink the lockout flag. unlink is atomic; missing file means nothing to resolve."""
+    flag = _force_ask_flag(conversation_id)
+    if flag is None:
+        return False
+    try:
+        flag.unlink()
+    except FileNotFoundError:
+        return False
+    return True
+
+
+def _emit(
+    decision: str,
+    reason: str = "",
+    conversation_id: str = "",
+    terminal_reason: str = "",
+) -> None:
     if decision in ("force_ask", "ask") and conversation_id:
-        try:
-            cid = re.sub(r"[^a-zA-Z0-9_-]", "", conversation_id)[:32]
-            flag = Path(f"/tmp/openeval_force_ask_{cid}.flag")
-            flag.write_text(str(time.time()), encoding="utf-8")
-        except Exception:
-            pass
+        with contextlib.suppress(Exception):
+            _mark_force_ask(conversation_id)
     out: dict[str, str] = {"decision": decision}
+    if terminal_reason:
+        out["terminal_reason"] = terminal_reason
+    elif decision == "force_ask":
+        out["terminal_reason"] = "lockout"
     if reason:
         out["reason"] = reason
     print(json.dumps(out, ensure_ascii=False))
@@ -328,10 +363,7 @@ def main() -> None:
         stdout, stderr = _get_latest_antigravity_tool_output(conversation_id)
         _report_tool_result_to_watcher(conversation_id, err, stdout, stderr)
 
-        cid = re.sub(r"[^a-zA-Z0-9_-]", "", conversation_id)[:32]
-        flag = Path(f"/tmp/openeval_force_ask_{cid}.flag")
-        if flag.exists():
-            flag.unlink(missing_ok=True)
+        if _consume_force_ask(conversation_id):
             _resolve_post_tool(conversation_id, err)
         print("{}")
         return

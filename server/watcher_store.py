@@ -141,14 +141,21 @@ class WatcherStore:
         return f"{uid}:{session_id}"
 
     def _cache_visible(self, key: str, session: Session) -> bool:
-        """Whether the active tenant may read this in-memory session."""
+        """Whether the active tenant may read this in-memory session.
+
+        Entries written with a bound user id are visible only to that user.
+        Unscoped entries (tests and eval runs assigned before a tenant is bound)
+        stay readable. The demo surface only sees demo-org sessions.
+        """
         uid = current_user_id.get()
         owner = self._session_owners.get(key)
-        if uid is not None:
-            return owner == uid
         if current_user_slug.get() == "demo":
-            return session.org_id == "demo"
-        return owner is None
+            return session.org_id == "demo" or owner == uid
+        if owner is None:
+            return True
+        if uid is None:
+            return False
+        return owner == uid
 
     def _cache_session(self, session: Session) -> str:
         key = self.memory_key(session.session_id)
@@ -213,10 +220,6 @@ class WatcherStore:
         """Write session and trajectory reviews to PostgreSQL and disk cache."""
         with self._lock:
             self._cache_session(session)
-
-        if current_user_slug.get() == "demo" or session.org_id == "demo":
-            # Ephemeral demo run: keep in memory only, do not write to PostgreSQL or disk
-            return
 
         payload = session.model_dump()
         payload_json = json.dumps(_to_jsonable(payload))
@@ -389,6 +392,7 @@ class WatcherStore:
         """List sessions for the current user, optionally filtered."""
         if current_user_slug.get() == "demo":
             from server.demo_seed import ensure_demo_timeline_fresh
+
             ensure_demo_timeline_fresh(self)
 
         with SessionLocal() as db:
@@ -435,16 +439,18 @@ class WatcherStore:
                 db.execute(text("DELETE FROM sessions WHERE user_id = :uid"), {"uid": user_id})
                 db.commit()
         with self._lock:
-            self._sessions.clear()
-            self._trajectories.clear()
-            self._reviews.clear()
+            for key, session in list(self._sessions.items()):
+                if not self._cache_visible(key, session):
+                    continue
+                self._sessions.pop(key, None)
+                self._trajectories.pop(key, None)
+                self._reviews.pop(key, None)
+                self._session_owners.pop(key, None)
 
     def delete_session(self, session_id: str) -> bool:
         """Delete a single session for the active tenant."""
         with self._lock:
-            mem_deleted = bool(self._sessions.pop(session_id, None))
-            self._trajectories.pop(session_id, None)
-            self._reviews.pop(session_id, None)
+            mem_deleted = self._drop_cached_session(session_id)
 
         if current_user_slug.get() == "demo":
             return mem_deleted
@@ -492,7 +498,8 @@ class WatcherStore:
                     ON CONFLICT (id) DO UPDATE SET
                         decision = EXCLUDED.decision,
                         score = EXCLUDED.score,
-                        explanation = EXCLUDED.explanation;
+                        explanation = EXCLUDED.explanation
+                    WHERE reviews.user_id = EXCLUDED.user_id;
                     """
                 ),
                 {
@@ -524,9 +531,16 @@ class WatcherStore:
     def get_session_decisions(self, session_id: str) -> list[ReviewRecord]:
         """Get all review decisions for a given session."""
         with self._lock:
-            if session_id in self._reviews and self._reviews[session_id]:
-                return list(self._reviews[session_id])
-            session = self._sessions.get(session_id)
+            key = self.memory_key(session_id)
+            if (
+                key in self._reviews
+                and self._reviews[key]
+                and self._cache_visible(
+                    key, self._sessions.get(key) or Session(session_id=session_id)
+                )
+            ):
+                return list(self._reviews[key])
+            session = self._cached_session(session_id)
             if session and session.trajectory and session.trajectory.reviews:
                 return list(session.trajectory.reviews)
 
@@ -1013,6 +1027,7 @@ class WatcherStore:
         if user_id is not None:
             return user_id
         from server.db import current_user_id
+
         uid = current_user_id.get()
         if uid is not None:
             return uid
@@ -1163,9 +1178,7 @@ class WatcherStore:
                     customized.append(g)
             return customized
 
-    def get_grader_definition(
-        self, grader_name: str, user_id: int | None = None
-    ) -> Any | None:
+    def get_grader_definition(self, grader_name: str, user_id: int | None = None) -> Any | None:
         """Retrieve a specific Canonical Grader with user customizations applied."""
         definitions = self.get_grader_definitions(user_id)
         for g in definitions:
@@ -1197,9 +1210,7 @@ class WatcherStore:
 
         return self.get_grader_definition(grader_name, uid)
 
-    def reset_grader_definition(
-        self, grader_name: str, user_id: int | None = None
-    ) -> Any | None:
+    def reset_grader_definition(self, grader_name: str, user_id: int | None = None) -> Any | None:
         """Reset a grader's prompt components back to defaults for this user."""
         uid = self._resolve_user_id(user_id)
         with self._lock:

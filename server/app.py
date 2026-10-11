@@ -12,22 +12,20 @@ import os
 import re
 import time
 from collections.abc import AsyncGenerator
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal, cast
 from uuid import uuid4
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Query, Request, status
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
 from engine.approval_policy import (
     WatcherConfig,
-    WatcherRequest,
     WatcherVerdict,
     evaluate_action_safety,
     global_watcher_engine,
@@ -41,6 +39,7 @@ from engine.watcher_sdk import WatcherClient
 from sandbox.docker_runner import DockerSandbox, create_sandbox_for_task
 from schemas.models import ModelSpec, get_available_models, get_default_model, get_model_spec
 from schemas.task_spec import TaskMetadata, TaskSpec, load_task_spec
+from schemas.watcher_models import ReviewRecord, Session
 from server.auth import (
     SESSION_COOKIE_NAME,
     resolve_api_key_user,
@@ -57,10 +56,14 @@ from server.db import (
     get_user_id_by_slug,
 )
 from server.inspect_loader import list_inspect_run_records
+from server.log import setup_logger
+from server.request_context import RequestIdMiddleware
+from server.routes.watcher_gate import router as watcher_gate_router
 from server.store import RunRecord, global_run_store
 from server.watcher_store import get_watcher_store
 
 load_dotenv()
+setup_logger()
 logger = logging.getLogger("openeval.server")
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -80,6 +83,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from server.demo_seed import seed_demo_data
 
     # Startup: fail-closed initial state
+    setup_logger()
     app.state.db_ready = False
     try:
         with SessionLocal() as db:
@@ -202,7 +206,10 @@ class _AuthMiddleware(BaseHTTPMiddleware):
         if is_demo_surface:
             is_eval_action = (
                 path in ("/api/eval/run", "/api/eval/launch")
-                or (path.startswith("/api/eval/runs/") and (path.endswith("/stop") or path.endswith("/delete") or method == "DELETE"))
+                or (
+                    path.startswith("/api/eval/runs/")
+                    and (path.endswith("/stop") or path.endswith("/delete") or method == "DELETE")
+                )
                 or (path == "/api/eval/runs" and method == "DELETE")
                 or path in ("/api/eval/runs/clear",)
             )
@@ -246,7 +253,9 @@ class _AuthMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(_AuthMiddleware)
+app.add_middleware(RequestIdMiddleware)
 app.include_router(auth_router)
+app.include_router(watcher_gate_router)
 
 
 class TaskSummary(BaseModel):
@@ -372,6 +381,21 @@ async def broadcast_watcher_event(event_type: str, data: dict[str, Any]) -> None
         watcher_sse_subscribers.discard(dq)
 
 
+def _is_interception_candidate(item: Any) -> bool:
+    """Return True only if the item/review was actually intercepted, denied, escalated, or rule-flagged."""
+    dec = str(getattr(item, "decision", "") or "").lower()
+    rule = getattr(item, "rule_violation_tag", None) or getattr(item, "rule_name", None)
+    score = float(getattr(item, "risk_score", 0.0) or (getattr(item, "score", 0) / 10.0))
+    reason = str(getattr(item, "reason", "") or getattr(item, "explanation", "") or "").lower()
+    return (
+        dec in ("deny", "escalate", "block", "ask", "force_ask", "warn")
+        or rule is not None
+        or score >= 0.5
+        or "lockout" in reason
+        or "blacklist" in reason
+    )
+
+
 @app.get("/api/watcher/config", response_model=WatcherConfig)
 async def get_watcher_config() -> WatcherConfig:
     """Get Watcher mode settings for active user. Thresholds for deny/escalate live in /api/v1/watcher/policy."""
@@ -413,394 +437,6 @@ async def update_watcher_config(new_config: WatcherConfig) -> WatcherConfig:
 async def update_watcher_config_v1(new_config: WatcherConfig) -> WatcherConfig:
     """v1 alias for mode config updates."""
     return await update_watcher_config(new_config)
-
-
-@app.post("/api/gate/evaluate", response_model=WatcherVerdict)
-@app.post("/api/watcher/evaluate", response_model=WatcherVerdict)
-async def evaluate_action_watcher_gateway(req: WatcherRequest) -> WatcherVerdict:
-    """Hook gateway: store PolicyGateway (rules + 1–10 thresholds) + mode only.
-
-    Float deny/flag fields on WatcherConfig are legacy and do not affect decisions.
-    """
-    if not getattr(app.state, "db_ready", True):
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Database connection is not ready.",
-        )
-
-    from server.policy_gateway import PolicyGateway
-    from server.watcher_store import get_watcher_store
-
-    store = get_watcher_store()
-    cfg = store.get_user_config()
-
-    tenant_id = _active_tenant_id()
-
-    # Paused mode: never block
-    if cfg.mode == "paused":
-        verdict = WatcherVerdict(
-            decision="allow",
-            stage="fallback",
-            reason="Watcher paused — all actions allowed",
-            risk_score=0.0,
-            latency_ms=0.0,
-            rule_violation_tag=None,
-            mode_applied="paused",
-            shadow_decision=None,
-            is_safe=True,
-            action_preview=f"{req.tool_name}",
-            agent_id=req.agent_id or "unknown",
-            user_id=tenant_id,
-        )
-        await broadcast_watcher_event("interception_event", verdict.model_dump())
-        return verdict
-
-    cmd = ""
-    tool_action = ""
-    path = ""
-    if req.arguments:
-        cmd = str(
-            req.arguments.get("CommandLine")
-            or req.arguments.get("command")
-            or req.arguments.get("cmd")
-            or req.arguments.get("command_line")
-            or ""
-        )
-        tool_action = str(
-            req.arguments.get("toolAction")
-            or req.arguments.get("toolSummary")
-            or req.arguments.get("Description")
-            or ""
-        )
-        path = str(
-            req.arguments.get("AbsolutePath")
-            or req.arguments.get("TargetFile")
-            or req.arguments.get("path")
-            or req.arguments.get("file_path")
-            or req.arguments.get("file")
-            or ""
-        )
-
-    if cmd:
-        full_cmd = cmd
-    elif req.arguments:
-        try:
-            full_cmd = json.dumps(req.arguments, indent=2)
-        except Exception:
-            full_cmd = str(req.arguments)
-    else:
-        full_cmd = req.tool_name
-
-    command_tool_names = {
-        "bash",
-        "shell",
-        "powershell",
-        "terminal",
-        "run_command",
-        "execute_command",
-        "cmd",
-        "exec",
-        "sh",
-        "zsh",
-        "execute_bash",
-    }
-    is_cmd_tool = req.tool_name.lower() in command_tool_names or bool(cmd)
-
-    tool_input = cmd or full_cmd if is_cmd_tool else path or req.tool_name
-
-    diff_content = None
-    if isinstance(req.arguments, dict):
-        diff_content = (
-            req.arguments.get("diff")
-            or req.arguments.get("contents")
-            or req.arguments.get("CodeContent")
-            or req.arguments.get("ReplacementContent")
-        )
-        if diff_content and not isinstance(diff_content, str):
-            diff_content = str(diff_content)
-
-    # Compute human-readable action title / summary
-    if tool_action:
-        action_preview = f"{req.tool_name}: {tool_action}"
-    elif cmd:
-        cmd_first = cmd.strip().splitlines()[0]
-        action_preview = (
-            f"{req.tool_name}: {cmd_first}"
-            if not cmd_first.startswith(req.tool_name)
-            else cmd_first
-        )
-    elif path:
-        action_preview = f"{req.tool_name} {Path(path).name}"
-    else:
-        action_preview = req.tool_name
-
-    # Resolve session before policy eval so reviews attach to a real session id
-    session_id = req.session_id or f"session-live-{int(time.time() * 1000) % 100000000:08d}"
-
-    # Context Stripping Optimization:
-    # Trajectory context boosts monitor fidelity, but tool outputs are stripped to minimize token overhead and latency.
-    traj_context = ""
-    try:
-        store = get_watcher_store()
-        existing_session = store.get_session(session_id)
-        if existing_session and existing_session.trajectory:
-            from server.policy_gateway import format_stripped_trajectory
-
-            traj_context = format_stripped_trajectory(existing_session.trajectory)
-    except Exception:
-        pass
-
-    # Shared gateway keeps the LLM circuit breaker across requests.
-    # Evaluation runs off the event loop so a slow model cannot stall other hooks.
-    gw = PolicyGateway.get_shared()
-    rec = await asyncio.to_thread(
-        gw.evaluate_tool_call,
-        session_id,
-        req.tool_name,
-        tool_input,
-        diff_content,
-        "",
-        False,
-        traj_context,
-    )
-
-    # Decision persisted after session ensure (below) so record_decision is not a no-op.
-
-    mapped_decision = "allow"
-    if rec.decision in ("block", "deny"):
-        mapped_decision = "deny"
-    elif rec.decision in ("escalate", "warn"):
-        mapped_decision = "escalate"
-
-    verdict = WatcherVerdict(
-        decision=mapped_decision,  # type: ignore[arg-type]
-        stage=(
-            "stage_2_deterministic"
-            if rec.stage == "rule"
-            else "stage_3_triage"
-            if rec.stage == "triage"
-            else "stage_4_deep_review"
-        ),
-        reason=rec.explanation or f"Policy: {rec.rule_name or rec.stage}",
-        risk_score=float(rec.score) / 10.0 if rec.score else 0.5,
-        latency_ms=rec.latency_ms,
-        rule_violation_tag=rec.rule_name,
-        mode_applied=cfg.mode,
-        shadow_decision=None,
-        is_safe=mapped_decision == "allow",
-        action_preview=action_preview,
-        agent_id=req.agent_id or "unknown",
-        review_id=rec.id,
-        session_id=session_id,
-        human_override=None,
-        resolution_status="pending",
-        full_command=full_cmd,
-        tool_result="Execution blocked by Watcher safety gate."
-        if mapped_decision in ("deny", "block")
-        else None,
-        threat_category=rec.threat_category,
-        user_id=tenant_id,
-    )
-
-    # Observe mode: never deny, but record shadow decision
-    if cfg.mode == "observe":
-        verdict = WatcherVerdict(
-            decision="allow",
-            stage=verdict.stage,
-            reason=f"[observe] would {mapped_decision}: {verdict.reason}",
-            risk_score=verdict.risk_score,
-            latency_ms=verdict.latency_ms,
-            rule_violation_tag=verdict.rule_violation_tag,
-            mode_applied="observe",
-            shadow_decision=mapped_decision,  # type: ignore[arg-type]
-            is_safe=True,
-            action_preview=verdict.action_preview,
-            agent_id=verdict.agent_id,
-            review_id=rec.id,
-            session_id=session_id,
-            human_override=None,
-            resolution_status="pending",
-            full_command=full_cmd,
-            tool_result=None,
-            threat_category=rec.threat_category,
-            user_id=tenant_id,
-        )
-
-    await broadcast_watcher_event("interception_event", verdict.model_dump())
-
-    if verdict.decision in ("deny", "escalate", "reject") or (
-        cfg.mode == "observe" and mapped_decision in ("deny", "escalate")
-    ):
-        from server.webhook import emit_watcher_webhook
-
-        emit_watcher_webhook(
-            "watcher.decision",
-            {
-                "decision": verdict.decision,
-                "shadow_decision": getattr(verdict, "shadow_decision", None),
-                "reason": verdict.reason,
-                "tool_name": req.tool_name,
-                "agent_id": req.agent_id,
-                "risk_score": verdict.risk_score,
-                "rule": verdict.rule_violation_tag,
-            },
-        )
-
-    # Persist live-gate session + decision into WatcherStore for the current user
-    try:
-        from schemas.watcher_models import ToolCall
-
-        store = get_watcher_store()
-        agent_id = req.agent_id or "antigravity"
-        store.ensure_live_session(
-            session_id,
-            agent_type=agent_id,
-            title=f"[{agent_id}] Live gate ({session_id[:8]})",
-        )
-        store.append_trajectory_event(
-            session_id,
-            ToolCall(
-                tool_name=req.tool_name,
-                arguments=req.arguments or {},
-                raw_input=tool_input or cmd or req.tool_name,
-            ),
-        )
-        store.record_decision(rec)
-        activity = verdict.decision
-        if cfg.mode == "observe" and mapped_decision != "allow":
-            activity = f"shadow:{mapped_decision}"
-        store.update_session(
-            session_id,
-            {
-                "current_activity": f"{req.tool_name} → {activity}",
-                "status": "working",
-            },
-        )
-        global_watcher_engine.record_interception(verdict)
-    except Exception as exc:
-        logger.debug("Failed persisting live-gate session %s: %s", session_id, exc)
-
-    return verdict
-
-
-class WatcherResultRequest(BaseModel):
-    session_id: str | None = None
-    agent_id: str = "unknown"
-    tool_name: str | None = None
-    stdout: str | None = ""
-    stderr: str | None = ""
-    exit_code: int | None = 0
-    tool_id: str | None = None
-    review_id: str | None = None
-    error: str | None = None
-
-
-@app.post("/api/watcher/result")
-@app.post("/api/v1/watcher/result")
-async def record_tool_result_watcher(req: WatcherResultRequest) -> dict[str, Any]:
-    """Report execution stdout/stderr from PostToolUse agent hooks back to Watcher immediately."""
-    from schemas.watcher_models import ToolResult
-    from server.watcher_store import get_watcher_store
-
-    parts: list[str] = []
-    if req.stdout:
-        parts.append(req.stdout.strip())
-    if req.stderr:
-        parts.append(f"[stderr]\n{req.stderr.strip()}")
-    if not parts and req.error:
-        parts.append(f"Error: {req.error.strip()}")
-
-    if parts:
-        tool_result_text = "\n".join(parts)
-    elif req.exit_code is not None and req.exit_code != 0:
-        tool_result_text = f"Command exited with code {req.exit_code}"
-    else:
-        tool_result_text = "Command completed (exit code 0)"
-
-    # 1. Update in-memory live engine history
-    updated_live = False
-    for item in reversed(global_watcher_engine._interception_history):
-        match_rev = req.review_id and item.review_id == req.review_id
-        match_sess = req.session_id and item.session_id == req.session_id
-        if match_rev or (
-            match_sess and (not item.tool_result or "Awaiting" in str(item.tool_result))
-        ):
-            item.tool_result = tool_result_text
-            updated_live = True
-            break
-    if not updated_live and global_watcher_engine._interception_history and not req.session_id:
-        last = global_watcher_engine._interception_history[-1]
-        if not last.tool_result or "Awaiting" in str(last.tool_result):
-            last.tool_result = tool_result_text
-
-    # 2. Update canonical store session if available
-    store = get_watcher_store()
-    if req.session_id:
-        sess = store.get_session(req.session_id)
-        if sess:
-            tr = ToolResult(
-                tool_id=req.tool_id or str(uuid4())[:8],
-                tool_name=req.tool_name or "tool",
-                stdout=req.stdout or "",
-                stderr=req.stderr or (req.error or ""),
-                exit_code=req.exit_code or 0,
-            )
-            sess.trajectory.tool_results.append(tr)
-            store.record_session(sess)
-
-    # 3. Broadcast SSE update so frontend live stream updates immediately
-    await broadcast_watcher_event(
-        "tool_result_event",
-        {
-            "session_id": req.session_id,
-            "review_id": req.review_id,
-            "tool_name": req.tool_name,
-            "tool_result": tool_result_text,
-            "timestamp": datetime.now(UTC).isoformat(),
-        },
-    )
-
-    return {
-        "status": "recorded",
-        "session_id": req.session_id,
-        "tool_result": tool_result_text,
-    }
-
-
-def _record_operator_resolution(item: Any, *, allow: bool, note: str) -> None:
-    """Record an operator override without rewriting the original decision or score."""
-    stamp = datetime.now(UTC).isoformat()
-    item.human_override = "allow" if allow else "deny"
-    item.resolution_status = "human_approved" if allow else "blocked"
-    marker = f"[Operator {stamp}: {note}]"
-    if hasattr(item, "explanation"):
-        current = getattr(item, "explanation", "") or ""
-        if marker not in current:
-            item.explanation = f"{current} {marker}".strip()
-    if hasattr(item, "reason"):
-        current = getattr(item, "reason", "") or ""
-        if marker not in current:
-            item.reason = f"{current} {marker}".strip()
-
-
-def _history_belongs_to_tenant(item: Any, uid: int | None) -> bool:
-    """In-memory verdicts are updated only for the active tenant."""
-    return getattr(item, "user_id", None) == uid
-
-
-def _is_interception_candidate(item: Any) -> bool:
-    """Return True only if the item/review was actually intercepted, denied, escalated, or rule-flagged."""
-    dec = str(getattr(item, "decision", "") or "").lower()
-    rule = getattr(item, "rule_violation_tag", None) or getattr(item, "rule_name", None)
-    score = float(getattr(item, "risk_score", 0.0) or (getattr(item, "score", 0) / 10.0))
-    reason = str(getattr(item, "reason", "") or getattr(item, "explanation", "") or "").lower()
-    return (
-        dec in ("deny", "escalate", "block", "ask", "force_ask", "warn")
-        or rule is not None
-        or score >= 0.5
-        or "lockout" in reason
-        or "blacklist" in reason
-    )
 
 
 def _normalize_cmd_for_match(s: str) -> str:
@@ -1038,110 +674,6 @@ def _verdicts_from_store_reviews(limit: int = 40) -> list[dict[str, Any]]:
             ).model_dump()
         )
     return out
-
-
-class ResolveInterceptionRequest(BaseModel):
-    session_id: str | None = None
-    review_id: str | None = None
-    resolution: Literal["human_approved", "blocked", "allow"] = "human_approved"
-    note: str | None = None
-
-
-@app.post("/api/v1/watcher/gate/resolve")
-async def resolve_watcher_interception(req: ResolveInterceptionRequest) -> dict[str, Any]:
-    """Resolve an intercepted tool call after operator authorization (PostToolUse or UI override)."""
-    from datetime import UTC, datetime
-
-    store = get_watcher_store()
-    resolved_count = 0
-    uid = _active_tenant_id()
-    approved = req.resolution in ("human_approved", "allow")
-    note = req.note or ("operator approved" if approved else "operator blocked")
-
-    # 1. Update in-memory live engine history ONLY for this tenant's interceptions.
-    # Original decision and risk_score stay intact for the audit trail.
-    for item in global_watcher_engine._interception_history:
-        if not _history_belongs_to_tenant(item, uid):
-            continue
-        match_sess = not req.session_id or item.session_id == req.session_id
-        match_rev = not req.review_id or item.review_id == req.review_id
-        if match_sess and match_rev and _is_interception_candidate(item):
-            _record_operator_resolution(item, allow=approved, note=note)
-            resolved_count += 1
-
-    # 2. Update canonical WatcherStore sessions already scoped to this user.
-    target_sessions = (
-        [store.get_session(req.session_id)] if req.session_id else store.list_sessions(limit=200)
-    )
-    for sess in target_sessions:
-        if not sess:
-            continue
-        updated = False
-        for r in sess.trajectory.reviews:
-            match_rev = not req.review_id or r.id == req.review_id
-            if match_rev and _is_interception_candidate(r):
-                original_decision = r.decision
-                original_score = r.score
-                _record_operator_resolution(r, allow=approved, note=note)
-                r.decision = original_decision
-                r.score = original_score
-                updated = True
-                resolved_count += 1
-        if updated:
-            store.record_session(sess)
-
-    payload = {
-        "session_id": req.session_id,
-        "review_id": req.review_id,
-        "resolution": req.resolution,
-        "resolved_count": resolved_count,
-        "timestamp": datetime.now(UTC).isoformat(),
-    }
-    await broadcast_watcher_event("interception_resolved", payload)
-    return {"status": "ok", **payload}
-
-
-@app.post("/api/v1/watcher/reviews/resolve-all")
-async def resolve_all_watcher_reviews() -> dict[str, Any]:
-    """Resolve/allow all currently blocked or escalated reviews across all sessions for clarity."""
-    from datetime import UTC, datetime
-
-    store = get_watcher_store()
-    resolved_count = 0
-    uid = _active_tenant_id()
-    note = "Operator allowed for clarity"
-
-    # 1. Update in-memory engine history only for this tenant.
-    for item in global_watcher_engine._interception_history:
-        if not _history_belongs_to_tenant(item, uid):
-            continue
-        if _is_interception_candidate(item):
-            _record_operator_resolution(item, allow=True, note=note)
-            resolved_count += 1
-
-    # 2. WatcherStore.list_sessions is already WHERE user_id = active tenant.
-    for sess in store.list_sessions(limit=200):
-        updated = False
-        for r in sess.trajectory.reviews:
-            if _is_interception_candidate(r):
-                original_decision = r.decision
-                original_score = r.score
-                _record_operator_resolution(r, allow=True, note=note)
-                r.decision = original_decision
-                r.score = original_score
-                updated = True
-                resolved_count += 1
-        if updated:
-            if sess.status in ("failed", "error"):
-                sess.status = "completed"
-            store.record_session(sess)
-
-    payload = {
-        "resolved_count": resolved_count,
-        "timestamp": datetime.now(UTC).isoformat(),
-    }
-    await broadcast_watcher_event("interception_resolved", payload)
-    return {"status": "ok", **payload}
 
 
 @app.get("/api/watcher/interceptions")
@@ -1465,8 +997,8 @@ def scan_antigravity_brain_sessions(limit: int = 15) -> list[dict[str, Any]]:
     return discovered
 
 
-@app.get("/api/watcher/sessions")
-async def list_watcher_sessions() -> list[dict[str, Any]]:
+@app.get("/api/watcher/sessions", response_model=list[Session])
+async def list_watcher_sessions() -> list[Session]:
     """Legacy alias → WatcherStore sessions (same source as /api/v1/watcher/sessions)."""
     if os.getenv("OPENEVAL_AUTO_SCAN_LOCAL_LOGS", "0").lower() in (
         "1",
@@ -1480,14 +1012,63 @@ async def list_watcher_sessions() -> list[dict[str, Any]]:
     store = get_watcher_store()
     store.reload_from_disk()
     sessions = store.list_sessions()
-    return [s.model_dump() for s in sessions]
+    return sessions
+
+
+class SessionFindingDetail(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str
+    session_id: str
+    headline: str
+    developer: str = "Operator"
+    timestamp: str | None = None
+    severity: str = "low"
+    dimension: str = "Live Observability"
+    agent_source: str = "antigravity"
+    summary: str = ""
+    recommended_actions: list[RecommendedAction] = Field(default_factory=list)
+    flagged_turns: list[int] = Field(default_factory=list)
+    blocked_turn: int | None = None
+    tags: list[str] = Field(default_factory=list)
+
+
+class SessionTurnDetail(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    step_number: int
+    role: str = "agent"
+    thought: str = ""
+    tool: str = ""
+    # Raw arguments dictionary from external agent tool call
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    observation: str = ""
+    is_blocked: bool = False
+    rule_violation_tag: str | None = None
+    risk_score: float = 0.0
+    reason: str | None = None
+
+
+class SessionDetailResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    session_id: str
+    finding: SessionFindingDetail | None = None
+    turns: list[SessionTurnDetail] = Field(default_factory=list)
+    total_turns: int = 0
+    blocked_turns_count: int = 0
+    developer: str = "Operator"
+    agent_source: str = "antigravity"
+    working_directory: str = "/workspace"
+    duration_sec: float = 0.0
+    total_tokens: int = 0
 
 
 STORED_SESSION_DETAILS: dict[str, dict[str, Any]] = {}
 
 
-@app.get("/api/watcher/sessions/{session_id}")
-async def get_watcher_session_detail(session_id: str) -> dict[str, Any]:
+@app.get("/api/watcher/sessions/{session_id}", response_model=SessionDetailResponse)
+async def get_watcher_session_detail(session_id: str) -> SessionDetailResponse:
     """Retrieve session detail — prefers WatcherStore, then legacy STORED_* / brain scan."""
     if os.getenv("OPENEVAL_AUTO_SCAN_LOCAL_LOGS", "0").lower() in ("1", "true", "yes"):
         brain_dir = Path.home() / ".gemini" / "antigravity" / "brain" / session_id
@@ -1547,39 +1128,36 @@ async def get_watcher_session_detail(session_id: str) -> dict[str, Any]:
             agent_str = str(db_s.agent_type)
             operator_name = db_s.human_reviewer or "Operator"
             severity = "critical" if blocked_n else "low"
-            return {
-                "session_id": session_id,
-                "finding": {
-                    "id": f"finding-{session_id[:8]}",
-                    "session_id": session_id,
-                    "headline": db_s.title
-                    or f"[{agent_str.capitalize()}] Session {session_id[:8]}",
-                    "developer": operator_name,
-                    "timestamp": db_s.created_at,
-                    "severity": severity,
-                    "dimension": "Access Control" if blocked_n else "Live Observability",
-                    "agent_source": "claude_code"
-                    if "claude" in agent_str.lower()
-                    else "antigravity",
-                    "summary": (top.explanation if top else None)
+            return SessionDetailResponse(
+                session_id=session_id,
+                finding=SessionFindingDetail(
+                    id=f"finding-{session_id[:8]}",
+                    session_id=session_id,
+                    headline=db_s.title or f"[{agent_str.capitalize()}] Session {session_id[:8]}",
+                    developer=operator_name,
+                    timestamp=db_s.created_at,
+                    severity=severity,
+                    dimension="Access Control" if blocked_n else "Live Observability",
+                    agent_source="claude_code" if "claude" in agent_str.lower() else "antigravity",
+                    summary=(top.explanation if top else None)
                     or db_s.current_activity
                     or f"Session {session_id} in WatcherStore.",
-                    "recommended_actions": [],
-                    "flagged_turns": [i + 1 for i, t in enumerate(turns) if t.get("is_blocked")],
-                    "blocked_turn": next(
+                    recommended_actions=[],
+                    flagged_turns=[i + 1 for i, t in enumerate(turns) if t.get("is_blocked")],
+                    blocked_turn=next(
                         (t["step_number"] for t in turns if t.get("is_blocked")), None
                     ),
-                    "tags": ["watcher_store"],
-                },
-                "turns": turns,
-                "total_turns": len(turns),
-                "blocked_turns_count": blocked_n,
-                "developer": operator_name,
-                "agent_source": agent_str,
-                "working_directory": db_s.working_dir or "/workspace",
-                "duration_sec": db_s.total_duration_sec or 0.0,
-                "total_tokens": db_s.total_tokens or 0,
-            }
+                    tags=["watcher_store"],
+                ),
+                turns=[SessionTurnDetail.model_validate(t) for t in turns],
+                total_turns=len(turns),
+                blocked_turns_count=blocked_n,
+                developer=operator_name,
+                agent_source=agent_str,
+                working_directory=db_s.working_dir or "/workspace",
+                duration_sec=db_s.total_duration_sec or 0.0,
+                total_tokens=db_s.total_tokens or 0,
+            )
     except Exception as e:
         logger.warning("Error fetching session %s from WatcherStore: %s", session_id, e)
 
@@ -1604,38 +1182,38 @@ async def get_watcher_session_detail(session_id: str) -> dict[str, Any]:
                 "blocked_turn": bl_turn,
                 "tags": ["legacy_stored"],
             }
-        return sdata
+        return SessionDetailResponse.model_validate(sdata)
 
     # Check if a stored finding exists for this session
     finding = next(
         (f for f in STORED_FINDINGS if f.session_id == session_id or f.id == session_id), None
     )
     if finding:
-        return {
-            "session_id": finding.session_id,
-            "finding": finding.model_dump(),
-            "turns": [
-                {
-                    "step_number": 1,
-                    "role": "agent",
-                    "thought": "Action flagged by security policy.",
-                    "tool": "policy_intercept",
-                    "arguments": {},
-                    "observation": finding.summary,
-                    "is_blocked": True,
-                    "rule_violation_tag": finding.dimension,
-                    "risk_score": 0.95,
-                    "reason": finding.summary,
-                }
+        return SessionDetailResponse(
+            session_id=finding.session_id,
+            finding=SessionFindingDetail.model_validate(finding.model_dump()),
+            turns=[
+                SessionTurnDetail(
+                    step_number=1,
+                    role="agent",
+                    thought="Action flagged by security policy.",
+                    tool="policy_intercept",
+                    arguments={},
+                    observation=finding.summary,
+                    is_blocked=True,
+                    rule_violation_tag=finding.dimension,
+                    risk_score=0.95,
+                    reason=finding.summary,
+                )
             ],
-            "total_turns": 1,
-            "blocked_turns_count": 1,
-            "developer": finding.developer,
-            "agent_source": finding.agent_source,
-            "working_directory": "/workspace",
-            "duration_sec": 1.0,
-            "total_tokens": 100,
-        }
+            total_turns=1,
+            blocked_turns_count=1,
+            developer=finding.developer,
+            agent_source=finding.agent_source,
+            working_directory="/workspace",
+            duration_sec=1.0,
+            total_tokens=100,
+        )
 
     raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
 
@@ -2019,13 +1597,19 @@ async def _run_catalog_eval_worker(
 
     try:
         if task_id == "inspect_evals/agentharm":
-            judge_model = "google/gemini-2.5-flash" if provider == "google" else "openai/gpt-4o-mini"
+            judge_model = (
+                "google/gemini-2.5-flash" if provider == "google" else "openai/gpt-4o-mini"
+            )
             try:
-                task_instance = inspect_task_fn(refusal_judge=judge_model, semantic_judge=judge_model)
+                task_instance = inspect_task_fn(
+                    refusal_judge=judge_model, semantic_judge=judge_model
+                )
             except Exception:
                 task_instance = inspect_task_fn()
         elif task_id == "inspect_evals/sycophancy":
-            judge_model = "google/gemini-2.5-flash" if provider == "google" else "openai/gpt-4o-mini"
+            judge_model = (
+                "google/gemini-2.5-flash" if provider == "google" else "openai/gpt-4o-mini"
+            )
             try:
                 task_instance = inspect_task_fn(scorer_model=judge_model)
             except Exception:
@@ -2078,9 +1662,7 @@ async def _run_catalog_eval_worker(
         # If sample has multiple-choice options (e.g. sec_qa), append formatted choices
         choices = getattr(sample, "choices", None)
         if choices and isinstance(choices, list):
-            options_text = "\n".join(
-                f"{chr(65 + i)}) {choice}" for i, choice in enumerate(choices)
-            )
+            options_text = "\n".join(f"{chr(65 + i)}) {choice}" for i, choice in enumerate(choices))
             prompt_input = (
                 f"{prompt_input}\n\nChoices:\n{options_text}\n\n"
                 f"State the single correct letter option (A, B, C, or D) and your reasoning."
@@ -2172,7 +1754,9 @@ async def _run_catalog_eval_worker(
                 if not (has_letter or has_choice_text):
                     passed = False
                     reward = 0.0
-                    failure_reason = f"Model solution did not select target option '{target_str.strip()}'."
+                    failure_reason = (
+                        f"Model solution did not select target option '{target_str.strip()}'."
+                    )
             else:
                 if clean_target not in clean_output and not any(
                     t in clean_output for t in clean_target.splitlines() if len(t.strip()) > 3
@@ -2982,6 +2566,13 @@ class WatcherResolvePayload(BaseModel):
     notes: str | None = None
 
 
+class ResolveSessionDecisionResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    status: str = "resolved"
+    review: ReviewRecord
+
+
 class RuleUpdatePayload(BaseModel):
     rule_name: str
     action: Literal["allow", "triage", "human", "deny", "off"]
@@ -3004,12 +2595,12 @@ async def get_analyzer_summary() -> dict[str, Any]:
     return store.get_analyzer_summary()
 
 
-@app.get("/api/v1/watcher/sessions")
+@app.get("/api/v1/watcher/sessions", response_model=list[Session])
 async def list_watcher_v1_sessions(
     agent_type: str | None = None,
     status: str | None = None,
     min_messages: int = 0,
-) -> list[dict[str, Any]]:
+) -> list[Session]:
     """List monitored agent sessions from WatcherStore."""
     if os.getenv("OPENEVAL_AUTO_SCAN_LOCAL_LOGS", "0").lower() in (
         "1",
@@ -3029,7 +2620,7 @@ async def list_watcher_v1_sessions(
             for s in sessions
             if len(s.trajectory.messages if s.trajectory else []) >= min_messages
         ]
-    return [s.model_dump() for s in sessions]
+    return sessions
 
 
 @app.post("/api/v1/watcher/sessions/purge-empty")
@@ -3058,22 +2649,22 @@ async def clear_watcher_sessions() -> dict[str, Any]:
     return {"status": "cleared", "count": 0}
 
 
-@app.get("/api/v1/watcher/sessions/{session_id}")
-async def get_watcher_session(session_id: str) -> dict[str, Any]:
+@app.get("/api/v1/watcher/sessions/{session_id}", response_model=Session)
+async def get_watcher_session(session_id: str) -> Session:
     """Retrieve detailed session information and complete trajectory."""
     store = get_watcher_store()
     session = store.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
-    return session.model_dump()
+    return session
 
 
-@app.get("/api/v1/watcher/sessions/{session_id}/decisions")
-async def get_watcher_decisions(session_id: str) -> list[dict[str, Any]]:
+@app.get("/api/v1/watcher/sessions/{session_id}/decisions", response_model=list[ReviewRecord])
+async def get_watcher_decisions(session_id: str) -> list[ReviewRecord]:
     """Retrieve all review decisions recorded for a session."""
     store = get_watcher_store()
     decisions = store.get_session_decisions(session_id)
-    return [d.model_dump() for d in decisions]
+    return decisions
 
 
 @app.post("/api/v1/watcher/review")
@@ -3089,11 +2680,14 @@ async def review_watcher_action(payload: WatcherReviewPayload) -> dict[str, Any]
     return record.model_dump()
 
 
-@app.post("/api/v1/watcher/sessions/{session_id}/resolve")
+@app.post(
+    "/api/v1/watcher/sessions/{session_id}/resolve",
+    response_model=ResolveSessionDecisionResponse,
+)
 async def resolve_watcher_decision(
     session_id: str,
     payload: WatcherResolvePayload,
-) -> dict[str, Any]:
+) -> ResolveSessionDecisionResponse:
     """Resolve an escalated or blocked decision via human oversight."""
     store = get_watcher_store()
     record = store.resolve_decision(
@@ -3104,7 +2698,7 @@ async def resolve_watcher_decision(
     )
     if not record:
         raise HTTPException(status_code=404, detail=f"No decision found for session '{session_id}'")
-    return {"status": "resolved", "review": record.model_dump()}
+    return ResolveSessionDecisionResponse(status="resolved", review=record)
 
 
 @app.get("/api/v1/watcher/sessions/{session_id}/stream")

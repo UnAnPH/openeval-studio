@@ -5,7 +5,6 @@ Filesystem mutations, Cloud & Infrastructure, Search, and Build commands.
 Matches the official Watcher command-rules specification.
 """
 
-import re
 from typing import Literal
 
 from schemas.watcher_models import CommandRule
@@ -33,7 +32,7 @@ _OVERSIGHT_TARGET_PATTERN = (
     r"|(?:^|[^\w])\.claude/settings\.json"
     r"|scripts/[^\s\"']*watcher_gate[^\s\"']*\.py"
     r"|scripts/[^\s\"']*watcher_hook[^\s\"']*\.py"
-    r"|(?:^|[^\s\"'])[^\s\"']*\.watcherignore"
+    r"|[^\s\"']*\.watcherignore\b"
     r")"
 )
 
@@ -681,7 +680,8 @@ class CommandRulesEngine:
                 if rule.action != action:
                     continue
                 if any(rule.matches(target) for target in targets):
-                    return rule, action, _rule_score(rule), _rule_explanation(rule)  # type: ignore[return-value]
+                    matched: Literal["deny", "human"] = "deny" if action == "deny" else "human"
+                    return rule, matched, _rule_score(rule), _rule_explanation(rule)
 
         best: tuple[int, CommandRule, Literal["triage", "allow"]] | None = None
         rank = {"triage": 2, "allow": 1}
@@ -696,7 +696,7 @@ class CommandRulesEngine:
                     "triage" if rule.action == "triage" else "allow"
                 )
                 if best is None or rank[action_name] > rank[best[2]]:
-                    best = ( _rule_score(rule), rule, action_name)
+                    best = (_rule_score(rule), rule, action_name)
                 break
         if best is not None:
             score, rule, action_name = best

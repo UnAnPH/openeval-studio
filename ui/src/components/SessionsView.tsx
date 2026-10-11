@@ -20,7 +20,6 @@ import {
 } from 'lucide-react';
 import { TranscriptCardView, TranscriptMessage } from './TranscriptCardView';
 import { WatcherSession } from '../types';
-import { DEMO_SESSIONS } from '../data/demoFixtures';
 
 interface FragmentMatch {
   session_id: string;
@@ -43,12 +42,14 @@ interface SessionsViewProps {
   isDemoSeed?: boolean;
   isDemo?: boolean;
   onBack?: () => void;
+  demoSessions?: WatcherSession[];
 }
 
 export const SessionsView: React.FC<SessionsViewProps> = ({
   initialSessionId,
   isDemoSeed,
   isDemo: propIsDemo,
+  demoSessions = [],
 }) => {
   const isDemo = propIsDemo ?? (isDemoSeed || (typeof window !== 'undefined' && (window.location.pathname.startsWith('/demo') || window.location.hash.startsWith('#/demo'))));
   const [sessions, setSessions] = useState<WatcherSession[]>([]);
@@ -106,8 +107,8 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
         }
       }
       if (isDemo) {
-        // Static Appwrite Sites fallback
-        const fallback = DEMO_SESSIONS as unknown as WatcherSession[];
+        // Fallback to demo sessions provided via props from demo route
+        const fallback = (demoSessions || []) as WatcherSession[];
         setSessions(fallback);
         if (autoSelect || !selectedSessionId) {
           if (initialSessionId && fallback.some((s) => s.session_id === initialSessionId)) {
@@ -123,7 +124,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
     } catch (err) {
       if (isDemo) {
         console.warn('Backend unavailable, using bundled demo sessions:', err);
-        const fallback = DEMO_SESSIONS as unknown as WatcherSession[];
+        const fallback = (demoSessions || []) as WatcherSession[];
         setSessions(fallback);
         if (fallback.length > 0 && !selectedSessionId) {
           setSelectedSessionId(fallback[0].session_id);
@@ -136,6 +137,15 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (isDemo && demoSessions && demoSessions.length > 0 && sessions.length === 0) {
+      setSessions(demoSessions);
+      if (!selectedSessionId) {
+        setSelectedSessionId(demoSessions[0].session_id);
+      }
+    }
+  }, [isDemo, demoSessions]);
 
   useEffect(() => {
     fetchSessions(true);

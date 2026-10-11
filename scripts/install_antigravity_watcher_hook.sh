@@ -20,6 +20,10 @@ else
   curl -fsSL "${SERVER_URL}/api/scripts/antigravity_watcher_gate.py" -o "$INSTALL_GATE"
 fi
 chmod +x "$INSTALL_GATE"
+if ! grep -q "OPENEVAL_API_KEY" "$INSTALL_GATE"; then
+  echo "Installed gate is missing OPENEVAL_API_KEY auth headers: $INSTALL_GATE" >&2
+  exit 1
+fi
 
 python3 - <<PY
 import json

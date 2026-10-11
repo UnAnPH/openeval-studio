@@ -1,13 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { IonIcon } from '@ionic/react';
 import {
-  alertCircle,
-  pulseOutline,
-  shieldCheckmark,
-  timeOutline,
-} from 'ionicons/icons';
+  Activity,
+  AlertCircle,
+  Clock,
+  ShieldCheck,
+} from 'lucide-react';
 import { FindingRecord, RunRecord, TaskSummary } from '../types';
-import { getFreshDemoSessions } from '../data/demoFixtures';
 
 interface DashboardOverviewProps {
   runs?: RunRecord[];
@@ -19,6 +17,7 @@ interface DashboardOverviewProps {
   onNavigateToRuns?: () => void;
   onNavigateToFirewall?: () => void;
   isDemoSeed?: boolean;
+  demoSessions?: any[];
 }
 
 interface RawSession {
@@ -51,12 +50,19 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   findings: propFindings,
   onSelectIncident,
   isDemoSeed,
+  demoSessions = [],
 }) => {
   const [dateFilter, setDateFilter] = useState<'today' | 'this_week' | 'last_week' | 'this_month' | 'last_month'>('this_month');
   const isDemo = Boolean(isDemoSeed || (typeof window !== 'undefined' && (window.location.pathname.startsWith('/demo') || window.location.hash.startsWith('#/demo'))));
   const [watcherSessions, setWatcherSessions] = useState<RawSession[]>(() =>
-    isDemo ? (getFreshDemoSessions() as unknown as RawSession[]) : []
+    isDemo && demoSessions.length > 0 ? (demoSessions as RawSession[]) : []
   );
+
+  useEffect(() => {
+    if (isDemo && demoSessions && demoSessions.length > 0 && watcherSessions.length === 0) {
+      setWatcherSessions(demoSessions as RawSession[]);
+    }
+  }, [isDemo, demoSessions]);
 
   // Fetch monitored watcher sessions (same source as Safety → Sessions)
   useEffect(() => {
@@ -66,16 +72,16 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         if (res.ok) {
           const data: RawSession[] = await res.json();
           if (isDemo && data.length === 0) {
-            setWatcherSessions(getFreshDemoSessions() as unknown as RawSession[]);
+            setWatcherSessions(demoSessions as RawSession[]);
           } else {
             setWatcherSessions(data);
           }
         } else if (isDemo) {
-          setWatcherSessions(getFreshDemoSessions() as unknown as RawSession[]);
+          setWatcherSessions(demoSessions as RawSession[]);
         }
       } catch (err) {
         if (isDemo) {
-          setWatcherSessions(getFreshDemoSessions() as unknown as RawSession[]);
+          setWatcherSessions(demoSessions as RawSession[]);
         } else {
           console.warn('Failed to fetch watcher sessions:', err);
         }
@@ -84,7 +90,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     fetchSessions();
     const interval = setInterval(fetchSessions, 5000);
     return () => clearInterval(interval);
-  }, [isDemo]);
+  }, [isDemo, demoSessions]);
 
   // Safe timestamp parser
   const parseTimestamp = (ts?: string | null): number => {
@@ -395,7 +401,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-gray-500">Sessions Observed</span>
             <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center text-gray-500">
-              <IonIcon icon={pulseOutline} className="text-sm" />
+              <Activity className="w-4 h-4" />
             </div>
           </div>
           <div className="my-2">
@@ -413,7 +419,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-gray-500">Critical Sessions</span>
             <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${criticalCount > 0 ? 'bg-rose-50 text-rose-600' : 'bg-gray-100 text-gray-500'}`}>
-              <IonIcon icon={alertCircle} className="text-sm" />
+              <AlertCircle className="w-4 h-4" />
             </div>
           </div>
           <div className="my-2">
@@ -431,7 +437,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-gray-500">Critical Session Rate</span>
             <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${criticalCount > 0 ? 'bg-rose-50 text-rose-600' : 'bg-gray-100 text-gray-500'}`}>
-              <IonIcon icon={alertCircle} className="text-sm" />
+              <AlertCircle className="w-4 h-4" />
             </div>
           </div>
           <div className="my-2">
@@ -616,7 +622,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           <div className="space-y-4">
             <div className="p-6 text-center bg-gray-50/50 rounded-xl border border-dashed border-gray-200 space-y-1.5">
               <div className="w-7 h-7 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto">
-                <IonIcon icon={shieldCheckmark} className="text-sm" />
+                <ShieldCheck className="w-4 h-4" />
               </div>
               <p className="text-xs font-bold text-gray-800">No Critical Sessions Recorded</p>
               <p className="text-[11px] text-gray-500 max-w-md mx-auto">
@@ -663,7 +669,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                           <span>{s.turns?.length || s.total_turns || 0} turns</span>
                           <span>·</span>
                           <span className="flex items-center gap-1">
-                            <IonIcon icon={timeOutline} className="text-[10px]" />
+                            <Clock className="w-3 h-3" />
                             <span>{s.timestamp ? new Date(s.timestamp).toLocaleDateString() : 'Active'}</span>
                           </span>
                         </div>

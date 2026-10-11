@@ -50,8 +50,8 @@ export const HookSetupView: React.FC<HookSetupViewProps> = ({
     }
   }, [apiKey]);
 
-  const fallbackKey = _isDemo ? 'oe_live_demo_readonly_token' : 'oe_live_agent_token_dev';
-  const displayKey = localApiKey || apiKey || fallbackKey;
+  const displayKey =
+    localApiKey || apiKey || (_isDemo ? 'oe_live_demo_readonly_token' : '<rotate to issue a one-time key>');
   const watcherUrl = typeof window !== 'undefined'
     ? `${window.location.origin}/api/watcher/evaluate`
     : 'https://openeval.studio/api/watcher/evaluate';

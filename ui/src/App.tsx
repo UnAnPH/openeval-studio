@@ -1,15 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   IonApp,
-  IonIcon,
   IonPage,
   IonSpinner,
   IonToast,
 } from '@ionic/react';
-import {
-  alertCircleOutline,
-  playSharp,
-} from 'ionicons/icons';
+import { AlertCircle, Play } from 'lucide-react';
 
 import { Sidebar } from './components/Sidebar';
 import { LiveTrajectory } from './components/LiveTrajectory';
@@ -26,7 +22,6 @@ import { RunDetailView } from './components/RunDetailView';
 import { BenchmarksList } from './components/BenchmarksList';
 import { CompareTestResults } from './components/CompareTestResults';
 import { DEFAULT_MODELS, DEFAULT_TASKS } from './data/defaults';
-import { DEMO_EVAL_RUNS, DEMO_INTERCEPTIONS, getFreshDemoSessions } from './data/demoFixtures';
 import {
   AgentStep,
   FindingRecord,
@@ -72,6 +67,11 @@ const getInitialUrlRoute = () => {
       const parts = rawHash.split('?');
       basePath = parts[0];
       queryStr = parts.slice(1).join('?');
+    }
+    if (basePath.startsWith('demo/')) {
+      basePath = basePath.slice(5);
+    } else if (basePath === 'demo') {
+      basePath = '';
     }
 
     const params = new URLSearchParams(queryStr);
@@ -150,13 +150,51 @@ export function App() {
   const demoTimersRef = useRef<number[]>([]);
 
   const [serverConnected, setServerConnected] = useState<boolean>(false);
-  const [isDemoSeed, setIsDemoSeed] = useState<boolean>(false);
+  const [isDemo, setIsDemo] = useState<boolean>(() => isDemoSurface());
+  const [isDemoSeed, setIsDemoSeed] = useState<boolean>(() => isDemoSurface());
+  const [demoSessions, setDemoSessions] = useState<any[]>([]);
+  const [demoRuns, setDemoRuns] = useState<RunRecord[]>([]);
+  const [demoInterceptions, setDemoInterceptions] = useState<WatcherVerdict[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const [currentUser, setCurrentUser] = useState<{ user_id: number; username: string } | null>(null);
   const [latestApiKey, setLatestApiKey] = useState<string | null>(null);
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
-  const isDemo = typeof window !== 'undefined' && isDemoSurface();
+
+  // Dynamically load demo fixtures ONLY when on /demo or #/demo
+  useEffect(() => {
+    const syncDemoState = async () => {
+      const demoActive = isDemoSurface();
+      setIsDemo(demoActive);
+      setIsDemoSeed(demoActive);
+
+      if (demoActive) {
+        try {
+          const mod = await import('./data/demoFixtures');
+          const freshSessions = mod.getFreshDemoSessions() as unknown as any[];
+          const runs = mod.DEMO_EVAL_RUNS as unknown as RunRecord[];
+          const interceptions = mod.DEMO_INTERCEPTIONS as unknown as WatcherVerdict[];
+          setDemoSessions(freshSessions);
+          setDemoRuns(runs);
+          setDemoInterceptions(interceptions);
+        } catch (e) {
+          console.warn('Failed loading demo fixtures dynamically:', e);
+        }
+      } else {
+        setDemoSessions([]);
+        setDemoRuns([]);
+        setDemoInterceptions([]);
+      }
+    };
+
+    syncDemoState();
+    window.addEventListener('hashchange', syncDemoState);
+    window.addEventListener('popstate', syncDemoState);
+    return () => {
+      window.removeEventListener('hashchange', syncDemoState);
+      window.removeEventListener('popstate', syncDemoState);
+    };
+  }, []);
 
 
   // Persistent client-side tombstone set for deleted runs
@@ -267,18 +305,16 @@ export function App() {
         fetch('/api/watcher/interceptions?limit=40').catch(() => null),
       ]);
 
-      let isDemo = isDemoSurface();
+      const demoActive = isDemoSurface();
+      setIsDemo(demoActive);
+      setIsDemoSeed(demoActive);
       if (healthRes && healthRes.ok) {
         setServerConnected(true);
-        setIsDemoSeed(isDemo);
       } else {
-        // Appwrite Sites static demo mode (seamless fallback when no backend is running)
-        setServerConnected(true);
-        setIsDemoSeed(true);
-        isDemo = true;
+        setServerConnected(false);
       }
 
-      if (!isDemo) {
+      if (!demoActive) {
         const meRes = await fetch('/api/auth/me').catch(() => null);
         if (meRes && meRes.ok) {
           const user = await meRes.json().catch(() => null);
@@ -290,22 +326,6 @@ export function App() {
           setCurrentUser(null);
           setShowAuthModal(true);
         }
-      }
-
-
-      if (sessionsRes && sessionsRes.ok) {
-        const sessData = await sessionsRes.json();
-        if (Array.isArray(sessData)) {
-          if (isDemo && sessData.length === 0) {
-            setDiscoveredSessions(getFreshDemoSessions() as unknown as any[]);
-          } else {
-            setDiscoveredSessions(sessData);
-          }
-        }
-      } else if (isDemo) {
-        setDiscoveredSessions(getFreshDemoSessions() as unknown as any[]);
-      } else {
-        setDiscoveredSessions([]);
       }
 
       if (modelsRes && modelsRes.ok) {
@@ -337,61 +357,99 @@ export function App() {
         }
       }
 
-      if (runsRes && runsRes.ok) {
-        const data: RunRecord[] = await runsRes.json();
-        const activeOnly = data
-          .filter((r) => !deletedRunIdsRef.current.has(r.run_id))
-          .map((r) => {
-            const rev = runRevisionsRef.current[r.run_id];
-            return rev ? { ...r, ...rev } : r;
-          });
-
-        if (isDemo && activeOnly.length === 0) {
-          setRunsHistory(DEMO_EVAL_RUNS as unknown as RunRecord[]);
-        } else {
-          setRunsHistory(activeOnly);
+      if (demoActive) {
+        let currentDemoSessions = demoSessions;
+        let currentDemoRuns = demoRuns;
+        let currentDemoInterceptions = demoInterceptions;
+        if (currentDemoSessions.length === 0) {
+          try {
+            const mod = await import('./data/demoFixtures');
+            currentDemoSessions = mod.getFreshDemoSessions() as unknown as any[];
+            currentDemoRuns = mod.DEMO_EVAL_RUNS as unknown as RunRecord[];
+            currentDemoInterceptions = mod.DEMO_INTERCEPTIONS as unknown as WatcherVerdict[];
+            setDemoSessions(currentDemoSessions);
+            setDemoRuns(currentDemoRuns);
+            setDemoInterceptions(currentDemoInterceptions);
+          } catch (e) {
+            console.warn('Failed dynamic import of demo fixtures:', e);
+          }
         }
-      } else if (isDemo) {
-        setRunsHistory(DEMO_EVAL_RUNS as unknown as RunRecord[]);
-      } else {
-        setRunsHistory([]);
-      }
 
-      if (findingsRes && findingsRes.ok) {
-        const findingsData: FindingRecord[] = await findingsRes.json();
-        if (findingsData.length > 0) {
-          setFindings(findingsData);
-        } else if (isDemo) {
-          setFindings(DEMO_INTERCEPTIONS as unknown as any[]);
+        if (sessionsRes && sessionsRes.ok) {
+          const sessData = await sessionsRes.json();
+          setDiscoveredSessions(Array.isArray(sessData) && sessData.length > 0 ? sessData : currentDemoSessions);
+        } else {
+          setDiscoveredSessions(currentDemoSessions);
+        }
+
+        if (runsRes && runsRes.ok) {
+          const data: RunRecord[] = await runsRes.json();
+          const activeOnly = Array.isArray(data)
+            ? data
+                .filter((r) => !deletedRunIdsRef.current.has(r.run_id))
+                .map((r) => {
+                  const rev = runRevisionsRef.current[r.run_id];
+                  return rev ? { ...r, ...rev } : r;
+                })
+            : [];
+          setRunsHistory(activeOnly.length > 0 ? activeOnly : currentDemoRuns);
+        } else {
+          setRunsHistory(currentDemoRuns);
+        }
+
+        if (findingsRes && findingsRes.ok) {
+          const findingsData: FindingRecord[] = await findingsRes.json();
+          setFindings(Array.isArray(findingsData) && findingsData.length > 0 ? findingsData : (currentDemoInterceptions as unknown as any[]));
+        } else {
+          setFindings(currentDemoInterceptions as unknown as any[]);
+        }
+
+        if (interceptRes && interceptRes.ok) {
+          const rows: WatcherVerdict[] = await interceptRes.json();
+          setLiveInterceptions(Array.isArray(rows) && rows.length > 0 ? rows : currentDemoInterceptions);
+        } else {
+          setLiveInterceptions(currentDemoInterceptions);
+        }
+      } else {
+        // LIVE ROUTE: Keep API results or clean empty state
+        if (sessionsRes && sessionsRes.ok) {
+          const sessData = await sessionsRes.json();
+          setDiscoveredSessions(Array.isArray(sessData) ? sessData : []);
+        } else {
+          setDiscoveredSessions([]);
+        }
+
+        if (runsRes && runsRes.ok) {
+          const data: RunRecord[] = await runsRes.json();
+          const activeOnly = Array.isArray(data)
+            ? data
+                .filter((r) => !deletedRunIdsRef.current.has(r.run_id))
+                .map((r) => {
+                  const rev = runRevisionsRef.current[r.run_id];
+                  return rev ? { ...r, ...rev } : r;
+                })
+            : [];
+          setRunsHistory(activeOnly);
+        } else {
+          setRunsHistory([]);
+        }
+
+        if (findingsRes && findingsRes.ok) {
+          const findingsData: FindingRecord[] = await findingsRes.json();
+          setFindings(Array.isArray(findingsData) ? findingsData : []);
         } else {
           setFindings([]);
         }
-      } else if (isDemo) {
-        setFindings(DEMO_INTERCEPTIONS as unknown as any[]);
-      } else {
-        setFindings([]);
-      }
 
-      if (interceptRes && interceptRes.ok) {
-        const rows: WatcherVerdict[] = await interceptRes.json();
-        if (Array.isArray(rows) && rows.length > 0) {
-          const filteredRows = isDemo
-            ? rows
-            : rows.filter((r) => !(r.session_id || '').includes('demo') && !(r.session_id || '').startsWith('demo-'));
-          if (isDemo && filteredRows.length === 0) {
-            setLiveInterceptions(DEMO_INTERCEPTIONS as unknown as any[]);
-          } else {
-            setLiveInterceptions(filteredRows);
-          }
-        } else if (isDemo) {
-          setLiveInterceptions(DEMO_INTERCEPTIONS as unknown as any[]);
+        if (interceptRes && interceptRes.ok) {
+          const rows: WatcherVerdict[] = await interceptRes.json();
+          const filteredRows = Array.isArray(rows)
+            ? rows.filter((r) => !(r.session_id || '').includes('demo') && !(r.session_id || '').startsWith('demo-'))
+            : [];
+          setLiveInterceptions(filteredRows);
         } else {
           setLiveInterceptions([]);
         }
-      } else if (isDemo) {
-        setLiveInterceptions(DEMO_INTERCEPTIONS as unknown as any[]);
-      } else {
-        setLiveInterceptions([]);
       }
 
       if (watcherCfgRes && watcherCfgRes.ok) {
@@ -445,9 +503,10 @@ export function App() {
 
   // Helper to sync route into URL hash with browser history push
   const setRoute = (hashPath: string, replace: boolean = false) => {
-
+    const isDemo = isDemoSurface();
     const clean = hashPath.replace(/^#\/?/, '').trim();
-    const formatted = `#${clean}`;
+    const prefix = isDemo && window.location.hash.startsWith('#/demo') ? 'demo/' : '';
+    const formatted = `#${prefix}${clean.replace(/^demo\/?/, '')}`;
     if (window.location.hash !== formatted) {
       if (replace) {
         window.location.replace(formatted);
@@ -468,6 +527,12 @@ export function App() {
         const parts = rawHash.split('?');
         basePath = parts[0];
         queryStr = parts.slice(1).join('?');
+      }
+
+      if (basePath.startsWith('demo/')) {
+        basePath = basePath.slice(5);
+      } else if (basePath === 'demo') {
+        basePath = '';
       }
 
       const params = new URLSearchParams(queryStr);
@@ -1085,7 +1150,7 @@ export function App() {
 
             <div className="mx-6 mt-3 p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-center justify-between shadow-xs shrink-0">
               <div className="flex items-center gap-2">
-                <IonIcon icon={alertCircleOutline} className="text-amber-600 text-base flex-shrink-0" />
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
                 <span>
                   <strong>Backend Server Offline:</strong> Benchmark harness API is unreachable. Start the backend server on port 8000:
                 </span>
@@ -1110,6 +1175,7 @@ export function App() {
                 onNavigateToRuns={() => setRoute('runs')}
                 onNavigateToFirewall={() => setRoute('control')}
                 isDemoSeed={isDemoSeed}
+                demoSessions={demoSessions}
               />
             )}
 
@@ -1119,6 +1185,7 @@ export function App() {
                 initialSessionId={selectedSessionId}
                 isDemoSeed={isDemoSeed}
                 isDemo={isDemo}
+                demoSessions={demoSessions}
                 onBack={() => {
                   if (window.history.length > 1) {
                     window.history.back();
@@ -1382,7 +1449,7 @@ export function App() {
                           disabled={!selectedTaskId || !serverConnected}
                           className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#111827] hover:bg-black text-white text-xs font-bold transition-all shadow-xs disabled:opacity-50 cursor-pointer"
                         >
-                          <IonIcon icon={playSharp} className="text-xs" />
+                          <Play className="w-3.5 h-3.5 fill-current" />
                           <span>Launch Evaluation</span>
                         </button>
                       </div>

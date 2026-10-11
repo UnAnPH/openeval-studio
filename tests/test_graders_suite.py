@@ -129,4 +129,3 @@ def test_per_user_grader_prompt_customization_and_isolation():
     reset_grader = store.reset_grader_definition("CredentialsGrader", user_id=user_a)
     assert reset_grader is not None
     assert reset_grader.c3_definition == b_grader.c3_definition
-
