@@ -25,7 +25,6 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
 from engine.approval_policy import (
-    WatcherConfig,
     WatcherVerdict,
     evaluate_action_safety,
     global_watcher_engine,
@@ -59,6 +58,7 @@ from server.inspect_loader import list_inspect_run_records
 from server.log import setup_logger
 from server.request_context import RequestIdMiddleware
 from server.routes.watcher_gate import router as watcher_gate_router
+from server.routes.watcher_policy import router as watcher_policy_router
 from server.store import RunRecord, global_run_store
 from server.watcher_store import get_watcher_store
 
@@ -256,6 +256,7 @@ app.add_middleware(_AuthMiddleware)
 app.add_middleware(RequestIdMiddleware)
 app.include_router(auth_router)
 app.include_router(watcher_gate_router)
+app.include_router(watcher_policy_router)
 
 
 class TaskSummary(BaseModel):
@@ -394,49 +395,6 @@ def _is_interception_candidate(item: Any) -> bool:
         or "lockout" in reason
         or "blacklist" in reason
     )
-
-
-@app.get("/api/watcher/config", response_model=WatcherConfig)
-async def get_watcher_config() -> WatcherConfig:
-    """Get Watcher mode settings for active user. Thresholds for deny/escalate live in /api/v1/watcher/policy."""
-    return get_watcher_store().get_user_config()
-
-
-@app.get("/api/v1/watcher/config", response_model=WatcherConfig)
-async def get_watcher_config_v1() -> WatcherConfig:
-    """v1 alias for mode config (same handler backing as /api/watcher/config)."""
-    return await get_watcher_config()
-
-
-@app.get("/api/v1/watcher/analyzer")
-async def watcher_analyzer_lite() -> dict[str, Any]:
-    """Analyzer-lite: org-level blocked/escalated counts from WatcherStore."""
-    store = get_watcher_store()
-    overview = store.get_analytics_overview()
-    return {
-        "org_id": "default_org",
-        "session_count": overview.get("total_sessions", 0),
-        "blocked_decisions": overview.get("blocked_incidents", 0),
-        "escalated_decisions": overview.get("escalated_count", 0),
-        "fleet": overview,
-    }
-
-
-@app.post("/api/watcher/config", response_model=WatcherConfig)
-async def update_watcher_config(new_config: WatcherConfig) -> WatcherConfig:
-    """Update runtime mode (enforce/observe/paused) for active user. Float threshold fields are ignored for gating."""
-    store = get_watcher_store()
-    updated = store.update_user_config(new_config)
-    cfg_dict = updated.model_dump()
-    cfg_dict["user_id"] = current_user_id.get()
-    await broadcast_watcher_event("config_update", cfg_dict)
-    return updated
-
-
-@app.post("/api/v1/watcher/config", response_model=WatcherConfig)
-async def update_watcher_config_v1(new_config: WatcherConfig) -> WatcherConfig:
-    """v1 alias for mode config updates."""
-    return await update_watcher_config(new_config)
 
 
 def _normalize_cmd_for_match(s: str) -> str:
@@ -2575,20 +2533,6 @@ class ResolveSessionDecisionResponse(BaseModel):
     review: ReviewRecord
 
 
-class RuleUpdatePayload(BaseModel):
-    rule_name: str
-    action: Literal["allow", "triage", "human", "deny", "off"]
-
-
-class ThresholdUpdatePayload(BaseModel):
-    tool_name: str
-    auto_approve: bool = False
-    escalate_ge: int | None = None
-    auto_deny_ge: int | None = None
-    always_escalate: bool = False
-    auto_approve_le: int = 3
-
-
 @app.get("/api/v1/analyzer/summary")
 @app.get("/api/analyzer/summary")
 async def get_analyzer_summary() -> dict[str, Any]:
@@ -2729,66 +2673,6 @@ async def stream_watcher_session(session_id: str) -> StreamingResponse:
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
     )
-
-
-@app.get("/api/v1/watcher/policy")
-async def get_watcher_policy() -> dict[str, Any]:
-    """Retrieve active policy configuration, 63 command rules, and tool thresholds."""
-    store = get_watcher_store()
-    return store.get_default_policy().model_dump()
-
-
-@app.post("/api/v1/watcher/policy/reset")
-async def reset_watcher_policy() -> dict[str, Any]:
-    """Reset command rules and tool thresholds to built-in Watcher defaults."""
-    store = get_watcher_store()
-    policy = store.reset_policy_to_defaults()
-    return {"status": "reset", "policy": policy.model_dump()}
-
-
-@app.post("/api/v1/watcher/policy/rule")
-async def update_rule(payload: RuleUpdatePayload) -> dict[str, Any]:
-    """Update action on a specific command rule."""
-    store = get_watcher_store()
-    ok = store.update_command_rule(payload.rule_name, payload.action)
-    if not ok:
-        raise HTTPException(status_code=404, detail=f"Rule '{payload.rule_name}' not found")
-    return {"status": "updated", "rule_name": payload.rule_name, "action": payload.action}
-
-
-@app.post("/api/v1/watcher/policy/threshold")
-async def update_threshold(payload: ThresholdUpdatePayload) -> dict[str, Any]:
-    """Update threshold limits for a tool."""
-    store = get_watcher_store()
-    ok = store.update_tool_threshold(
-        tool_name=payload.tool_name,
-        auto_approve=payload.auto_approve,
-        escalate_ge=payload.escalate_ge,
-        auto_deny_ge=payload.auto_deny_ge,
-        always_escalate=payload.always_escalate,
-        auto_approve_le=payload.auto_approve_le,
-    )
-    if not ok:
-        raise HTTPException(
-            status_code=404, detail=f"Tool '{payload.tool_name}' not found in thresholds"
-        )
-    return {"status": "updated", "threshold": payload.model_dump()}
-
-
-@app.post("/api/v1/watcher/policy/thresholds")
-async def update_thresholds(payloads: list[ThresholdUpdatePayload]) -> dict[str, Any]:
-    """Bulk update threshold limits for multiple tools."""
-    store = get_watcher_store()
-    for p in payloads:
-        store.update_tool_threshold(
-            tool_name=p.tool_name,
-            auto_approve=p.auto_approve,
-            escalate_ge=p.escalate_ge,
-            auto_deny_ge=p.auto_deny_ge,
-            always_escalate=p.always_escalate,
-            auto_approve_le=p.auto_approve_le,
-        )
-    return {"status": "updated", "count": len(payloads)}
 
 
 @app.get("/api/v1/watcher/doctor")
