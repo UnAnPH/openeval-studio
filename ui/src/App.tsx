@@ -26,7 +26,7 @@ import { RunDetailView } from './components/RunDetailView';
 import { BenchmarksList } from './components/BenchmarksList';
 import { CompareTestResults } from './components/CompareTestResults';
 import { DEFAULT_MODELS, DEFAULT_TASKS } from './data/defaults';
-import { DEMO_SESSIONS, DEMO_EVAL_RUNS, DEMO_INTERCEPTIONS } from './data/demoFixtures';
+import { DEMO_EVAL_RUNS, DEMO_INTERCEPTIONS, getFreshDemoSessions } from './data/demoFixtures';
 import {
   AgentStep,
   FindingRecord,
@@ -296,17 +296,14 @@ export function App() {
       if (sessionsRes && sessionsRes.ok) {
         const sessData = await sessionsRes.json();
         if (Array.isArray(sessData)) {
-          const filtered = isDemo
-            ? sessData.filter((s: any) => (s.session_id || s.id || '').includes('demo') || (s.session_id || s.id || '').startsWith('demo-'))
-            : sessData;
-          if (isDemo && filtered.length === 0) {
-            setDiscoveredSessions(DEMO_SESSIONS as unknown as any[]);
+          if (isDemo && sessData.length === 0) {
+            setDiscoveredSessions(getFreshDemoSessions() as unknown as any[]);
           } else {
-            setDiscoveredSessions(filtered);
+            setDiscoveredSessions(sessData);
           }
         }
       } else if (isDemo) {
-        setDiscoveredSessions(DEMO_SESSIONS as unknown as any[]);
+        setDiscoveredSessions(getFreshDemoSessions() as unknown as any[]);
       } else {
         setDiscoveredSessions([]);
       }

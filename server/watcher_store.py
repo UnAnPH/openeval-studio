@@ -345,6 +345,10 @@ class WatcherStore:
         limit: int = 100,
     ) -> list[Session]:
         """List sessions for the current user, optionally filtered."""
+        if current_user_slug.get() == "demo":
+            from server.demo_seed import ensure_demo_timeline_fresh
+            ensure_demo_timeline_fresh(self)
+
         with SessionLocal() as db:
             user_id = get_current_user_id(db)
             query = "SELECT payload FROM sessions WHERE user_id = :uid"
@@ -476,6 +480,13 @@ class WatcherStore:
 
     def get_session_decisions(self, session_id: str) -> list[ReviewRecord]:
         """Get all review decisions for a given session."""
+        with self._lock:
+            if session_id in self._reviews and self._reviews[session_id]:
+                return list(self._reviews[session_id])
+            session = self._sessions.get(session_id)
+            if session and session.trajectory and session.trajectory.reviews:
+                return list(session.trajectory.reviews)
+
         with SessionLocal() as db:
             user_id = get_current_user_id(db)
             rows = db.execute(

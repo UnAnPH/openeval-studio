@@ -7,7 +7,7 @@ import {
   timeOutline,
 } from 'ionicons/icons';
 import { FindingRecord, RunRecord, TaskSummary } from '../types';
-import { DEMO_SESSIONS } from '../data/demoFixtures';
+import { getFreshDemoSessions } from '../data/demoFixtures';
 
 interface DashboardOverviewProps {
   runs?: RunRecord[];
@@ -55,7 +55,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   const [dateFilter, setDateFilter] = useState<'today' | 'this_week' | 'last_week' | 'this_month' | 'last_month'>('this_month');
   const isDemo = Boolean(isDemoSeed || (typeof window !== 'undefined' && (window.location.pathname.startsWith('/demo') || window.location.hash.startsWith('#/demo'))));
   const [watcherSessions, setWatcherSessions] = useState<RawSession[]>(() =>
-    isDemo ? (DEMO_SESSIONS as unknown as RawSession[]) : []
+    isDemo ? (getFreshDemoSessions() as unknown as RawSession[]) : []
   );
 
   // Fetch monitored watcher sessions (same source as Safety → Sessions)
@@ -65,20 +65,17 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         const res = await fetch('/api/v1/watcher/sessions');
         if (res.ok) {
           const data: RawSession[] = await res.json();
-          const filtered = isDemo
-            ? data.filter((s) => (s.session_id || s.id || '').includes('demo') || (s.session_id || s.id || '').startsWith('demo-'))
-            : data;
-          if (isDemo && filtered.length === 0) {
-            setWatcherSessions(DEMO_SESSIONS as unknown as RawSession[]);
+          if (isDemo && data.length === 0) {
+            setWatcherSessions(getFreshDemoSessions() as unknown as RawSession[]);
           } else {
-            setWatcherSessions(filtered);
+            setWatcherSessions(data);
           }
         } else if (isDemo) {
-          setWatcherSessions(DEMO_SESSIONS as unknown as RawSession[]);
+          setWatcherSessions(getFreshDemoSessions() as unknown as RawSession[]);
         }
       } catch (err) {
         if (isDemo) {
-          setWatcherSessions(DEMO_SESSIONS as unknown as RawSession[]);
+          setWatcherSessions(getFreshDemoSessions() as unknown as RawSession[]);
         } else {
           console.warn('Failed to fetch watcher sessions:', err);
         }
@@ -180,7 +177,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
 
     if (dateFilter === 'this_week') {
-      const day = now.getDay();
+      const day = (now.getDay() + 6) % 7; // ISO week: Monday = 0 ... Sunday = 6
       const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - day, 0, 0, 0, 0);
       const end = todayEnd;
       const prevEnd = new Date(start.getTime() - 1);
@@ -189,7 +186,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     }
 
     if (dateFilter === 'last_week') {
-      const day = now.getDay();
+      const day = (now.getDay() + 6) % 7;
       const currentWeekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - day, 0, 0, 0, 0);
       const end = new Date(currentWeekStart.getTime() - 1);
       const start = new Date(end.getFullYear(), end.getMonth(), end.getDate() - 6, 0, 0, 0, 0);
@@ -318,12 +315,13 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     for (let i = 0; i <= daysCount; i++) {
       const cur = new Date(rangeConfig.start.getTime() + i * 24 * 60 * 60 * 1000);
       if (cur.getTime() > endMs && i > 0) break;
-      const dateIso = cur.toISOString().split('T')[0];
+      const dayStart = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate(), 0, 0, 0, 0).getTime();
+      const dayEnd = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate(), 23, 59, 59, 999).getTime();
       const dateLabel = cur.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
       const daySessions = currentSessions.filter((s) => {
-        const ts = sessionObservedAt(s);
-        return ts && ts.startsWith(dateIso);
+        const t = parseTimestamp(sessionObservedAt(s));
+        return t >= dayStart && t <= dayEnd;
       });
 
       const dayCritical = daySessions.filter(
@@ -331,7 +329,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       );
 
       points.push({
-        dateIso,
+        dateIso: dateLabel,
         dateLabel,
         total: daySessions.length,
         critical: dayCritical.length,

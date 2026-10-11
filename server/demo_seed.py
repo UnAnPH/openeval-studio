@@ -30,54 +30,66 @@ def is_demo_seed_enabled() -> bool:
 from datetime import UTC, datetime, timedelta
 
 
+_last_demo_refresh: float = 0.0
+
+
 def generate_rolling_timeline(now: datetime | None = None) -> list[datetime]:
     """Generate dynamic relative timestamps so demo data covers today, this week, last week, this month, and last month."""
     if now is None:
         now = datetime.now(UTC)
 
-    # 1. Today (5 sessions)
+    today_start = datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=UTC)
+
+    # 1. Today (7 sessions) - guaranteed >= today_start and <= now
+    hours_since_start = max(0.5, (now - today_start).total_seconds() / 3600.0)
     today_slots = [
-        now - timedelta(hours=1, minutes=15),
-        now - timedelta(hours=3, minutes=20),
-        now - timedelta(hours=5, minutes=45),
-        now - timedelta(hours=7, minutes=30),
-        now - timedelta(hours=9, minutes=50),
+        max(today_start + timedelta(minutes=10), now - timedelta(minutes=15)),
+        max(today_start + timedelta(minutes=25), now - timedelta(minutes=48)),
+        max(today_start + timedelta(minutes=40), now - timedelta(hours=2, minutes=10)),
+        today_start + timedelta(hours=min(14.0, max(0.2, hours_since_start * 0.85))),
+        today_start + timedelta(hours=min(10.0, max(0.2, hours_since_start * 0.65))),
+        today_start + timedelta(hours=min(6.0, max(0.2, hours_since_start * 0.45))),
+        today_start + timedelta(hours=min(2.5, max(0.1, hours_since_start * 0.2))),
     ]
+    today_slots = sorted(list(set(today_slots)), reverse=True)
 
-    # 2. This week (prior days)
-    js_day = (now.weekday() + 1) % 7
-    curr_week_start = datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=UTC) - timedelta(days=js_day)
+    # 2. This week (prior days) - ISO week (Monday = 0, Sunday = 6)
+    iso_day = now.weekday()  # 0 = Mon, ..., 6 = Sun
+    curr_week_start = today_start - timedelta(days=iso_day)
     this_week_slots: list[datetime] = []
-    if js_day > 0:
-        for d in range(1, min(js_day + 1, 7)):
-            this_week_slots.append(now - timedelta(days=d, hours=3))
-    while len(this_week_slots) < 6:
-        this_week_slots.append(now - timedelta(hours=12 + len(this_week_slots) * 2))
+    for d in range(1, iso_day + 1):
+        day_date = today_start - timedelta(days=d)
+        this_week_slots.append(day_date + timedelta(hours=14, minutes=20))
+        this_week_slots.append(day_date + timedelta(hours=10, minutes=45))
 
-    # 3. Last week (strictly inside last week)
-    last_week_end = curr_week_start - timedelta(microseconds=1)
+    # If early in the week (Mon/Tue), ensure there are extra slots in preceding days
+    while len(this_week_slots) < 6:
+        extra_d = len(this_week_slots) + 1
+        this_week_slots.append(curr_week_start - timedelta(days=extra_d, hours=4))
+
+    # 3. Last week (strictly Monday to Sunday of previous week)
+    last_week_start = curr_week_start - timedelta(days=7)
     last_week_slots = [
-        last_week_end - timedelta(days=0, hours=5),
-        last_week_end - timedelta(days=1, hours=8),
-        last_week_end - timedelta(days=2, hours=4),
-        last_week_end - timedelta(days=3, hours=9),
-        last_week_end - timedelta(days=4, hours=6),
-        last_week_end - timedelta(days=5, hours=3),
+        last_week_start + timedelta(days=6, hours=16, minutes=30),
+        last_week_start + timedelta(days=5, hours=11, minutes=15),
+        last_week_start + timedelta(days=4, hours=15, minutes=40),
+        last_week_start + timedelta(days=3, hours=9, minutes=20),
+        last_week_start + timedelta(days=2, hours=14, minutes=10),
+        last_week_start + timedelta(days=1, hours=10, minutes=50),
+        last_week_start + timedelta(days=0, hours=13, minutes=25),
     ]
 
-    # 4. Earlier this month
+    # 4. Earlier this month (before last week, within current month)
     first_of_month = datetime(now.year, now.month, 1, 0, 0, 0, tzinfo=UTC)
+    this_month_early_slots: list[datetime] = []
     if now.day > 7:
+        for d in [2, 4, 6]:
+            if d < now.day - 7:
+                this_month_early_slots.append(datetime(now.year, now.month, d, 14, 0, tzinfo=UTC))
+    if not this_month_early_slots:
         this_month_early_slots = [
-            datetime(now.year, now.month, 2, 14, 0, tzinfo=UTC),
-            datetime(now.year, now.month, 4, 11, 30, tzinfo=UTC),
-            datetime(now.year, now.month, 6, 16, 45, tzinfo=UTC),
-        ]
-    else:
-        this_month_early_slots = [
-            curr_week_start + timedelta(hours=2),
-            curr_week_start + timedelta(hours=6),
-            curr_week_start + timedelta(hours=10),
+            last_week_start - timedelta(days=2, hours=3),
+            last_week_start - timedelta(days=4, hours=7),
         ]
 
     # 5. Last month (strictly inside last month)
@@ -108,6 +120,100 @@ def generate_rolling_timeline(now: datetime | None = None) -> list[datetime]:
         + last_month_slots
         + two_months_slots
     )
+
+
+def refresh_demo_timeline(
+    watcher_store: "WatcherStore | None" = None,
+    run_store: "RunStore | None" = None,
+    now: datetime | None = None,
+) -> None:
+    """Dynamically re-anchor timestamps of in-memory demo fixtures to current rolling time."""
+    from server.store import global_run_store
+    from server.watcher_store import get_watcher_store
+
+    if now is None:
+        now = datetime.now(UTC)
+
+    ws = watcher_store or get_watcher_store()
+    rs = run_store or global_run_store
+    timeline = generate_rolling_timeline(now)
+
+    with ws._lock:
+        demo_sessions = [
+            s for s in ws._sessions.values()
+            if s.org_id == "demo" or (s.session_id and not s.session_id.startswith("eval-"))
+        ]
+    if not demo_sessions:
+        seed_demo_data(ws, rs)
+        return
+
+    with ws._lock:
+        for idx, session in enumerate(demo_sessions):
+            target_dt = timeline[idx % len(timeline)]
+            session.created_at = target_dt.isoformat()
+            session.updated_at = (target_dt + timedelta(minutes=5)).isoformat()
+            if session.trajectory:
+                for m_idx, msg in enumerate(session.trajectory.messages):
+                    msg.timestamp = target_dt.timestamp() + m_idx * 2.0
+                for r_idx, rev in enumerate(session.trajectory.reviews):
+                    rev.timestamp = (target_dt + timedelta(seconds=r_idx * 2 + 1)).isoformat()
+                ws._trajectories[session.session_id] = session.trajectory
+                ws._reviews[session.session_id] = session.trajectory.reviews
+
+    for idx, run in enumerate(rs._runs.values()):
+        if run.org_id == "demo" or (run.session_id and not run.session_id.startswith("eval-")):
+            target_dt = timeline[idx % len(timeline)]
+            run.created_at = target_dt.isoformat()
+            run.updated_at = (target_dt + timedelta(minutes=5)).isoformat()
+
+    non_demo_verdicts = [
+        v for v in global_watcher_engine._interception_history
+        if getattr(v, "user_id", None) != 1 and getattr(v, "agent_id", "") not in ("inspect_eval", "antigravity", "claude_code", "cursor")
+    ]
+    global_watcher_engine._interception_history.clear()
+    global_watcher_engine._interception_history.extend(non_demo_verdicts)
+
+    with ws._lock:
+        for s in demo_sessions:
+            if not s.trajectory:
+                continue
+                for rev in s.trajectory.reviews:
+                    if rev.decision in ("block", "deny", "escalate"):
+                        verdict = WatcherVerdict(
+                            decision="deny" if rev.decision in ("block", "deny") else "escalate",
+                            stage="stage_2_deterministic",
+                            reason=rev.explanation or f"Policy rule violation: {rev.rule_name}",
+                            risk_score=(rev.score / 10.0) if rev.score else 0.9,
+                            rule_violation_tag=rev.rule_name,
+                            action_preview=rev.tool_input,
+                            agent_id=s.agent_type,
+                            session_id=s.session_id,
+                            review_id=rev.id,
+                            full_command=rev.tool_input,
+                            tool_result="Execution blocked by OpenEval runtime gate.",
+                            threat_category=rev.threat_category,
+                            timestamp=rev.timestamp or s.created_at,
+                            is_safe=False,
+                            mode_applied="enforce",
+                            user_id=1,
+                        )
+                        global_watcher_engine.record_interception(verdict)
+
+
+def ensure_demo_timeline_fresh(
+    watcher_store: "WatcherStore | None" = None,
+    run_store: "RunStore | None" = None,
+    force: bool = False,
+) -> None:
+    """Ensure demo fixtures have rolling timestamps matching the current calendar day."""
+    global _last_demo_refresh
+    now = datetime.now(UTC)
+    now_ts = now.timestamp()
+    if not force and _last_demo_refresh > 0:
+        if now_ts - _last_demo_refresh < 300:  # 5 minutes
+            return
+    refresh_demo_timeline(watcher_store=watcher_store, run_store=run_store, now=now)
+    _last_demo_refresh = now_ts
 
 
 def seed_demo_data(

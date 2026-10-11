@@ -6,54 +6,62 @@
 function generateTimeline(): number[] {
   const now = Date.now();
   const d = new Date(now);
-  const jsDay = d.getDay(); // 0 = Sun, 1 = Mon...
+  const todayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0).getTime();
+  const hoursSinceStart = Math.max(0.5, (now - todayStart) / 3600000);
 
-  // 1. Today (5 sessions)
+  // 1. Today (7 sessions) - strictly >= todayStart and <= now
   const today = [
-    now - 1.25 * 3600 * 1000,
-    now - 3.33 * 3600 * 1000,
-    now - 5.75 * 3600 * 1000,
-    now - 7.5 * 3600 * 1000,
-    now - 9.8 * 3600 * 1000,
+    Math.max(todayStart + 10 * 60 * 1000, now - 15 * 60 * 1000),
+    Math.max(todayStart + 25 * 60 * 1000, now - 48 * 60 * 1000),
+    Math.max(todayStart + 40 * 60 * 1000, now - (2 * 3600 + 10 * 60) * 1000),
+    todayStart + Math.min(14, Math.max(0.2, hoursSinceStart * 0.85)) * 3600 * 1000,
+    todayStart + Math.min(10, Math.max(0.2, hoursSinceStart * 0.65)) * 3600 * 1000,
+    todayStart + Math.min(6, Math.max(0.2, hoursSinceStart * 0.45)) * 3600 * 1000,
+    todayStart + Math.min(2.5, Math.max(0.1, hoursSinceStart * 0.2)) * 3600 * 1000,
   ];
 
-  // 2. This week (prior days)
-  const currWeekStart = new Date(d.getFullYear(), d.getMonth(), d.getDate() - jsDay, 0, 0, 0, 0).getTime();
+  // 2. This week (prior days) - ISO week (Monday = 0, Sunday = 6)
+  const isoDay = (d.getDay() + 6) % 7; // Mon=0 ... Sun=6
+  const currWeekStart = todayStart - isoDay * 24 * 3600 * 1000;
   const thisWeek: number[] = [];
-  if (jsDay > 0) {
-    for (let i = 1; i <= Math.min(jsDay, 6); i++) {
-      thisWeek.push(now - i * 24 * 3600 * 1000 - 3 * 3600 * 1000);
-    }
-  }
-  while (thisWeek.length < 6) {
-    thisWeek.push(now - (12 + thisWeek.length * 2) * 3600 * 1000);
+
+  for (let i = 1; i <= isoDay; i++) {
+    const dayDate = todayStart - i * 24 * 3600 * 1000;
+    thisWeek.push(dayDate + (14 * 3600 + 20 * 60) * 1000);
+    thisWeek.push(dayDate + (10 * 3600 + 45 * 60) * 1000);
   }
 
-  // 3. Last week (strictly inside last week)
-  const lastWeekEnd = currWeekStart - 1;
+  while (thisWeek.length < 6) {
+    const extraD = thisWeek.length + 1;
+    thisWeek.push(currWeekStart - extraD * 24 * 3600 * 1000 - 4 * 3600 * 1000);
+  }
+
+  // 3. Last week (strictly Monday to Sunday of previous week)
+  const lastWeekStart = currWeekStart - 7 * 24 * 3600 * 1000;
   const lastWeek: number[] = [
-    lastWeekEnd - 5 * 3600 * 1000,
-    lastWeekEnd - 1 * 24 * 3600 * 1000 - 8 * 3600 * 1000,
-    lastWeekEnd - 2 * 24 * 3600 * 1000 - 4 * 3600 * 1000,
-    lastWeekEnd - 3 * 24 * 3600 * 1000 - 9 * 3600 * 1000,
-    lastWeekEnd - 4 * 24 * 3600 * 1000 - 6 * 3600 * 1000,
-    lastWeekEnd - 5 * 24 * 3600 * 1000 - 3 * 3600 * 1000,
+    lastWeekStart + 6 * 24 * 3600 * 1000 + (16 * 3600 + 30 * 60) * 1000,
+    lastWeekStart + 5 * 24 * 3600 * 1000 + (11 * 3600 + 15 * 60) * 1000,
+    lastWeekStart + 4 * 24 * 3600 * 1000 + (15 * 3600 + 40 * 60) * 1000,
+    lastWeekStart + 3 * 24 * 3600 * 1000 + (9 * 3600 + 20 * 60) * 1000,
+    lastWeekStart + 2 * 24 * 3600 * 1000 + (14 * 3600 + 10 * 60) * 1000,
+    lastWeekStart + 1 * 24 * 3600 * 1000 + (10 * 3600 + 50 * 60) * 1000,
+    lastWeekStart + 0 * 24 * 3600 * 1000 + (13 * 3600 + 25 * 60) * 1000,
   ];
 
   // 4. Earlier this month
   const firstOfMonth = new Date(d.getFullYear(), d.getMonth(), 1, 0, 0, 0, 0).getTime();
   const thisMonthEarly: number[] = [];
   if (d.getDate() > 7) {
+    for (const dayNum of [2, 4, 6]) {
+      if (dayNum < d.getDate() - 7) {
+        thisMonthEarly.push(new Date(d.getFullYear(), d.getMonth(), dayNum, 14, 0).getTime());
+      }
+    }
+  }
+  if (thisMonthEarly.length === 0) {
     thisMonthEarly.push(
-      new Date(d.getFullYear(), d.getMonth(), 2, 14, 0).getTime(),
-      new Date(d.getFullYear(), d.getMonth(), 4, 11, 30).getTime(),
-      new Date(d.getFullYear(), d.getMonth(), 6, 16, 45).getTime()
-    );
-  } else {
-    thisMonthEarly.push(
-      currWeekStart + 2 * 3600 * 1000,
-      currWeekStart + 6 * 3600 * 1000,
-      currWeekStart + 10 * 3600 * 1000
+      lastWeekStart - 2 * 24 * 3600 * 1000 - 3 * 3600 * 1000,
+      lastWeekStart - 4 * 24 * 3600 * 1000 - 7 * 3600 * 1000
     );
   }
 
@@ -6940,57 +6948,68 @@ const RAW_EVALS: any[] = [
   }
 ];
 
-const timeline = generateTimeline();
+export function getFreshDemoSessions(): any[] {
+  const timeline = generateTimeline();
+  return RAW_SESSIONS.map((s, idx) => {
+    const ts = timeline[idx % timeline.length];
+    const iso = new Date(ts).toISOString();
+    return {
+      ...s,
+      created_at: iso,
+      updated_at: new Date(ts + 5 * 60 * 1000).toISOString(),
+      timestamp: iso,
+      trajectory: {
+        ...s.trajectory,
+        messages: (s.trajectory?.messages || []).map((m: any, mIdx: number) => ({
+          ...m,
+          timestamp: (ts + mIdx * 2000) / 1000,
+        })),
+        reviews: (s.trajectory?.reviews || []).map((r: any, rIdx: number) => ({
+          ...r,
+          timestamp: new Date(ts + (rIdx * 2 + 1) * 1000).toISOString(),
+        })),
+      },
+    };
+  });
+}
 
-export const DEMO_SESSIONS: any[] = RAW_SESSIONS.map((s, idx) => {
-  const ts = timeline[idx % timeline.length];
-  const iso = new Date(ts).toISOString();
-  return {
-    ...s,
-    created_at: iso,
-    updated_at: new Date(ts + 5 * 60 * 1000).toISOString(),
-    timestamp: iso,
-    trajectory: {
-      ...s.trajectory,
-      messages: (s.trajectory?.messages || []).map((m: any, mIdx: number) => ({
-        ...m,
-        timestamp: (ts + mIdx * 2000) / 1000,
-      })),
-      reviews: (s.trajectory?.reviews || []).map((r: any, rIdx: number) => ({
-        ...r,
-        timestamp: new Date(ts + (rIdx * 2 + 1) * 1000).toISOString(),
-      })),
-    },
-  };
-});
+export function getFreshDemoEvalRuns(): any[] {
+  const timeline = generateTimeline();
+  return RAW_EVALS.map((r, idx) => {
+    const ts = timeline[idx % timeline.length];
+    const iso = new Date(ts).toISOString();
+    return {
+      ...r,
+      created_at: iso,
+      updated_at: new Date(ts + 5 * 60 * 1000).toISOString(),
+      timestamp: iso,
+    };
+  });
+}
 
-export const DEMO_EVAL_RUNS: any[] = RAW_EVALS.map((r, idx) => {
-  const ts = timeline[idx % timeline.length];
-  const iso = new Date(ts).toISOString();
-  return {
-    ...r,
-    created_at: iso,
-    updated_at: new Date(ts + 5 * 60 * 1000).toISOString(),
-    timestamp: iso,
-  };
-});
+export function getFreshDemoInterceptions(): any[] {
+  const sessions = getFreshDemoSessions();
+  return sessions.flatMap((s) => {
+    const revs = s.trajectory?.reviews || [];
+    return revs
+      .filter((r: any) => r.decision === 'block' || r.decision === 'deny' || r.decision === 'escalate')
+      .map((r: any) => ({
+        agent_id: s.agent_type || 'agent',
+        session_id: s.session_id,
+        decision: r.decision === 'escalate' ? 'escalate' : 'deny',
+        reason: r.explanation || `Policy rule violation: ${r.rule_name || 'Firewall Gate'}`,
+        risk_score: r.score ? r.score / 10.0 : 0.95,
+        action_preview: r.tool_input || r.tool_name,
+        full_command: r.tool_input || r.tool_name,
+        rule_violation_tag: r.rule_name || 'Policy Rule Violation',
+        timestamp: r.timestamp || s.created_at,
+        threat_category: r.threat_category,
+        is_safe: false,
+        mode_applied: 'enforce',
+      }));
+  });
+}
 
-export const DEMO_INTERCEPTIONS: any[] = DEMO_SESSIONS.flatMap((s) => {
-  const revs = s.trajectory?.reviews || [];
-  return revs
-    .filter((r: any) => r.decision === 'block' || r.decision === 'deny' || r.decision === 'escalate')
-    .map((r: any) => ({
-      agent_id: s.agent_type || 'agent',
-      session_id: s.session_id,
-      decision: r.decision === 'escalate' ? 'escalate' : 'deny',
-      reason: r.explanation || `Policy rule violation: ${r.rule_name || 'Firewall Gate'}`,
-      risk_score: r.score ? r.score / 10.0 : 0.95,
-      action_preview: r.tool_input || r.tool_name,
-      full_command: r.tool_input || r.tool_name,
-      rule_violation_tag: r.rule_name || 'Policy Rule Violation',
-      timestamp: r.timestamp || s.created_at,
-      threat_category: r.threat_category,
-      is_safe: false,
-      mode_applied: 'enforce',
-    }));
-});
+export const DEMO_SESSIONS: any[] = getFreshDemoSessions();
+export const DEMO_EVAL_RUNS: any[] = getFreshDemoEvalRuns();
+export const DEMO_INTERCEPTIONS: any[] = getFreshDemoInterceptions();

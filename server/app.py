@@ -1123,13 +1123,6 @@ async def list_watcher_interceptions(
         if (v.user_id is None and current_user_slug.get() in ("owner", "demo"))
         or (v.user_id is not None and v.user_id == uid)
     ]
-    if current_user_slug.get() == "demo":
-        live = [
-            v
-            for v in live
-            if "demo" in str(v.get("session_id", ""))
-            or str(v.get("session_id", "")).startswith("demo-")
-        ]
     stored = _verdicts_from_store_reviews(limit=limit)
     # Prefer live order first, then fill from store without duping action+agent+decision
     seen: set[str] = set()
