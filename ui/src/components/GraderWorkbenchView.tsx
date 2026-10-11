@@ -519,9 +519,9 @@ export const GraderWorkbenchView: React.FC = () => {
         </div>
 
         {/* Right Column: Live Audit / Rubric Guide / Historical Benchmark (7 cols) */}
-        <div className="lg:col-span-7 flex flex-col gap-4">
+        <div className="lg:col-span-7 flex flex-col gap-4 min-w-0">
           {/* Right Mode Navigation Tabs */}
-          <div className="flex items-center justify-between bg-white p-2 rounded-2xl border border-border-subtle shadow-sm">
+          <div className="flex items-center justify-between bg-white p-2 rounded-2xl border border-border-subtle shadow-sm min-w-0">
             <div className="flex items-center gap-1">
               <button
                 onClick={() => setRightTab('live_audit')}
@@ -564,20 +564,20 @@ export const GraderWorkbenchView: React.FC = () => {
 
           {/* TAB 1: LIVE SESSION AUDIT */}
           {rightTab === 'live_audit' && (
-            <div className="bg-white p-5 rounded-2xl border border-border-subtle shadow-sm space-y-5 flex-1 flex flex-col">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-100">
-                <div>
-                  <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2">
-                    <IonIcon icon={sparklesOutline} className="text-indigo-600" />
+            <div className="bg-white p-5 rounded-2xl border border-border-subtle shadow-sm space-y-5 flex-1 flex flex-col min-w-0">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-100 min-w-0">
+                <div className="min-w-0">
+                  <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2 truncate">
+                    <IonIcon icon={sparklesOutline} className="text-indigo-600 shrink-0" />
                     Audit Monitored Agent Session
                   </h3>
-                  <p className="text-[11px] text-gray-500 mt-0.5">
+                  <p className="text-[11px] text-gray-500 mt-0.5 truncate">
                     Evaluate an active or completed session transcript against the {selectedGraderName} judge.
                   </p>
                 </div>
 
                 {/* Model Selector for live audit */}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                   <span className="text-[11px] text-gray-500 font-mono">Model:</span>
                   <select
                     value={selectedModel}
@@ -591,14 +591,14 @@ export const GraderWorkbenchView: React.FC = () => {
               </div>
 
               {/* Session Selector & Audit Action */}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 min-w-0">
                 <div
                   onClick={() => setIsPickerOpen(true)}
-                  className="flex-1 min-h-[41px] h-[41px] px-4 rounded-xl border border-gray-200 bg-gray-50/70 hover:bg-gray-100/80 transition-all cursor-pointer flex items-center justify-between gap-3 group shadow-2xs select-none"
+                  className="flex-1 min-w-0 min-h-[41px] h-[41px] px-3.5 sm:px-4 rounded-xl border border-gray-200 bg-gray-50/70 hover:bg-gray-100/80 transition-all cursor-pointer flex items-center justify-between gap-2.5 sm:gap-3 group shadow-2xs select-none"
                   title="Click to choose a monitored agent session"
                 >
                   {selectedSession ? (
-                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
                       {/* Agent Badge */}
                       <span className="px-2 py-0.5 rounded-md bg-dark-base text-white text-[10px] font-mono font-semibold shrink-0">
                         {selectedSession.agent_type === 'antigravity'
@@ -628,24 +628,24 @@ export const GraderWorkbenchView: React.FC = () => {
                       </span>
 
                       {/* Session Title & Info */}
-                      <div className="min-w-0 flex-1 flex items-center gap-2">
+                      <div className="min-w-0 flex-1 flex items-center gap-2 overflow-hidden">
                         <div className="text-xs font-bold text-gray-900 truncate">
                           {selectedSession.title || selectedSession.project_name || selectedSession.session_id}
                         </div>
-                        <div className="text-[10px] text-gray-400 font-mono truncate hidden md:inline">
+                        <div className="text-[10px] text-gray-400 font-mono truncate hidden 2xl:inline shrink-0">
                           id: {selectedSession.session_id.slice(0, 16)} · {selectedSession.trajectory?.messages?.length || 0} msgs · {selectedSession.trajectory?.tool_calls?.length || 0} tools
                         </div>
                       </div>
                     </div>
                   ) : (
-                    <div className="text-xs text-gray-500 font-medium">
+                    <div className="text-xs text-gray-500 font-medium truncate">
                       Select any monitored session transcript to audit...
                     </div>
                   )}
 
                   {/* Right-side Trigger Button */}
                   <div className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 group-hover:text-indigo-800 shrink-0 font-mono">
-                    <span>{selectedSession ? 'Change Session' : 'Browse Sessions'}</span>
+                    <span className="hidden sm:inline">{selectedSession ? 'Change' : 'Browse'}</span>
                     <ChevronDown className="w-3.5 h-3.5" />
                   </div>
                 </div>
@@ -653,10 +653,10 @@ export const GraderWorkbenchView: React.FC = () => {
                 <button
                   onClick={runLiveAudit}
                   disabled={isAuditing || !selectedSessionId}
-                  className="min-h-[41px] h-[41px] px-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50 shrink-0"
+                  className="min-h-[41px] h-[41px] px-4 sm:px-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50 shrink-0 whitespace-nowrap"
                 >
                   <IonIcon icon={isAuditing ? refreshOutline : playOutline} className={isAuditing ? 'animate-spin text-[15px]' : 'text-[15px]'} />
-                  <span>{isAuditing ? 'Auditing Transcript...' : 'Audit Live Session'}</span>
+                  <span>{isAuditing ? 'Auditing...' : 'Audit Live Session'}</span>
                 </button>
               </div>
 
