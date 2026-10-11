@@ -3,15 +3,7 @@
 import json
 from pathlib import Path
 
-import pytest
-
 from server.agent_daemon import AgentWatcherDaemon
-
-
-@pytest.fixture(autouse=True)
-def enable_local_log_scan(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Daemon scans are opt-in via OPENEVAL_AUTO_SCAN_LOCAL_LOGS."""
-    monkeypatch.setenv("OPENEVAL_AUTO_SCAN_LOCAL_LOGS", "1")
 
 
 def test_daemon_status_initial():
@@ -27,9 +19,8 @@ def test_daemon_status_initial():
     assert any("Cursor" in s for s in status.monitored_sources)
 
 
-def test_daemon_scan_skipped_without_flag(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+def test_daemon_scan_skipped_without_flag(tmp_path: Path):
     """Without OPENEVAL_AUTO_SCAN_LOCAL_LOGS, scan_once is a no-op."""
-    monkeypatch.setenv("OPENEVAL_AUTO_SCAN_LOCAL_LOGS", "0")
     brain_dir = tmp_path / "brain"
     conv_dir = brain_dir / "conv_abc123" / ".system_generated" / "logs"
     conv_dir.mkdir(parents=True, exist_ok=True)
@@ -40,6 +31,7 @@ def test_daemon_scan_skipped_without_flag(monkeypatch: pytest.MonkeyPatch, tmp_p
         claude_sessions_dir=tmp_path / "claude",
         claude_projects_dir=tmp_path / "claude_projects",
         cursor_projects_dir=tmp_path / "cursor",
+        auto_scan_local_logs=False,
     )
     assert daemon.scan_once() == 0
 
@@ -69,6 +61,7 @@ def test_daemon_scan_antigravity_logs(tmp_path: Path):
         claude_sessions_dir=tmp_path / "claude",
         claude_projects_dir=tmp_path / "claude_projects",
         cursor_projects_dir=tmp_path / "cursor",
+        auto_scan_local_logs=True,
     )
 
     events = daemon.scan_once()
@@ -97,6 +90,7 @@ def test_daemon_scan_claude_code_logs_blocked_action(tmp_path: Path):
         claude_sessions_dir=claude_dir,
         claude_projects_dir=tmp_path / "claude_projects",
         cursor_projects_dir=tmp_path / "cursor",
+        auto_scan_local_logs=True,
     )
 
     events = daemon.scan_once()
@@ -138,6 +132,7 @@ def test_daemon_scan_cursor_transcript(tmp_path: Path):
         claude_sessions_dir=tmp_path / "claude",
         claude_projects_dir=tmp_path / "claude_projects",
         cursor_projects_dir=tmp_path / "cursor",
+        auto_scan_local_logs=True,
     )
     events = daemon.scan_once()
     assert events == 1

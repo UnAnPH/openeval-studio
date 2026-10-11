@@ -238,6 +238,8 @@ class PolicyGateway:
         llm_timeout_sec: float = _LLM_BUDGET_SEC,
         on_failure: OnFailureAction = "fail_open",
         llm_model: str = "gemini-3.1-flash-lite",
+        requester: Any | None = None,
+        api_key: str | None = None,
     ) -> None:
         self.command_engine = (
             command_engine
@@ -261,6 +263,8 @@ class PolicyGateway:
         self._llm_circuit_open = False
         self._llm_deadline: float | None = None
         self._last_threat_category: ThreatCategory | None = None
+        self._requester = requester
+        self._api_key = api_key
 
     @classmethod
     def from_store(cls, **kwargs: object) -> PolicyGateway:
@@ -543,7 +547,9 @@ class PolicyGateway:
         timeout = self._llm_request_timeout()
         if timeout is None:
             return None
-        api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        api_key = (
+            self._api_key or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        )
         if not api_key:
             return None
         try:
@@ -564,7 +570,8 @@ class PolicyGateway:
                 headers={"Content-Type": "application/json"},
                 method="POST",
             )
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
+            requester = self._requester or urllib.request.urlopen
+            with requester(req, timeout=timeout) as resp:
                 data = __import__("json").loads(resp.read().decode("utf-8"))
             text = (
                 data.get("candidates", [{}])[0]

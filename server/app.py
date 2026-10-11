@@ -1548,15 +1548,17 @@ async def _run_catalog_eval_worker(
     model: str,
     provider: str,
     api_key: str | None = None,
+    env: dict[str, str] | None = None,
 ) -> None:
     """Execute genuine benchmark evaluation for catalog/inspect tasks with real LLM runs and audits."""
     # 1. Honest API key check
     key = api_key
     if not key:
+        env_map = env if env is not None else os.environ
         if provider == "google":
-            key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+            key = env_map.get("GEMINI_API_KEY") or env_map.get("GOOGLE_API_KEY")
         else:
-            key = os.getenv("OPENAI_API_KEY")
+            key = env_map.get("OPENAI_API_KEY")
 
     if not key:
         logger.info("API key for %s not provided; refusing simulated pass: %s", provider, task_id)

@@ -51,6 +51,7 @@ class AgentWatcherDaemon:
         claude_projects_dir: Path | None = None,
         cursor_projects_dir: Path | None = None,
         poll_interval_sec: float = 1.0,
+        auto_scan_local_logs: bool | None = None,
     ) -> None:
         self.antigravity_dir = (
             antigravity_brain_dir or Path.home() / ".gemini" / "antigravity" / "brain"
@@ -59,6 +60,11 @@ class AgentWatcherDaemon:
         self.claude_projects_dir = claude_projects_dir or Path.home() / ".claude" / "projects"
         self.cursor_dir = cursor_projects_dir or Path.home() / ".cursor" / "projects"
         self.poll_interval = poll_interval_sec
+        self.auto_scan_local_logs = (
+            auto_scan_local_logs
+            if auto_scan_local_logs is not None
+            else os.getenv("OPENEVAL_AUTO_SCAN_LOCAL_LOGS", "0").lower() in ("1", "true", "yes")
+        )
         self.is_running = False
         self._task: asyncio.Task[None] | None = None
 
@@ -120,7 +126,7 @@ class AgentWatcherDaemon:
 
     def scan_once(self) -> int:
         """Single polling cycle checking Antigravity, Claude Code, and Cursor logs."""
-        if os.getenv("OPENEVAL_AUTO_SCAN_LOCAL_LOGS", "0").lower() not in ("1", "true", "yes"):
+        if not self.auto_scan_local_logs:
             return 0
 
         new_events = 0

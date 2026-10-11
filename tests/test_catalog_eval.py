@@ -26,12 +26,8 @@ def test_resolve_catalog_tasks():
 
 
 @pytest.mark.asyncio
-async def test_catalog_eval_fails_honestly_without_api_key(monkeypatch):
+async def test_catalog_eval_fails_honestly_without_api_key():
     """Verify that without API key, catalog evaluation fails honestly and never simulates a pass."""
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-
     record = global_run_store.create_run(
         task_id="inspect_evals/humaneval",
         model="gemini-3.1-flash-lite",
@@ -44,6 +40,7 @@ async def test_catalog_eval_fails_honestly_without_api_key(monkeypatch):
         model=record.model,
         provider="google",
         api_key=None,
+        env={},
     )
 
     updated = global_run_store.get_run(record.run_id)

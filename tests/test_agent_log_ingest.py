@@ -7,10 +7,8 @@ from server.agent_log_loader import UniversalAgentLogLoader
 from server.watcher_store import WatcherStore
 
 
-def test_ingest_cursor_agent_transcript_jsonl(tmp_path: Path, monkeypatch) -> None:
+def test_ingest_cursor_agent_transcript_jsonl(tmp_path: Path) -> None:
     store = WatcherStore(storage_dir=tmp_path / "w", db_path=":memory:")
-    monkeypatch.setattr("server.agent_log_loader.get_watcher_store", lambda: store)
-    monkeypatch.setattr("server.watcher_store.get_watcher_store", lambda: store)
 
     path = tmp_path / "agent-transcripts" / "abc" / "abc.jsonl"
     path.parent.mkdir(parents=True)
@@ -51,7 +49,7 @@ def test_ingest_cursor_agent_transcript_jsonl(tmp_path: Path, monkeypatch) -> No
         encoding="utf-8",
     )
 
-    session = UniversalAgentLogLoader.ingest_cursor_agent_transcript_jsonl(path)
+    session = UniversalAgentLogLoader.ingest_cursor_agent_transcript_jsonl(path, store=store)
     assert session is not None
     assert session.agent_type == "cursor"
     assert "Fix the bug" in (session.title or "")
@@ -59,9 +57,8 @@ def test_ingest_cursor_agent_transcript_jsonl(tmp_path: Path, monkeypatch) -> No
     assert session.trajectory.tool_calls[0].tool_name == "Shell"
 
 
-def test_ingest_claude_projects_native_format(tmp_path: Path, monkeypatch) -> None:
+def test_ingest_claude_projects_native_format(tmp_path: Path) -> None:
     store = WatcherStore(storage_dir=tmp_path / "w", db_path=":memory:")
-    monkeypatch.setattr("server.agent_log_loader.get_watcher_store", lambda: store)
 
     path = tmp_path / "sess.jsonl"
     path.write_text(
@@ -96,7 +93,7 @@ def test_ingest_claude_projects_native_format(tmp_path: Path, monkeypatch) -> No
         + "\n",
         encoding="utf-8",
     )
-    session = UniversalAgentLogLoader.ingest_claude_code_jsonl(path)
+    session = UniversalAgentLogLoader.ingest_claude_code_jsonl(path, store=store)
     assert session is not None
     assert session.agent_type == "claude_code"
     assert any(m.role == "user" and "hello" in m.content for m in session.trajectory.messages)

@@ -27,7 +27,7 @@ from schemas.watcher_models import (
     ToolResult,
     Trajectory,
 )
-from server.watcher_store import get_watcher_store
+from server.watcher_store import WatcherStore, get_watcher_store
 
 logger = logging.getLogger("openeval.server.agent_log_loader")
 
@@ -113,7 +113,9 @@ class UniversalAgentLogLoader:
     _session_cache: dict[str, Session] = {}
 
     @classmethod
-    def ingest_claude_code_jsonl(cls, file_path: Path | str) -> Session | None:
+    def ingest_claude_code_jsonl(
+        cls, file_path: Path | str, store: WatcherStore | None = None
+    ) -> Session | None:
         """Parse a Claude Code session JSONL file into a canonical Session."""
         path = Path(file_path)
         if not path.exists():
@@ -263,13 +265,15 @@ class UniversalAgentLogLoader:
             created_at=datetime.now(UTC).isoformat(),
         )
 
-        store = get_watcher_store()
-        store.record_session(session)
+        active_store = store or get_watcher_store()
+        active_store.record_session(session)
         logger.info("Ingested Claude Code session '%s' (%d messages)", session_id, len(messages))
         return session
 
     @classmethod
-    def ingest_cursor_session_json(cls, file_path: Path | str) -> Session | None:
+    def ingest_cursor_session_json(
+        cls, file_path: Path | str, store: WatcherStore | None = None
+    ) -> Session | None:
         """Parse a Cursor composer or workspace session JSON export."""
         path = Path(file_path)
         if not path.exists():
@@ -318,8 +322,8 @@ class UniversalAgentLogLoader:
             created_at=datetime.now(UTC).isoformat(),
         )
 
-        store = get_watcher_store()
-        store.record_session(session)
+        active_store = store or get_watcher_store()
+        active_store.record_session(session)
         logger.info("Ingested Cursor session '%s'", session_id)
         return session
 
@@ -329,6 +333,7 @@ class UniversalAgentLogLoader:
         file_path: Path | str,
         status: SessionStatus = "completed",
         max_tool_calls: int = 400,
+        store: WatcherStore | None = None,
     ) -> Session | None:
         """Parse Cursor IDE agent-transcripts/*.jsonl (role + message.content blocks)."""
         path = Path(file_path)
@@ -343,13 +348,13 @@ class UniversalAgentLogLoader:
             and path_str in cls._session_cache
         ):
             cached = cls._session_cache[path_str]
-            store = get_watcher_store()
+            active_store = store or get_watcher_store()
             if cached.status != status:
                 cached.status = status
-            if store.get_session(cached.session_id) is None or cached.status != getattr(
-                store.get_session(cached.session_id), "status", None
+            if active_store.get_session(cached.session_id) is None or cached.status != getattr(
+                active_store.get_session(cached.session_id), "status", None
             ):
-                store.record_session(cached)
+                active_store.record_session(cached)
             return cached
 
         lines = path.read_text(encoding="utf-8", errors="ignore").strip().splitlines()
@@ -462,8 +467,8 @@ class UniversalAgentLogLoader:
             created_at=datetime.fromtimestamp(mtime, UTC).isoformat(),
             updated_at=datetime.fromtimestamp(mtime, UTC).isoformat(),
         )
-        store = get_watcher_store()
-        store.record_session(session)
+        active_store = store or get_watcher_store()
+        active_store.record_session(session)
         cls._mtime_cache[path_str] = mtime
         cls._session_cache[path_str] = session
         logger.info(
@@ -480,6 +485,7 @@ class UniversalAgentLogLoader:
         transcript_path: Path | str,
         max_tail_steps: int = 150,
         status: SessionStatus = "working",
+        store: WatcherStore | None = None,
     ) -> Session | None:
         """Parse an Antigravity coding assistant transcript.jsonl into a canonical Watcher Session."""
         path = Path(transcript_path)
@@ -494,14 +500,14 @@ class UniversalAgentLogLoader:
             and path_str in cls._session_cache
         ):
             cached = cls._session_cache[path_str]
-            store = get_watcher_store()
+            active_store = store or get_watcher_store()
             if cached.status != status:
                 cached.status = status
             # Cache hit must still populate store (e.g. after clear / process restart quirks).
-            if store.get_session(cached.session_id) is None or cached.status != getattr(
-                store.get_session(cached.session_id), "status", None
+            if active_store.get_session(cached.session_id) is None or cached.status != getattr(
+                active_store.get_session(cached.session_id), "status", None
             ):
-                store.record_session(cached)
+                active_store.record_session(cached)
             return cached
 
         lines = path.read_text(encoding="utf-8", errors="ignore").strip().splitlines()
@@ -785,8 +791,8 @@ class UniversalAgentLogLoader:
             updated_at=created_time,
         )
 
-        store = get_watcher_store()
-        store.record_session(session)
+        active_store = store or get_watcher_store()
+        active_store.record_session(session)
         cls._mtime_cache[path_str] = mtime
         cls._session_cache[path_str] = session
         logger.info(
