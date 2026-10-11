@@ -1858,6 +1858,19 @@ async def _fail_eval_honestly(
 
 
 INSPECT_TASK_MAP: dict[str, tuple[str, str]] = {
+    "inspect_evals/agentharm": ("inspect_evals.agentharm", "agentharm"),
+    "inspect_evals/agent_threat_bench_data_exfil": (
+        "inspect_evals.agent_threat_bench",
+        "agent_threat_bench_data_exfil",
+    ),
+    "inspect_evals/agent_threat_bench_leak": (
+        "inspect_evals.agent_threat_bench",
+        "agent_threat_bench_data_exfil",
+    ),
+    "inspect_evals/agent_threat_bench_memory_poison": (
+        "inspect_evals.agent_threat_bench",
+        "agent_threat_bench_memory_poison",
+    ),
     "inspect_evals/humaneval": ("inspect_evals.humaneval", "humaneval"),
     "inspect_evals/sycophancy": ("inspect_evals.sycophancy", "sycophancy"),
     "inspect_evals/strong_reject": ("inspect_evals.strong_reject", "strong_reject"),
@@ -1870,14 +1883,6 @@ INSPECT_TASK_MAP: dict[str, tuple[str, str]] = {
     "inspect_evals/cyse2_prompt_injection": (
         "inspect_evals.cyberseceval_2",
         "cyse2_prompt_injection",
-    ),
-    "inspect_evals/agent_threat_bench_leak": (
-        "inspect_evals.agent_threat_bench",
-        "agent_threat_bench_data_exfil",
-    ),
-    "inspect_evals/agent_threat_bench_memory_poison": (
-        "inspect_evals.agent_threat_bench",
-        "agent_threat_bench_memory_poison",
     ),
 }
 
@@ -1944,6 +1949,13 @@ async def _run_catalog_eval_worker(
         )
         return
 
+    # Keep API key environment variables synchronized for inspect_ai components
+    if provider == "google" and key:
+        os.environ.setdefault("GOOGLE_API_KEY", key)
+        os.environ.setdefault("GEMINI_API_KEY", key)
+    elif provider == "openai" and key:
+        os.environ.setdefault("OPENAI_API_KEY", key)
+
     global_run_store.update_run(run_id, status="running")
     global_run_store.publish_event(
         run_id, "start", {"task_id": task_id, "model": model, "provider": provider}
@@ -1964,7 +1976,14 @@ async def _run_catalog_eval_worker(
         return
 
     try:
-        task_instance = inspect_task_fn()
+        if task_id == "inspect_evals/agentharm":
+            judge_model = "google/gemini-2.5-flash" if provider == "google" else "openai/gpt-4o-mini"
+            try:
+                task_instance = inspect_task_fn(refusal_judge=judge_model, semantic_judge=judge_model)
+            except Exception:
+                task_instance = inspect_task_fn()
+        else:
+            task_instance = inspect_task_fn()
     except Exception as exc:
         logger.error("Failed instantiating catalog task %s: %s", task_id, exc)
         await _fail_eval_honestly(
