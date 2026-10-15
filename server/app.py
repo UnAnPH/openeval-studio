@@ -84,6 +84,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Startup: fail-closed initial state
     setup_logger()
+    if "OPENEVAL_GATE_USE_LLM" in os.environ:
+        raise RuntimeError(
+            "Obsolete environment variable OPENEVAL_GATE_USE_LLM is set. "
+            "Use OPENEVAL_WATCHER_USE_LLM instead."
+        )
     app.state.db_ready = False
     try:
         with SessionLocal() as db:

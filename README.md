@@ -69,7 +69,7 @@ In **Safety → Sessions**, use hybrid dense vector + lexical search:
 1. **Deterministic Command Rules** — regex matching backed by PostgreSQL 16: `allow`, `triage`, `human`, `deny`, `off`.
 
 2. **Tool Thresholds** — per-tool 1–10 risk limits: auto-approve, escalate, auto-deny.
-3. **Fast Triage** — heuristic Secret Reading analysis, or Gemini XML grading when `OPENEVAL_GATE_USE_LLM=1`.
+3. **Fast Triage** — heuristic Secret Reading analysis, or Gemini XML grading when `OPENEVAL_WATCHER_USE_LLM=1`.
 4. **Deep Review** — comprehensive context inspection when risk is elevated.
 
 **Interactive Lockout (`force_ask`):** In `enforce` mode, policy violations trigger an interactive lockout response (`"decision": "force_ask"`, `terminal_reason="lockout"`) in client hooks. This halts autonomous agents and requires human operator sign-off before proceeding.

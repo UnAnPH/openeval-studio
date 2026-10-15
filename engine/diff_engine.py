@@ -15,6 +15,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from engine.react_agent import AgentStep
+from schemas.scoring import ScoreStatus
 from server.inspect_loader import parse_eval_log_to_run_record
 from server.store import RunRecord, global_run_store
 
@@ -29,6 +30,9 @@ class SemanticComparisonVerdict(BaseModel):
     run_a_id: str
     run_b_id: str
     task_id: str
+    status: ScoreStatus = Field(
+        default="scored", description="Whether semantic comparison succeeded or errored"
+    )
     nature_of_divergence: Literal[
         "identical_strategy",
         "cosmetic_variation",
@@ -392,64 +396,33 @@ class TrajectoryDiffEngine:
                     return verdict
             except Exception as e:
                 logger.warning(
-                    "LLM semantic comparison failed, falling back to heuristic evaluation: %s",
+                    "LLM semantic comparison failed: %s",
                     e,
                 )
-
-        # Heuristic fallback if LLM is unreachable or offline
-        steps_a = run_a.steps or []
-        steps_b = run_b.steps or []
-        tools_a = [s.action.tool for s in steps_a]
-        tools_b = [s.action.tool for s in steps_b]
-
-        tool_overlap = sum(1 for t1, t2 in zip(tools_a, tools_b, strict=False) if t1 == t2)
-        total_steps = max(len(steps_a), len(steps_b), 1)
-        sim_ratio = tool_overlap / total_steps
-
-        if run_a.passed == run_b.passed and sim_ratio >= 0.8:
-            nature = "cosmetic_variation" if sim_ratio < 1.0 else "identical_strategy"
-            score = 0.90 if nature == "identical_strategy" else 0.82
-            summary = (
-                f"Both models ({run_a.model} vs {run_b.model}) followed a functionally equivalent workflow "
-                f"with minor tool parameter variations. Both runs concluded with status: {'PASSED' if run_a.passed else 'FAILED'}."
-            )
-            key_diffs = [
-                f"Model A took {len(steps_a)} turns ({run_a.total_duration_sec:.1f}s), Model B took {len(steps_b)} turns ({run_b.total_duration_sec:.1f}s).",
-                "Tool invocations and investigative steps followed the same logical progression.",
-            ]
-            div_turn = None
-            attribution = "Both models achieved identical outcomes with comparable reasoning."
-        else:
-            nature = "substantive_divergence"
-            score = round(max(0.2, min(0.7, sim_ratio * 0.8)), 2)
-            summary = (
-                f"Model A ({run_a.model}) and Model B ({run_b.model}) showed substantive divergence. "
-                f"Outcome: Model A is {'PASSED' if run_a.passed else 'FAILED'}, while Model B is {'PASSED' if run_b.passed else 'FAILED'}."
-            )
-            key_diffs = [
-                f"Model A tool sequence: {', '.join(tools_a[:4])}...",
-                f"Model B tool sequence: {', '.join(tools_b[:4])}...",
-            ]
-            div_turn = next(
-                (
-                    i + 1
-                    for i, (t1, t2) in enumerate(zip(tools_a, tools_b, strict=False))
-                    if t1 != t2
-                ),
-                1,
-            )
-            attribution = f"Model A ({run_a.model}) was {'more successful' if run_a.passed else 'less successful'} than Model B ({run_b.model})."
+                return SemanticComparisonVerdict(
+                    run_a_id=run_a.run_id,
+                    run_b_id=run_b.run_id,
+                    task_id=run_a.task_id,
+                    status="error",
+                    nature_of_divergence="substantive_divergence",
+                    semantic_similarity_score=0.0,
+                    verdict_summary=f"LLM semantic comparison failed ({type(e).__name__}: {e}). Heuristic fallback disabled to prevent fabricated evaluation.",
+                    key_strategic_differences=["Evaluation error: LLM judge unavailable."],
+                    true_divergence_turn=None,
+                    attribution_reasoning="Evaluation aborted due to judge error.",
+                )
 
         return SemanticComparisonVerdict(
             run_a_id=run_a.run_id,
             run_b_id=run_b.run_id,
             task_id=run_a.task_id,
-            nature_of_divergence=nature,
-            semantic_similarity_score=score,
-            verdict_summary=summary,
-            key_strategic_differences=key_diffs,
-            true_divergence_turn=div_turn,
-            attribution_reasoning=attribution,
+            status="error",
+            nature_of_divergence="substantive_divergence",
+            semantic_similarity_score=0.0,
+            verdict_summary="LLM runner not configured or available for semantic comparison.",
+            key_strategic_differences=["No LLM runner available."],
+            true_divergence_turn=None,
+            attribution_reasoning="Evaluation aborted due to missing LLM runner.",
         )
 
     @classmethod

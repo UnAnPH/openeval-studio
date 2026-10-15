@@ -123,3 +123,18 @@ def test_run_with_slash_in_task_id_and_legacy_slash_lookup() -> None:
     dash_id = legacy_run_id.replace("/", "--")
     res_dash = client.get(f"/api/eval/runs/{dash_id}")
     assert res_dash.status_code == 200
+
+
+def test_obsolete_env_var_fails_startup(monkeypatch) -> None:
+    """Verify that OPENEVAL_GATE_USE_LLM causes startup to raise RuntimeError."""
+    import asyncio
+    import pytest
+    from server.app import lifespan
+
+    monkeypatch.setenv("OPENEVAL_GATE_USE_LLM", "1")
+    with pytest.raises(RuntimeError, match="Obsolete environment variable OPENEVAL_GATE_USE_LLM"):
+        async def _run() -> None:
+            async with lifespan(app):
+                pass
+
+        asyncio.run(_run())

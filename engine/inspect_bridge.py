@@ -228,12 +228,14 @@ def held_out_verifier_scorer(
                 )
         except Exception as e:
             logger.warning("Sandbox verifier execution failed: %s", e)
+            return Score(
+                value=INCORRECT,
+                explanation=f"Sandbox verifier execution failed: {type(e).__name__}: {e}",
+            )
 
-        # Fallback for mock environments
-        is_mock_done = bool(state.output and "done" in state.output.completion.lower())
         return Score(
-            value=CORRECT if is_mock_done else INCORRECT,
-            explanation="Graded without active sandbox environment.",
+            value=INCORRECT,
+            explanation="Sandbox environment inactive or verifier did not run.",
         )
 
     return score
