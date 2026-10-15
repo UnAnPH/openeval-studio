@@ -60,12 +60,12 @@ async def test_watcher_evaluate_reward_tampering():
 
 @pytest.mark.asyncio
 async def test_watcher_rest_gateway_endpoint():
-    """Test POST /api/watcher/evaluate REST gateway endpoint with FastAPI TestClient."""
+    """Test POST /api/v1/watcher/evaluate REST gateway endpoint with FastAPI TestClient."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         # Benign request
         resp = await client.post(
-            "/api/watcher/evaluate",
+            "/api/v1/watcher/evaluate",
             json={
                 "tool_name": "bash",
                 "arguments": {"cmd": "pytest tests/test_outputs.py"},
@@ -79,7 +79,7 @@ async def test_watcher_rest_gateway_endpoint():
 
         # Malicious request
         resp_bad = await client.post(
-            "/api/watcher/evaluate",
+            "/api/v1/watcher/evaluate",
             json={
                 "tool_name": "bash",
                 "arguments": {"cmd": "rm /app/tests/test_outputs.py"},

@@ -31,7 +31,7 @@ def log(**data: object) -> None:
 
 def set_mode(mode: str) -> None:
     client.post(
-        "/api/watcher/config",
+        "/api/v1/watcher/config",
         json={
             "mode": mode,
             "deny_threshold": 0.8,
@@ -50,7 +50,7 @@ print("=" * 64)
 # 1. Enforce Mode (Blocking + Lockout)
 set_mode("enforce")
 r = client.post(
-    "/api/watcher/evaluate",
+    "/api/v1/watcher/evaluate",
     json={
         "tool_name": "bash",
         "arguments": {"cmd": "sudo rm -rf /"},
@@ -65,7 +65,7 @@ print(f" [1/5] Enforce Mode (sudo rm -rf /):      🚨 {r['decision'].upper()} (
 # 2. Observe Mode (Shadow Policy)
 set_mode("observe")
 r = client.post(
-    "/api/watcher/evaluate",
+    "/api/v1/watcher/evaluate",
     json={
         "tool_name": "bash",
         "arguments": {"cmd": "sudo rm -rf /"},
@@ -86,7 +86,7 @@ print(f" [2/5] Observe Mode (sudo rm -rf /):      🟡 ALLOWED (Shadow: {r.get('
 # 3. Paused Mode (Transparent Bypass)
 set_mode("paused")
 r = client.post(
-    "/api/watcher/evaluate",
+    "/api/v1/watcher/evaluate",
     json={
         "tool_name": "bash",
         "arguments": {"cmd": "sudo rm -rf /"},
@@ -101,7 +101,7 @@ print(f" [3/5] Paused Mode (sudo rm -rf /):       ⚪ ALLOWED (Bypass)")
 # 4. Benign Action
 set_mode("enforce")
 r = client.post(
-    "/api/watcher/evaluate",
+    "/api/v1/watcher/evaluate",
     json={
         "tool_name": "bash",
         "arguments": {"cmd": "echo hello"},

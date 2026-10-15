@@ -201,14 +201,14 @@ def test_automated_remediation_engine():
 def test_watcher_rest_gateway_and_config(client: TestClient):
     """Test REST API routes for Watcher Live."""
     # 1. Config GET & POST
-    get_res = client.get("/api/watcher/config")
+    get_res = client.get("/api/v1/watcher/config")
     assert get_res.status_code == 200
     config_data = get_res.json()
     assert "mode" in config_data
     assert "deny_threshold" in config_data
 
     update_res = client.post(
-        "/api/watcher/config",
+        "/api/v1/watcher/config",
         json={
             "mode": "enforce",
             "deny_threshold": 0.85,
@@ -223,7 +223,7 @@ def test_watcher_rest_gateway_and_config(client: TestClient):
 
     # 2. Evaluate POST
     eval_res = client.post(
-        "/api/watcher/evaluate",
+        "/api/v1/watcher/evaluate",
         json={
             "tool_name": "run_command",
             "arguments": {"CommandLine": "rm -rf .git"},
@@ -234,7 +234,7 @@ def test_watcher_rest_gateway_and_config(client: TestClient):
     assert eval_res.json()["decision"] == "deny"
 
     # 3. Findings GET
-    findings_res = client.get("/api/watcher/findings")
+    findings_res = client.get("/api/v1/watcher/findings")
     assert findings_res.status_code == 200
     findings = findings_res.json()
     assert len(findings) >= 1
@@ -244,7 +244,7 @@ def test_watcher_rest_gateway_and_config(client: TestClient):
     )
 
     # 4. Session Detail GET
-    session_res = client.get(f"/api/watcher/sessions/{findings[0]['session_id']}")
+    session_res = client.get(f"/api/v1/watcher/sessions/{findings[0]['session_id']}")
     assert session_res.status_code == 200
     detail = session_res.json()
     assert "finding" in detail

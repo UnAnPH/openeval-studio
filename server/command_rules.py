@@ -149,10 +149,10 @@ ALL_63_COMMAND_RULES: list[CommandRule] = [
     CommandRule(
         rule_id="sec_curl_bash",
         category="security",
-        name="Remote script execution (curl to bash)",
-        pattern=r"curl\s+.*\|\s*(bash|sh|zsh)",
+        name="Remote script or encoded execution (curl/base64 to shell)",
+        pattern=r"(?:curl|wget)\s+.*\|\s*(bash|sh|zsh)|(?:base64\s+(?:-d|--decode)|openssl\s+enc\s+-d|xxd\s+-r)\s*.*\|\s*(bash|sh|zsh)",
         action="deny",
-        description="Piping untrusted remote scripts directly into a shell interpreter",
+        description="Piping untrusted remote scripts or obfuscated encoded payloads directly into a shell interpreter",
     ),
     CommandRule(
         rule_id="sec_cloud_metadata",
@@ -273,7 +273,7 @@ ALL_63_COMMAND_RULES: list[CommandRule] = [
         rule_id="fs_destructive_rm",
         category="fs",
         name="Destructive filesystem removal",
-        pattern=r"rm\s+(-[rf]{1,2}|--recursive|--force).*(/|\*|\$HOME|\~)",
+        pattern=r"rm\s+(?:-[a-zA-Z0-9_-]+\s+)*(-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*|-[a-zA-Z]*r[a-zA-Z]*\s+-[a-zA-Z]*f[a-zA-Z]*|-[a-zA-Z]*f[a-zA-Z]*\s+-[a-zA-Z]*r[a-zA-Z]*|--recursive\s+--force|--force\s+--recursive|-[rf]{1,2}).*(/|\*|\$HOME|\~)",
         action="deny",
         description="Unrestricted bulk filesystem deletion",
     ),

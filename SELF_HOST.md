@@ -46,7 +46,7 @@ Open `http://localhost:5173` in your browser.
 2. **Retrieve API Key:** Upon successful registration, the studio routes directly to the **Hook Setup** view and generates a high-entropy API key (`oe_live_...`). This key is displayed **once**.
 3. **Configure Local IDE Hooks:** Copy the pre-filled export commands for your agent:
    ```bash
-   export OPENEVAL_WATCHER_URL="http://127.0.0.1:8000/api/watcher/evaluate"
+   export OPENEVAL_WATCHER_URL="http://127.0.0.1:8000/api/v1/watcher/evaluate"
    export OPENEVAL_API_KEY="<user_api_key>"
    ```
 4. **Run Hook Installers:**
@@ -110,6 +110,9 @@ make cloud-off
 | `OPENEVAL_API_KEY` | `""` | Optional system API key (authenticates as `owner` tenant). |
 | `WATCHER_ENFORCE_MODE` | `enforce` | Gate policy mode: `enforce` (blocking), `observe` (audit), `paused` (bypass). |
 | `FAIL_OPEN` | `true` | When `true`, allows actions if the gateway times out (>1.5s) to avoid freezing developers. |
+| `OPENEVAL_MAX_GATEWAY_FAILURES` | `3` | Max consecutive gateway timeouts before local hook circuit breaker trips to `force_ask`. |
+| `OPENEVAL_FAILURE_WINDOW_SEC` | `60.0` | Sliding window in seconds for tracking consecutive gateway failure count. |
+| `OPENEVAL_CIRCUIT_STATE_FILE` | `~/.openeval/circuit_breaker.json` | Local atomic state file tracking circuit breaker timestamps. |
 | `OPENEVAL_WATCHER_USE_LLM` | `0` | When `1`, enables Layer 3 deep LLM trajectory review (requires `GEMINI_API_KEY`). |
 | `GEMINI_API_KEY` | `""` | API key for frontier LLM calls (Gemini 2.5/Flash-Lite). |
 
@@ -125,7 +128,7 @@ uv run pytest tests/ -m "not slow" -q
 curl -fsS http://127.0.0.1:8000/api/health
 
 # 3. Test evaluation gate with API key
-curl -s -X POST http://127.0.0.1:8000/api/watcher/evaluate \
+curl -s -X POST http://127.0.0.1:8000/api/v1/watcher/evaluate \
   -H "Authorization: Bearer <user_api_key>" \
   -H "Content-Type: application/json" \
   -d '{"tool_name": "bash", "tool_input": "echo hello", "agent_id": "test"}'

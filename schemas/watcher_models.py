@@ -15,6 +15,96 @@ from pydantic import BaseModel, ConfigDict, Field
 ReviewPosture = Literal["blocking", "trailing", "disabled"]
 ReviewDecision = Literal["allow", "warn", "block", "modify", "escalate"]
 ReviewStage = Literal["rule", "threshold", "triage", "deep_review"]
+CallOrigin = Literal["user_direct", "subagent"]
+BlastRadiusTier = Literal[
+    "local_reversible",
+    "local_destructive",
+    "external_shared",
+    "critical_unrecoverable",
+]
+
+
+class ProvenanceMetadata(BaseModel):
+    """Provenance and lineage metadata for tool invocations (Apollo Codex auto-review)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    call_origin: CallOrigin = Field(
+        default="user_direct",
+        description="Origin of the tool call: 'user_direct' (root human) or 'subagent' (delegated)",
+    )
+    parent_session_id: str | None = Field(
+        default=None,
+        description="Parent session or conversation ID if spawned by a parent agent",
+    )
+    delegation_depth: int = Field(
+        default=0,
+        ge=0,
+        description="Recursive delegation depth (0 = root user direct, 1 = first-order subagent)",
+    )
+    delegated_by: str | None = Field(
+        default=None,
+        description="Identifier of delegating tool or agent (e.g., 'invoke_subagent', 'Agent')",
+    )
+
+
+class ConsentDisclosure(BaseModel):
+    """Structured disclosure of blast radius, targets, and reversibility for operator consent."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    target_resources: list[str] = Field(
+        default_factory=list,
+        description="List of files, directories, endpoints, or system objects being accessed",
+    )
+    destination: str | None = Field(
+        default=None,
+        description="External domain, URL, or host receiving data (e.g. in exfiltration/curl/wget)",
+    )
+    disclosed_data_types: list[str] = Field(
+        default_factory=list,
+        description="Categories of sensitive data identified (e.g. environment_variables, ssh_keys, credentials)",
+    )
+    blast_radius: BlastRadiusTier = Field(
+        default="local_reversible",
+        description="Severity tier of potential blast radius",
+    )
+    reversibility_summary: str = Field(
+        default="Action can be undone locally.",
+        description="Plain-English explanation of whether and how the action can be reversed",
+    )
+    discovered_context: str | None = Field(
+        default=None,
+        description="Contextual disclosures discovered during evaluation",
+    )
+
+    def render_terminal_box(self, decision: str = "FORCE_ASK", reason: str = "") -> str:
+        """Render formatted visual informed consent box for terminal / IDE hooks."""
+        radius_desc = {
+            "external_shared": "external_shared (Irreversible external disclosure)",
+            "critical_unrecoverable": "critical_unrecoverable (Catastrophic unrecoverable damage)",
+            "local_destructive": "local_destructive (Destructive local modification)",
+            "local_reversible": "local_reversible (Reversible local modification)",
+        }.get(self.blast_radius, self.blast_radius)
+
+        lines = [
+            "================ [OPENEVAL INFORMED CONSENT REQUIRED] ================",
+            f"Decision: {decision.upper()} (Pending Operator Approval)",
+        ]
+        if reason:
+            lines.append(f"Reason: {reason}")
+        lines.append(f"🎯 Target Resources: {self.target_resources}")
+        if self.destination:
+            lines.append(f"🌐 Destination: {self.destination}")
+        if self.disclosed_data_types:
+            lines.append(f"⚠️ Disclosed Data: {self.disclosed_data_types}")
+        lines.append(f"💥 Blast Radius: {radius_desc}")
+        lines.append(f"🔒 Reversibility: {self.reversibility_summary}")
+        if self.discovered_context:
+            lines.append(f"🔍 Discovered Context: {self.discovered_context}")
+        lines.append("========================================================================")
+        return "\n".join(lines)
+
 
 # Apollo Research September 2026: Canonical 13-Point Threat Taxonomy for Real-Time Blocking
 ThreatCategory = Literal[
@@ -129,6 +219,14 @@ class ReviewRecord(BaseModel):
     threat_category: ThreatCategory | None = Field(
         default=None, description="Apollo 13-point threat taxonomy category"
     )
+    provenance: ProvenanceMetadata = Field(
+        default_factory=ProvenanceMetadata,
+        description="Provenance and delegation lineage metadata",
+    )
+    consent_disclosure: ConsentDisclosure | None = Field(
+        default=None,
+        description="Structured informed consent disclosure for intercepted actions",
+    )
 
 
 class Trajectory(BaseModel):
@@ -182,6 +280,15 @@ class Session(BaseModel):
     human_review_notes: str | None = Field(default=None)
     audit_verdicts: list[Any] = Field(default_factory=list)
     audit_overrides: dict[str, bool] = Field(default_factory=dict)
+
+    # Session detail & finding hydration
+    finding: Any | None = Field(default=None)
+    turns: list[Any] = Field(default_factory=list)
+    blocked_turns_count: int = Field(default=0)
+    developer: str = Field(default="Operator")
+    agent_source: str = Field(default="antigravity")
+    working_directory: str = Field(default="/workspace")
+    duration_sec: float = Field(default=0.0)
 
     created_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
@@ -519,3 +626,20 @@ DEFAULT_TOOL_THRESHOLDS: list[ToolThreshold] = [
 # Backward Compatibility Shims
 RunRecord = Session
 AgentTrajectory = Trajectory
+
+
+class SessionEventRecord(BaseModel):
+    """An immutable, append-only discrete event in the session event log."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    user_id: int | None = Field(default=None)
+    session_id: str = Field(...)
+    step_index: int = Field(default=0)
+    event_type: str = Field(
+        ...,
+        description="e.g., tool_call, review_decision, tool_result, operator_resolution",
+    )
+    payload: dict[str, Any] = Field(default_factory=dict)
+    created_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())

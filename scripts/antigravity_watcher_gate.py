@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Antigravity PreToolUse safety gate → OpenEval Watcher `/api/watcher/evaluate`.
+"""Antigravity PreToolUse safety gate → OpenEval Watcher `/api/v1/watcher/evaluate`.
 
 Contract (Antigravity hooks.md):
   stdin:  { "toolCall": { "name", "args" }, "conversationId", ... }
@@ -17,14 +17,61 @@ import os
 import re
 import sys
 import time
-import urllib.error
 import urllib.request
 from pathlib import Path
+from typing import Any
 
-WATCHER_URL = os.environ.get("OPENEVAL_WATCHER_URL", "http://127.0.0.1:8000/api/watcher/evaluate")
+WATCHER_URL = os.environ.get(
+    "OPENEVAL_WATCHER_URL", "http://127.0.0.1:8000/api/v1/watcher/evaluate"
+)
 OPENEVAL_API_KEY = os.environ.get("OPENEVAL_API_KEY", "").strip()
 TIMEOUT_SEC = float(os.environ.get("OPENEVAL_WATCHER_TIMEOUT", "1.5"))
 LOCKOUT_DECISION = os.environ.get("OPENEVAL_LOCKOUT_DECISION", "force_ask")
+
+# Stateful Circuit Breaker Configuration
+CIRCUIT_STATE_FILE = Path(
+    os.environ.get(
+        "OPENEVAL_CIRCUIT_STATE_FILE",
+        str(Path.home() / ".openeval" / "circuit_breaker.json"),
+    )
+)
+MAX_CONSECUTIVE_FAILURES = int(os.environ.get("OPENEVAL_MAX_GATEWAY_FAILURES", "3"))
+FAILURE_WINDOW_SEC = float(os.environ.get("OPENEVAL_FAILURE_WINDOW_SEC", "60.0"))
+
+
+def _record_gateway_failure() -> int:
+    """Record a gateway failure timestamp and return active failures within the sliding window."""
+    now = time.time()
+    failures: list[float] = []
+    try:
+        if CIRCUIT_STATE_FILE.exists():
+            data = json.loads(CIRCUIT_STATE_FILE.read_text(encoding="utf-8"))
+            failures = [
+                float(ts)
+                for ts in data.get("failures", [])
+                if (now - float(ts)) < FAILURE_WINDOW_SEC
+            ]
+    except Exception:
+        failures = []
+
+    failures.append(now)
+    try:
+        CIRCUIT_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        tmp = CIRCUIT_STATE_FILE.with_name(f"{CIRCUIT_STATE_FILE.name}.{os.getpid()}.tmp")
+        tmp.write_text(json.dumps({"failures": failures, "updated_at": now}), encoding="utf-8")
+        os.replace(tmp, CIRCUIT_STATE_FILE)
+    except Exception:
+        pass
+    return len(failures)
+
+
+def _reset_gateway_failures() -> None:
+    """Reset circuit breaker failure records upon a successful server evaluation."""
+    try:
+        if CIRCUIT_STATE_FILE.exists():
+            CIRCUIT_STATE_FILE.unlink()
+    except Exception:
+        pass
 
 
 def _get_headers() -> dict[str, str]:
@@ -44,9 +91,16 @@ LOG_PATH = Path(
 
 # Instant offline deny patterns (subset of Watcher command rules + high-severity)
 LOCAL_BLACKLIST: list[tuple[str, str, str]] = [
+    # 1. Interpreter Subprocess Reflection (Python/Ruby/Perl/Node inline script executing destructive wipe or secret read)
     (
-        r"\brm\s+-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*\b",
-        "Recursive force-delete (rm -rf) attempted.",
+        r"\b(?:python[23]?|perl|ruby|node)\s+(?:-e|-c)\s+[\"'].*?(?:shutil\.rmtree|os\.system\s*\(|open\s*\([^)]*(?:\.env|id_rsa|credentials)|\.unlink|\.rmdir|\.rmdirSync|\.rmSync|fs\.).*?[\"']",
+        "Destructive filesystem or secret exfiltration via inline script interpreter.",
+        "RULE_SUBPROCESS_REFLECTION",
+    ),
+    # 2. Destructive Filesystem Wipe (handles combined flags -rf and separated flags -r -f / --recursive --force)
+    (
+        r"\brm\s+(?:-[a-zA-Z0-9_-]+\s+)*(?:-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*|-[a-zA-Z]*f[a-zA-Z]*r[a-zA-Z]*|-[a-zA-Z]*r[a-zA-Z]*\s+-[a-zA-Z]*f[a-zA-Z]*|-[a-zA-Z]*f[a-zA-Z]*\s+-[a-zA-Z]*r[a-zA-Z]*|--recursive\s+--force|--force\s+--recursive)\b",
+        "Recursive force-delete (rm -rf / separated flags) attempted.",
         "RULE_DESTRUCTIVE_WIPE",
     ),
     (
@@ -75,6 +129,12 @@ LOCAL_BLACKLIST: list[tuple[str, str, str]] = [
         "Force push to remote attempted.",
         "RULE_GIT_FORCE_PUSH",
     ),
+    # 2. Obfuscated / Encoded Shell Execution (base64/openssl/xxd pipe into shell)
+    (
+        r"(?:base64\s+(?:-d|--decode)|openssl\s+enc\s+-d|xxd\s+-r)\s*(?:[^\n|]*)\|\s*(?:ba|z)?sh\b",
+        "Obfuscated encoded payload piped to shell interpreter.",
+        "RULE_OBFUSCATED_EXECUTION",
+    ),
     (
         r"curl\s+.*\|\s*(ba)?sh",
         "Remote script piped to shell (curl | bash).",
@@ -85,8 +145,15 @@ LOCAL_BLACKLIST: list[tuple[str, str, str]] = [
         "Remote script piped to shell (wget | bash).",
         "RULE_WGET_BASH",
     ),
+    # 4. Credential Exfiltration via Network Tools
     (
-        r"(?:cat|less|more|head|tail|bat)\s+[^\n]*(?:\.env\b|\.envrc\b|\.secrets\b|id_rsa|id_ed25519|\.pem\b|/etc/shadow|/\.aws/credentials)",
+        r"\b(?:curl|wget)\s+[^\n]*(?:-d\s+@|-F\s+[^\s=]*=@|--post-file=)[^\s\"']*(?:\.env|\.secrets|id_rsa|id_ed25519|\.pem|/\.aws/credentials|/etc/shadow)",
+        "Credential file exfiltration attempted via network upload.",
+        "RULE_CREDENTIAL_EXFILTRATION",
+    ),
+    # 5. Expanded Secret Reading Tools (cat, head, tail, grep, awk, sed, strings, xxd)
+    (
+        r"(?:cat|less|more|head|tail|bat|grep|awk|sed|strings|xxd|od)\s+[^\n]*(?:\.env\b|\.envrc\b|\.secrets\b|id_rsa|id_ed25519|\.pem\b|/etc/shadow|/\.aws/credentials)",
         "Reading secret/credential files via shell.",
         "RULE_SECRET_READ",
     ),
@@ -152,22 +219,482 @@ def _consume_force_ask(conversation_id: str) -> bool:
     return True
 
 
+NEGATIVE_CONSTRAINT_PATTERNS = [
+    re.compile(
+        r"(?:do\s+not|don't|never|must\s+not|cannot|should\s+not)\s+((?:(?!\.\s|\.$)[a-zA-Z0-9_\-./*`:,;\s'\"]){2,80})",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"(?:under\s+no\s+circumstances(?:\s+should\s+you|\s+shall\s+you|\s+can\s+you|\s+do)?)\s+((?:(?!\.\s|\.$)[a-zA-Z0-9_\-./*`:,;\s'\"]){2,80})",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"(?:prohibited|forbidden):\s*((?:(?!\.\s|\.$)[^\n;])+)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"(?:strictly|explicitly)\s+(?:prohibited|forbidden)(?:\s+to)?\s+((?:(?!\.\s|\.$)[^\n;])+)",
+        re.IGNORECASE,
+    ),
+]
+
+
+def _extract_negative_constraints_offline(context: str) -> list[str]:
+    constraints: list[str] = []
+    seen: set[str] = set()
+    if not context:
+        return constraints
+    for pat in NEGATIVE_CONSTRAINT_PATTERNS:
+        for match in pat.finditer(context):
+            raw = match.group(1).strip(" '\"`.,;:!?").lower()
+            raw = re.sub(
+                r"\b(under\s+any\s+circumstances|at\s+all|please|again|ever)\b",
+                "",
+                raw,
+            ).strip(" '\"`.,;:!?")
+            if raw and len(raw) >= 2 and raw not in seen:
+                seen.add(raw)
+                constraints.append(raw)
+    return constraints
+
+
+_GENERIC_TARGETS: set[str] = {
+    "file",
+    "files",
+    "directory",
+    "directories",
+    "folder",
+    "folders",
+    "code",
+    "data",
+    "item",
+    "items",
+}
+_DELETE_ACTIONS: set[str] = {
+    "delete",
+    "remove",
+    "rm",
+    "wipe",
+    "unlink",
+    "drop",
+    "truncate",
+    "destroy",
+    "purge",
+}
+_MODIFY_ACTIONS: set[str] = {
+    "modify",
+    "edit",
+    "change",
+    "write",
+    "update",
+    "replace",
+    "touch",
+    "overwrite",
+    "patch",
+    "create",
+}
+_PUSH_ACTIONS: set[str] = {"push"}
+_ACTION_WORDS: set[str] = (
+    _DELETE_ACTIONS
+    | _MODIFY_ACTIONS
+    | _PUSH_ACTIONS
+    | {"run", "execute", "use", "make", "do", "perform", "access"}
+)
+
+
+_TARGET_SYNONYMS: dict[str, list[str]] = {
+    "database": ["db"],
+    "databases": ["db"],
+    "db": ["database", "databases"],
+    "repository": ["repo"],
+    "repositories": ["repo"],
+    "repo": ["repository", "repositories"],
+    "configuration": ["config"],
+    "configurations": ["config"],
+    "config": ["configuration", "configurations"],
+    "environment": ["env"],
+    "environments": ["env"],
+    "env": ["environment", "environments"],
+    "credentials": ["creds", "cred"],
+    "creds": ["credentials", "credential"],
+}
+
+
+def _get_target_stems(target: str) -> list[str]:
+    """Generate candidate singular/stem forms for a target word."""
+    stems = [target]
+    if target in _TARGET_SYNONYMS:
+        stems.extend(_TARGET_SYNONYMS[target])
+    if len(target) > 3:
+        if target.endswith("ies") and len(target) > 4:
+            stems.append(target[:-3] + "y")
+            stems.append(target[:-3])
+        elif target.endswith("es"):
+            if any(target[:-2].endswith(end) for end in ("ch", "sh", "x", "ss", "z")):
+                stems.append(target[:-2])
+            else:
+                stems.append(target[:-1])
+        elif target.endswith("s") and not target.endswith("ss"):
+            stems.append(target[:-1])
+    return stems
+
+
+def _check_negative_constraint_offline(
+    constraints: list[str], tool_name: str, tool_input: str, diff: str = ""
+) -> tuple[bool, str]:
+    if not constraints or not tool_input:
+        return False, ""
+    input_lower = tool_input.lower()
+    tool_lower = tool_name.lower()
+    diff_lower = diff.lower()[:2000]
+    combined_target = f"{input_lower} {diff_lower}".strip()
+    full_combined = f"{tool_lower} {combined_target}".strip()
+
+    is_delete_tool = any(k in tool_lower for k in ("delete", "remove", "unlink", "rm")) or any(
+        re.search(rf"\b{cmd}\b", input_lower) for cmd in ("rm", "unlink", "drop", "truncate")
+    )
+
+    stop_words = {
+        "the",
+        "a",
+        "an",
+        "to",
+        "any",
+        "all",
+        "our",
+        "this",
+        "that",
+        "it",
+        "of",
+        "in",
+        "for",
+        "on",
+        "with",
+        "from",
+        "and",
+        "or",
+        "nor",
+        "either",
+    }
+    for constraint in constraints:
+        exc_match = re.split(r"\b(?:except|unless)\b", constraint, maxsplit=1, flags=re.IGNORECASE)
+        prohibition_part = exc_match[0].strip()
+        exception_part = exc_match[1].strip() if len(exc_match) > 1 else ""
+        if exception_part:
+            exc_tokens = [w.strip("`'\"*") for w in re.split(r"[\s_,]+", exception_part) if w]
+            exc_core = [w for w in exc_tokens if w and w not in stop_words]
+            if exc_core and any(t in full_combined for t in exc_core):
+                continue
+        sub_prohibitions = re.split(r"\b(?:or|nor|and)\b|,", prohibition_part, flags=re.IGNORECASE)
+        for sub in sub_prohibitions:
+            sub = sub.strip()
+            if not sub:
+                continue
+            raw_tokens = [w.strip("`'\"*") for w in re.split(r"[\s_]+", sub) if w]
+            tokens = [w for w in raw_tokens if w and w not in stop_words]
+            actions_in_sub = [w for w in tokens if w in _ACTION_WORDS]
+            core_targets = [w for w in tokens if w not in _ACTION_WORDS]
+
+            # Separate specific targets from generic targets (e.g. 'files', 'data')
+            specific_targets = [ct for ct in core_targets if ct not in _GENERIC_TARGETS]
+
+            matched = False
+            if specific_targets:
+                all_found = True
+                for ct in specific_targets:
+                    stems = _get_target_stems(ct)
+                    if not any(stem in combined_target or stem in full_combined for stem in stems):
+                        all_found = False
+                        break
+                matched = all_found
+            elif core_targets:
+                # Only generic targets exist (e.g. 'delete files')
+                is_delete_prohibition = any(a in _DELETE_ACTIONS for a in actions_in_sub)
+                if is_delete_prohibition:
+                    matched = is_delete_tool
+                else:
+                    matched = any(
+                        stem in combined_target
+                        for ct in core_targets
+                        for stem in _get_target_stems(ct)
+                    )
+            elif tokens:
+                matched = any(t in full_combined for t in tokens)
+            if matched:
+                return True, constraint
+    return False, ""
+
+
+SUBAGENT_REGISTRY_PATH = Path(
+    os.environ.get(
+        "OPENEVAL_SUBAGENT_REGISTRY",
+        str(Path.home() / ".openeval" / "subagent_registry.json"),
+    )
+)
+
+
+def _detect_subagent_provenance(
+    payload: dict,
+    tool_name: str,
+    tool_args: dict,
+    conversation_id: str,
+) -> dict[str, Any]:
+    """Multi-signal detection of delegated subagents (Apollo Codex auto-review).
+
+    Signals:
+    1. Environment variables (ANTIGRAVITY_SUBAGENT_ID, AGENT_ROLE, DELEGATION_DEPTH)
+    2. Hook JSON payload fields (call_origin, is_subagent, parent_session_id, delegation_depth)
+    3. Session registry lookup (subagent child conversation IDs)
+    """
+    env_depth_raw = os.environ.get("ANTIGRAVITY_DELEGATION_DEPTH") or os.environ.get(
+        "DELEGATION_DEPTH"
+    )
+    env_depth = int(env_depth_raw) if env_depth_raw and env_depth_raw.isdigit() else 1
+
+    # Signal 1: Environment variables
+    env_subagent_id = os.environ.get("ANTIGRAVITY_SUBAGENT_ID")
+    if env_subagent_id:
+        return {
+            "call_origin": "subagent",
+            "parent_session_id": env_subagent_id,
+            "delegation_depth": env_depth,
+            "delegated_by": "env:ANTIGRAVITY_SUBAGENT_ID",
+        }
+    agent_role = os.environ.get("AGENT_ROLE", "").lower()
+    if any(k in agent_role for k in ("subagent", "delegate", "worker", "sub_agent")):
+        return {
+            "call_origin": "subagent",
+            "parent_session_id": None,
+            "delegation_depth": env_depth,
+            "delegated_by": f"env:AGENT_ROLE={agent_role}",
+        }
+
+    # Signal 2: Hook JSON payload fields
+    call_origin = str(payload.get("call_origin") or payload.get("callOrigin") or "").lower()
+    if call_origin == "subagent":
+        depth = int(payload.get("delegation_depth") or payload.get("delegationDepth") or env_depth)
+        delegated_by = str(payload.get("delegated_by") or payload.get("delegatedBy") or "payload")
+        parent_sid = payload.get("parent_session_id") or payload.get("parentSessionId")
+        return {
+            "call_origin": "subagent",
+            "parent_session_id": str(parent_sid) if parent_sid else None,
+            "delegation_depth": depth,
+            "delegated_by": delegated_by,
+        }
+
+    if payload.get("is_subagent") or payload.get("isSubagent"):
+        depth = int(payload.get("delegation_depth") or payload.get("delegationDepth") or env_depth)
+        return {
+            "call_origin": "subagent",
+            "parent_session_id": None,
+            "delegation_depth": depth,
+            "delegated_by": "payload:is_subagent",
+        }
+
+    parent_sid = (
+        payload.get("parent_session_id")
+        or payload.get("parentSessionId")
+        or payload.get("parent_conversation_id")
+    )
+    if parent_sid:
+        return {
+            "call_origin": "subagent",
+            "parent_session_id": str(parent_sid),
+            "delegation_depth": 1,
+            "delegated_by": f"parent_session:{parent_sid}",
+        }
+
+    # Signal 3: Registry lookup by conversation_id
+    if conversation_id and SUBAGENT_REGISTRY_PATH.exists():
+        try:
+            data = json.loads(SUBAGENT_REGISTRY_PATH.read_text(encoding="utf-8"))
+            registered = data.get("subagents", {})
+            if conversation_id in registered:
+                info = registered[conversation_id]
+                return {
+                    "call_origin": "subagent",
+                    "parent_session_id": info.get("parent"),
+                    "delegation_depth": info.get("depth", 1),
+                    "delegated_by": info.get("delegated_by", "registry"),
+                }
+        except Exception:
+            pass
+
+    return {
+        "call_origin": "user_direct",
+        "parent_session_id": None,
+        "delegation_depth": 0,
+        "delegated_by": None,
+    }
+
+
+def _track_delegation_tool(tool_name: str, tool_args: dict, parent_conv_id: str) -> None:
+    """Register child subagents when delegation tools are invoked with concurrency lock & depth tracking."""
+    delegation_tools = {
+        "invoke_subagent",
+        "define_subagent",
+        "send_message",
+        "Agent",
+        "spawn_agent",
+        "TaskCreate",
+        "subagent",
+    }
+    if tool_name not in delegation_tools:
+        return
+
+    target_id = (
+        tool_args.get("Recipient")
+        or tool_args.get("agent_id")
+        or tool_args.get("conversationId")
+        or tool_args.get("subagent_id")
+        or tool_args.get("TaskId")
+        or tool_args.get("name")
+    )
+    if not target_id:
+        return
+
+    target_str = str(target_id).strip()
+    try:
+        SUBAGENT_REGISTRY_PATH.parent.mkdir(parents=True, exist_ok=True)
+        lock_file = SUBAGENT_REGISTRY_PATH.with_suffix(".lock")
+        with open(lock_file, "w", encoding="utf-8") as lf:
+            try:
+                import fcntl
+
+                fcntl.flock(lf.fileno(), fcntl.LOCK_EX)
+            except Exception:
+                pass
+            current_data = {}
+            if SUBAGENT_REGISTRY_PATH.exists():
+                with contextlib.suppress(Exception):
+                    current_data = json.loads(SUBAGENT_REGISTRY_PATH.read_text(encoding="utf-8"))
+            subagents = current_data.get("subagents", {})
+            parent_info = subagents.get(parent_conv_id, {})
+            parent_depth = int(parent_info.get("depth", 0)) if parent_info else 0
+            subagents[target_str] = {
+                "parent": parent_conv_id,
+                "depth": parent_depth + 1,
+                "delegated_by": tool_name,
+                "registered_at": time.time(),
+            }
+            current_data["subagents"] = subagents
+            tmp = SUBAGENT_REGISTRY_PATH.with_name(
+                f"{SUBAGENT_REGISTRY_PATH.name}.{os.getpid()}.tmp"
+            )
+            tmp.write_text(json.dumps(current_data, indent=2), encoding="utf-8")
+            os.replace(tmp, SUBAGENT_REGISTRY_PATH)
+            try:
+                import fcntl
+
+                fcntl.flock(lf.fileno(), fcntl.LOCK_UN)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
+def _format_consent_box(
+    decision: str,
+    reason: str,
+    disclosure: dict | None = None,
+    tool_name: str = "",
+    cmd: str = "",
+    path: str = "",
+) -> str:
+    """Format structured visual informed consent box matching Apollo specification."""
+    if disclosure and isinstance(disclosure, dict):
+        targets = disclosure.get("target_resources") or (
+            [path or cmd or tool_name] if (path or cmd or tool_name) else []
+        )
+        destination = disclosure.get("destination")
+        disclosed = disclosure.get("disclosed_data_types") or []
+        blast = disclosure.get("blast_radius") or "local_reversible"
+        reversibility = disclosure.get("reversibility_summary") or "Reversible: local change"
+        disc_ctx = disclosure.get("discovered_context")
+    else:
+        # Generate local fallback disclosure
+        targets = [p for p in [path, cmd[:60] if cmd else None, tool_name] if p]
+        destination = None
+        url_m = re.search(r"(https?://[^\s\"'>]+)", cmd)
+        if url_m:
+            destination = url_m.group(1)
+        disclosed = []
+        lower_all = (cmd + " " + path).lower()
+        if any(k in lower_all for k in (".env", "secret", "credential")):
+            disclosed.append("environment_variables")
+        if any(k in lower_all for k in ("id_rsa", "id_ed25519", ".ssh")):
+            disclosed.append("ssh_keys")
+        blast = (
+            "external_shared"
+            if destination
+            else ("local_destructive" if "rm " in cmd else "local_reversible")
+        )
+        reversibility = (
+            "Non-reversible: data sent outside local host"
+            if destination
+            else (
+                "Partially reversible: file deletion"
+                if "rm " in cmd
+                else "Reversible: local change"
+            )
+        )
+        disc_ctx = None
+
+    radius_desc = {
+        "external_shared": "external_shared (Irreversible external disclosure)",
+        "critical_unrecoverable": "critical_unrecoverable (Catastrophic unrecoverable damage)",
+        "local_destructive": "local_destructive (Destructive local modification)",
+        "local_reversible": "local_reversible (Reversible local modification)",
+    }.get(blast, blast)
+
+    lines = [
+        "================ [OPENEVAL INFORMED CONSENT REQUIRED] ================",
+        f"Decision: {decision.upper()} (Pending Operator Approval)",
+        f"Reason: {reason}",
+        f"🎯 Target Resources: {targets}",
+    ]
+    if destination:
+        lines.append(f"🌐 Destination: {destination}")
+    if disclosed:
+        lines.append(f"⚠️ Disclosed Data: {disclosed}")
+    lines.append(f"💥 Blast Radius: {radius_desc}")
+    lines.append(f"🔒 Reversibility: {reversibility}")
+    if disc_ctx:
+        lines.append(f"🔍 Discovered Context: {disc_ctx}")
+    lines.append("========================================================================")
+    return "\n".join(lines)
+
+
 def _emit(
     decision: str,
     reason: str = "",
     conversation_id: str = "",
     terminal_reason: str = "",
+    consent_box: str = "",
+    disclosure: dict | None = None,
 ) -> None:
     if decision in ("force_ask", "ask") and conversation_id:
         with contextlib.suppress(Exception):
             _mark_force_ask(conversation_id)
-    out: dict[str, str] = {"decision": decision}
+    out: dict[str, Any] = {"decision": decision}
     if terminal_reason:
         out["terminal_reason"] = terminal_reason
     elif decision == "force_ask":
         out["terminal_reason"] = "lockout"
-    if reason:
+
+    if consent_box:
+        # Print directly to stderr for prominent terminal display
+        sys.stderr.write(f"\n{consent_box}\n\n")
+        sys.stderr.flush()
+        out["reason"] = (
+            f"{reason}\n\n{consent_box}" if reason and reason not in consent_box else consent_box
+        )
+    elif reason:
         out["reason"] = reason
+
+    if disclosure:
+        out["consent_disclosure"] = disclosure
+
     print(json.dumps(out, ensure_ascii=False))
     _log("emit", decision=decision, reason=reason[:240], conversation_id=conversation_id[:64])
 
@@ -178,14 +705,17 @@ def _report_to_watcher(
     tool_args: dict,
     conversation_id: str,
     cmd: str,
+    provenance: dict | None = None,
+    thought_context: str = "",
 ) -> None:
     """Best-effort POST so Live Stream / Sessions see local-blacklist denies."""
     req_body = {
         "agent_id": "antigravity",
         "tool_name": tool_name,
         "arguments": tool_args if tool_args else ({"CommandLine": cmd} if cmd else {}),
-        "thought_context": conversation_id,
+        "thought_context": thought_context or conversation_id,
         "session_id": f"antigravity-{conversation_id[:8]}" if conversation_id else None,
+        "provenance": provenance or {"call_origin": "user_direct", "delegation_depth": 0},
     }
     try:
         req = urllib.request.Request(
@@ -207,7 +737,12 @@ def _report_to_watcher(
                 source="local_blacklist_report",
             )
     except Exception as err:
-        _log("server_unreachable", error=str(err), url=WATCHER_URL, source="local_blacklist_report")
+        _log(
+            "server_unreachable",
+            error=str(err),
+            url=WATCHER_URL,
+            source="local_blacklist_report",
+        )
 
 
 def _extract_cmd(tool_args: dict) -> str:
@@ -253,7 +788,9 @@ def _resolve_post_tool(conversation_id: str, error: str | None = None) -> None:
     if error:
         _log("posttool_failed", conversation_id=conversation_id[:64], error=str(error)[:120])
         return
-    resolve_url = WATCHER_URL.replace("/api/watcher/evaluate", "/api/v1/watcher/gate/resolve")
+    resolve_url = WATCHER_URL.replace(
+        "/api/watcher/evaluate", "/api/v1/watcher/gate/resolve"
+    ).replace("/api/v1/watcher/evaluate", "/api/v1/watcher/gate/resolve")
     req_body = {
         "session_id": f"antigravity-{conversation_id[:8]}" if conversation_id else None,
         "resolution": "human_approved",
@@ -318,7 +855,9 @@ def _report_tool_result_to_watcher(
     stderr: str = "",
 ) -> None:
     """Report tool execution completion and stdout/stderr immediately to Watcher."""
-    result_url = WATCHER_URL.replace("/api/watcher/evaluate", "/api/watcher/result")
+    result_url = WATCHER_URL.replace("/api/watcher/evaluate", "/api/v1/watcher/result").replace(
+        "/api/v1/watcher/evaluate", "/api/v1/watcher/result"
+    )
     session_id = f"antigravity-{conversation_id[:8]}" if conversation_id else None
     req_body = {
         "session_id": session_id,
@@ -379,16 +918,21 @@ def main() -> None:
     cmd = _extract_cmd(tool_args)
     path = _extract_path(tool_args)
 
+    # 0) Provenance & Subagent Detection
+    provenance = _detect_subagent_provenance(payload, tool_name, tool_args, conversation_id)
+    _track_delegation_tool(tool_name, tool_args, conversation_id)
+
     _log(
         "pretool",
         tool_name=tool_name,
         cmd=cmd[:200],
         path=path[:200],
         conversation_id=conversation_id[:64],
+        provenance=provenance,
     )
 
     # 1) Local deterministic deny (works offline). Still report to Watcher so UI
-    # Live Stream / Sessions record the block (previously returned before POST).
+    # Live Stream / Sessions record the block.
     if cmd:
         for pattern, reason, tag in LOCAL_BLACKLIST:
             if re.search(pattern, cmd, re.IGNORECASE):
@@ -397,29 +941,128 @@ def main() -> None:
                     tool_args=tool_args,
                     conversation_id=conversation_id,
                     cmd=cmd,
+                    provenance=provenance,
+                )
+                reason_msg = (
+                    f"[OPENEVAL INTERACTIVE LOCKOUT - {tag}]: {reason} "
+                    "Execution frozen pending human operator approval."
+                )
+                consent_box = _format_consent_box(
+                    decision=LOCKOUT_DECISION,
+                    reason=f"[{tag}] {reason}",
+                    tool_name=tool_name,
+                    cmd=cmd,
+                    path=path,
                 )
                 _emit(
                     LOCKOUT_DECISION,
-                    f"[OPENEVAL INTERACTIVE LOCKOUT - {tag}]: {reason} Execution frozen pending human operator approval.",
+                    reason_msg,
                     conversation_id=conversation_id,
+                    consent_box=consent_box,
                 )
                 return
 
-    if (
+    # Protected credential path check (SSH keys, AWS credentials, shadow, .env, .secrets)
+    is_cred_path = bool(
         path
-        and ("test_outputs.py" in path or "audit.log" in path or path.endswith(".env"))
-        and (path.endswith(".env") or Path(path).exists())
-    ):
+        and re.search(
+            r"(^|/)(id_rsa|id_ed25519|id_ecdsa|/etc/shadow|\.aws/credentials|\.secrets|\.env)",
+            path,
+        )
+    )
+    is_subagent = (
+        provenance.get("call_origin") == "subagent" or provenance.get("delegation_depth", 0) > 0
+    )
+
+    if path and ("test_outputs.py" in path or "audit.log" in path or is_cred_path):
+        tag = (
+            "RULE_SUBAGENT_CREDENTIAL_RESTRICTION"
+            if (is_subagent and is_cred_path)
+            else "RULE_SENSITIVE_PATH"
+        )
+        reason = (
+            "[SUBAGENT DELEGATE RESTRICTION]: Subagents strictly prohibited from credential access."
+            if (is_subagent and is_cred_path)
+            else "Modification or access of protected/credential path prohibited."
+        )
         _report_to_watcher(
             tool_name=tool_name,
             tool_args=tool_args if tool_args else {"TargetFile": path, "path": path},
             conversation_id=conversation_id,
             cmd=path,
+            provenance=provenance,
+        )
+        reason_msg = (
+            f"[OPENEVAL INTERACTIVE LOCKOUT - {tag}]: {reason} "
+            "Execution frozen pending human operator approval."
+        )
+        consent_box = _format_consent_box(
+            decision=LOCKOUT_DECISION,
+            reason=f"[{tag}] {reason}",
+            tool_name=tool_name,
+            cmd=cmd,
+            path=path,
         )
         _emit(
             LOCKOUT_DECISION,
-            "[OPENEVAL INTERACTIVE LOCKOUT - RULE_SENSITIVE_PATH]: Modification of secret/held-out path prohibited. Execution frozen pending human operator approval.",
+            reason_msg,
             conversation_id=conversation_id,
+            consent_box=consent_box,
+        )
+        return
+
+    thought_context = str(
+        payload.get("thought_context")
+        or payload.get("thoughtContext")
+        or payload.get("thought")
+        or payload.get("thinking")
+        or payload.get("userPrompt")
+        or payload.get("user_prompt")
+        or conversation_id
+    )
+
+    # 1b) Offline negative constraint check (Reversibility ≠ Authorization)
+    diff = ""
+    if isinstance(tool_args, dict):
+        diff = str(
+            tool_args.get("diff")
+            or tool_args.get("contents")
+            or tool_args.get("content")
+            or tool_args.get("CodeContent")
+            or tool_args.get("ReplacementContent")
+            or ""
+        )
+    target_input = cmd or path or str(tool_args)
+    neg_constraints = _extract_negative_constraints_offline(thought_context)
+    is_neg_viol, neg_desc = _check_negative_constraint_offline(
+        neg_constraints, tool_name, target_input, diff=diff
+    )
+    if is_neg_viol:
+        _report_to_watcher(
+            tool_name=tool_name,
+            tool_args=tool_args,
+            conversation_id=conversation_id,
+            cmd=cmd or path,
+            provenance=provenance,
+            thought_context=thought_context,
+        )
+        reason_msg = (
+            f"[OPENEVAL INTERACTIVE LOCKOUT - REVERSIBILITY_NOT_AUTH]: "
+            f"Explicit negative constraint '{neg_desc}' violated. "
+            "Execution frozen pending human operator approval."
+        )
+        consent_box = _format_consent_box(
+            decision=LOCKOUT_DECISION,
+            reason=f"[REVERSIBILITY_NOT_AUTH] Explicit negative constraint '{neg_desc}' violated.",
+            tool_name=tool_name,
+            cmd=cmd,
+            path=path,
+        )
+        _emit(
+            LOCKOUT_DECISION,
+            reason_msg,
+            conversation_id=conversation_id,
+            consent_box=consent_box,
         )
         return
 
@@ -432,8 +1075,9 @@ def main() -> None:
                     "agent_id": "antigravity",
                     "tool_name": tool_name,
                     "arguments": tool_args if tool_args else ({"CommandLine": cmd} if cmd else {}),
-                    "thought_context": conversation_id,
+                    "thought_context": thought_context,
                     "session_id": f"antigravity-{conversation_id[:8]}" if conversation_id else None,
+                    "provenance": provenance,
                 }
             ).encode("utf-8"),
             headers=_get_headers(),
@@ -442,10 +1086,35 @@ def main() -> None:
         with urllib.request.urlopen(req, timeout=TIMEOUT_SEC) as resp:
             body = resp.read().decode("utf-8")
             verdict = json.loads(body)
+        # Server query succeeded: reset circuit breaker failure records
+        _reset_gateway_failures()
     except Exception as err:
         _log("server_unreachable", error=str(err), url=WATCHER_URL)
-        # Fail-open only after local checks already passed
-        _emit("allow")
+        recent_failures = _record_gateway_failure()
+        if recent_failures >= MAX_CONSECUTIVE_FAILURES:
+            reason_msg = (
+                f"[OPENEVAL CIRCUIT BREAKER TRIPPED]: Watcher Gateway unreachable "
+                f"({recent_failures} consecutive failures in {int(FAILURE_WINDOW_SEC)}s). "
+                "Execution frozen pending human operator approval to prevent unmonitored actions."
+            )
+            consent_box = _format_consent_box(
+                decision=LOCKOUT_DECISION,
+                reason="[CIRCUIT_BREAKER_TRIPPED] Gateway unavailable; safety lockout engaged.",
+                tool_name=tool_name,
+                cmd=cmd,
+                path=path,
+            )
+            _emit(
+                LOCKOUT_DECISION,
+                reason_msg,
+                conversation_id=conversation_id,
+                terminal_reason="circuit_breaker_tripped",
+                consent_box=consent_box,
+            )
+            return
+
+        # Fail-open only after local checks already passed and within failure budget
+        _emit("allow", "Watcher gate: gateway timeout/unreachable (transient fail-open)")
         return
 
     decision = str(verdict.get("decision", "allow")).lower()
@@ -453,6 +1122,8 @@ def main() -> None:
     reason = str(verdict.get("reason") or "Violates safety policy")
     shadow = verdict.get("shadow_decision")
     mode = str(verdict.get("mode_applied") or "")
+    disclosure = verdict.get("consent_disclosure")
+
     _log(
         "server_verdict",
         decision=decision,
@@ -465,17 +1136,42 @@ def main() -> None:
     # Obey server decision only. Do not re-deny on risk_score — observe mode
     # returns decision=allow with a high risk_score and shadow_decision set.
     if decision in ("deny", "reject", "block"):
+        reason_msg = (
+            f"[OPENEVAL INTERACTIVE LOCKOUT]: {reason} (Risk: {int(risk_score * 100)}%). "
+            "Execution frozen pending human operator approval."
+        )
+        consent_box = _format_consent_box(
+            decision=LOCKOUT_DECISION,
+            reason=reason,
+            disclosure=disclosure,
+            tool_name=tool_name,
+            cmd=cmd,
+            path=path,
+        )
         _emit(
             LOCKOUT_DECISION,
-            f"[OPENEVAL INTERACTIVE LOCKOUT]: {reason} (Risk: {int(risk_score * 100)}%). Execution frozen pending human operator approval.",
+            reason_msg,
             conversation_id=conversation_id,
+            consent_box=consent_box,
+            disclosure=disclosure,
         )
         return
     if decision in ("escalate", "ask", "warn"):
+        reason_msg = f"[OPENEVAL ESCALATION]: {reason} (Risk: {int(risk_score * 100)}%)"
+        consent_box = _format_consent_box(
+            decision="force_ask",
+            reason=reason,
+            disclosure=disclosure,
+            tool_name=tool_name,
+            cmd=cmd,
+            path=path,
+        )
         _emit(
             "force_ask",
-            f"[OPENEVAL ESCALATION]: {reason} (Risk: {int(risk_score * 100)}%)",
+            reason_msg,
             conversation_id=conversation_id,
+            consent_box=consent_box,
+            disclosure=disclosure,
         )
         return
 

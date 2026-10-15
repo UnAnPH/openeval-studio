@@ -15,7 +15,7 @@
 **OpenEval Studio** is a portfolio evaluation workbench and autonomous coding agent safety runtime:
 
 1. **Eval IDE** — sandboxed agent evaluation harness, streaming trajectories, synchronized run compare, hybrid transcript search, and Inspect AI bridge.
-2. **Runtime Gate** — real-time PreToolUse governance hooks for **Antigravity**, **Claude Code**, and **Cursor** invoking `/api/gate/evaluate` (alias `/api/watcher/evaluate`) with deterministic command rules, tool thresholds (1–10), and optional LLM triage/deep review.
+2. **Runtime Gate** — real-time PreToolUse governance hooks for **Antigravity**, **Claude Code**, and **Cursor** invoking `/api/v1/watcher/evaluate` with deterministic command rules, tool thresholds (1–10), and optional LLM triage/deep review.
 3. **Org-Wide Analyzer** — PostgreSQL 16 telemetry tracking cross-session block rates, latency percentiles, and top blocked threat categories.
 
 *Engineering notes: See [PORTFOLIO.md](PORTFOLIO.md) for what this work sample proves, and [SELF_HOST.md](SELF_HOST.md) for self-hosting instructions.*
@@ -74,12 +74,19 @@ In **Safety → Sessions**, use hybrid dense vector + lexical search:
 
 **Interactive Lockout (`force_ask`):** In `enforce` mode, policy violations trigger an interactive lockout response (`"decision": "force_ask"`, `terminal_reason="lockout"`) in client hooks. This halts autonomous agents and requires human operator sign-off before proceeding.
 
-**Modes (`GET/POST /api/watcher/config`):**
+**Apollo Codex Auto-Review Safeguards (September 2026 Red-Teaming):**
+- **Authorization Provenance:** Structured `ProvenanceMetadata` (`call_origin`, `parent_session_id`, `delegation_depth`, `delegated_by`) tracks caller identity across delegation chains. Multi-signal detection across environment variables (`ANTIGRAVITY_SUBAGENT_ID`, `CURSOR_SUBAGENT_ID`, `AGENT_ROLE`), hook payloads, and session registries enforces a strict threshold ceiling for subagent delegates (score $\ge 6 \implies$ block, score $\ge 4 \implies$ escalate) and blocks subagents from credential access or privilege escalation.
+- **Reversibility ≠ Authorization:** Reversibility reduces risk but never establishes permission. Explicit negative constraints (*"do not touch tags"*, *"never run rm"*, *"strictly prohibited to edit .env"*) are extracted from thought and task context. Any violation enforces an absolute non-discountable floor (score $\ge 8 \implies$ block), disqualifying user-intent deductions (`-4`/`-2`) and prior-state capping.
+- **Informed Consent in Lockouts:** Emits structured `ConsentDisclosure` (`target_resources`, `destination`, `disclosed_data_types`, `blast_radius`, `reversibility_summary`, `discovered_context`) with an interactive formatted consent box rendered in terminal and IDE hooks on `force_ask` lockout.
+
+**Adversarial Evasion Defense:** Local client hooks and gateway rules actively intercept command obfuscation (`base64 -d | sh`, `xxd -r | zsh`), subprocess/script reflection (`python3 -c "import shutil; shutil.rmtree('/')"`, `node -e "fs.rmdirSync('/')"`), flag splitting (`rm -r -f /`), and network credential exfiltration (`curl -d @.env`).
+
+**Stateful Circuit Breaker:** Rather than blind unconditional fail-open, client hooks use an atomic sliding-window state file (`~/.openeval/circuit_breaker.json`). Transient blips (<3 timeouts in 60s) fail-open to preserve developer velocity, but 3 consecutive gateway failures immediately trip the circuit to `force_ask`, halting autonomous agent loops to prevent unmonitored execution until the gateway recovers.
+
+**Modes (`GET/POST /api/v1/watcher/config`):**
 - `enforce`: Active blocking and lockout.
 - `observe`: Shadow mode (logs and displays interceptions without blocking execution).
 - `paused`: Transparent bypass (allows all actions).
-
-Hooks **fail-open** if the backend API is unreachable *after* evaluating local instant-deny rules.
 
 ---
 

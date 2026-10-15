@@ -347,7 +347,7 @@ All session, review, trajectory, Control, and Analyzer queries filter by `WHERE 
      - If `Authorization: Bearer <key>` present: compute SHA-256 hash, query `api_keys` to resolve user, and set context.
      - If `X-OpenEval-Surface: demo` present:
        - For read requests: set context to `"demo"` and bypass authentication.
-       - For `POST /api/watcher/evaluate` or mutating requests: ignore demo header, enforce API key or session cookie, return 401 if unauthenticated.
+       - For `POST /api/v1/watcher/evaluate` or mutating requests: ignore demo header, enforce API key or session cookie, return 401 if unauthenticated.
      - `GET /demo` and `GET /demo/*`: serves SPA with no authentication.
      - `GET /api/health`: stays open.
      - All other app routes require authentication. Basic Auth is removed.
@@ -382,7 +382,7 @@ All session, review, trajectory, Control, and Analyzer queries filter by `WHERE 
        - Displays the raw API key once with a copy button.
        - Renders copyable setup commands for **Cursor**, **Claude Code**, and **Antigravity**, populated with:
          ```bash
-         export OPENEVAL_WATCHER_URL="https://openeval.studio/api/watcher/evaluate"
+         export OPENEVAL_WATCHER_URL="https://openeval.studio/api/v1/watcher/evaluate"
          export OPENEVAL_API_KEY="<user_api_key>"
          ```
      - Add a "Hooks" tab/view in navigation allowing authenticated users to review setup instructions and rotate their API key.
@@ -442,6 +442,6 @@ All session, review, trajectory, Control, and Analyzer queries filter by `WHERE 
 - [ ] **Tag Release:** Pushing a `prod-*` tag (e.g. `prod-1.0.1`) triggers CI tests, builds and pushes lowercased `ghcr.io/unanph/openeval-studio:prod-1.0.1` and `:latest`, and the server automatically pulls and restarts the container running that tag without compiling.
 - [ ] **User Registration:** A visitor can register with username and password, password hash is securely stored, the username "demo" is rejected, and the raw API key is presented once on the Hook Setup screen.
 - [ ] **Hook Instructions:** The Hook Setup screen renders pre-filled install commands for Cursor, Claude Code, and Antigravity containing the user's specific API key and URL.
-- [ ] **Per-User Sessions:** Tool calls posted to `/api/watcher/evaluate` with a user's API key insert records for that user; the website Sessions, Control, and Analyzer views display only that user's data; two registered users cannot inspect or modify each other's sessions.
+- [ ] **Per-User Sessions:** Tool calls posted to `/api/v1/watcher/evaluate` with a user's API key insert records for that user; the website Sessions, Control, and Analyzer views display only that user's data; two registered users cannot inspect or modify each other's sessions.
 - [ ] **Public `/demo`:** Navigating to `https://openeval.studio/demo` requires no login, displays the DEMO-ONLY banner, serves only curated fixtures, and rejects all write attempts.
 - [ ] **S3 Backup & Restore:** `scripts/pg_dump_to_s3.sh` uploads a gzipped database dump to S3 on schedule; `scripts/pg_restore_from_s3.sh` successfully restores the database from an S3 archive.

@@ -1,21 +1,19 @@
+import { Icon } from '../lib/icon';
+import {
+  ChevronLeft,
+  ChevronRight,
+  FlaskConical,
+  FolderOpen,
+  GitCompare,
+  Grid,
+  Inbox,
+  Layers,
+  Play,
+  ShieldCheck,
+  Sliders,
+  Terminal,
+} from 'lucide-react';
 import React, { useState } from 'react';
-import {
-  IonIcon,
-} from '@ionic/react';
-import {
-  gitCompareOutline,
-  gridOutline,
-  folderOpenOutline,
-  chevronBackOutline,
-  chevronForwardOutline,
-  layersOutline,
-  playSharp,
-  flaskOutline,
-  fileTrayFullOutline,
-  shieldCheckmarkOutline,
-  optionsOutline,
-  terminalOutline,
-} from 'ionicons/icons';
 
 import { MainNavTab } from '../types';
 
@@ -89,37 +87,37 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {
           id: 'overview',
           label: 'Overview',
-          icon: gridOutline,
+          icon: Grid,
           isActive: isDashboardActive,
         },
         {
           id: 'benchmarks',
           label: 'Catalog',
-          icon: layersOutline,
+          icon: Layers,
           isActive: isBenchmarksActive,
         },
         {
           id: 'studio',
           label: 'Launch',
-          icon: playSharp,
+          icon: Play,
           isActive: activeTab === 'studio',
         },
         {
           id: 'runs',
           label: 'Runs',
-          icon: folderOpenOutline,
+          icon: FolderOpen,
           isActive: isRunsActive,
         },
         {
           id: 'compare',
           label: 'Compare',
-          icon: gitCompareOutline,
+          icon: GitCompare,
           isActive: activeTab === 'compare',
         },
         {
           id: 'graders',
           label: 'Judges',
-          icon: flaskOutline,
+          icon: FlaskConical,
           isActive: activeTab === 'graders',
         },
       ],
@@ -130,25 +128,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {
           id: 'control',
           label: 'Control',
-          icon: shieldCheckmarkOutline,
+          icon: ShieldCheck,
           isActive: isControlActive,
         },
         {
           id: 'sessions',
           label: 'Sessions',
-          icon: fileTrayFullOutline,
+          icon: Inbox,
           isActive: isSessionsActive,
         },
         {
           id: 'policy',
           label: 'Policy',
-          icon: optionsOutline,
+          icon: Sliders,
           isActive: isPolicyActive,
         },
         {
           id: 'hooks',
           label: 'Hooks',
-          icon: terminalOutline,
+          icon: Terminal,
           isActive: activeTab === 'hooks',
         },
       ],
@@ -181,7 +179,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             className="w-7 h-7 rounded-lg bg-[#1C182E] hover:bg-[#282342] text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer border border-[#2B2644]"
             title={collapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
           >
-            <IonIcon icon={collapsed ? chevronForwardOutline : chevronBackOutline} className="text-xs" />
+            <Icon icon={collapsed ? ChevronRight : ChevronLeft} className="text-xs" />
           </button>
         </div>
 
@@ -215,7 +213,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     }`}
                   >
                     <div className="flex items-center gap-2.5">
-                      <IonIcon
+                      <Icon
                         icon={item.icon}
                         className={`text-base flex-shrink-0 ${item.isActive ? 'text-white' : 'text-slate-400 group-hover:text-white'}`}
                       />

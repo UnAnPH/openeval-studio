@@ -1,6 +1,7 @@
 """Tests for Cursor Watcher Gate script and endpoint integration."""
 
 import json
+import os
 import subprocess
 import sys
 import uuid
@@ -16,12 +17,14 @@ GATE_SCRIPT = Path(__file__).parent.parent / "scripts" / "cursor_watcher_gate.py
 def _run_gate(payload: dict) -> dict:
     if "conversation_id" not in payload:
         payload["conversation_id"] = uuid.uuid4().hex
+    env = {**os.environ, "OPENEVAL_MAX_GATEWAY_FAILURES": "999"}
     proc = subprocess.run(
         [sys.executable, str(GATE_SCRIPT)],
         input=json.dumps(payload),
         capture_output=True,
         text=True,
         check=True,
+        env=env,
     )
     return json.loads(proc.stdout.strip())
 
@@ -116,7 +119,7 @@ def test_evaluate_action_file_tool_does_not_apply_command_rules() -> None:
     client = TestClient(app)
     # File write containing shell keywords (rm -rf, sudo, .env in code text)
     res = client.post(
-        "/api/watcher/evaluate",
+        "/api/v1/watcher/evaluate",
         json={
             "agent_id": "cursor",
             "tool_name": "Write",
@@ -137,7 +140,7 @@ def test_evaluate_action_file_tool_blocks_sensitive_file_path() -> None:
     """Writing directly to .env must be blocked by Sensitive files rule."""
     client = TestClient(app)
     res = client.post(
-        "/api/watcher/evaluate",
+        "/api/v1/watcher/evaluate",
         json={
             "agent_id": "cursor",
             "tool_name": "Write",

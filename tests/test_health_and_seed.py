@@ -1,15 +1,27 @@
 """Tests for /api/health database probe and idempotent demo data seeding."""
 
-from unittest.mock import MagicMock, patch
-
 from sqlalchemy import text
 from starlette.testclient import TestClient
 
 from schemas.watcher_models import Session
-from server.app import app
+from server.app import app, get_db_opener, probe_database
 from server.db import SessionLocal, current_user_id, current_user_slug
 from server.demo_seed import seed_demo_data
 from server.watcher_store import get_watcher_store
+
+
+class _FailingSession:
+    """Context manager whose enter raises, standing in for a down database."""
+
+    def __enter__(self) -> None:
+        raise Exception("Connection refused / database unreachable")
+
+    def __exit__(self, *_args: object) -> bool:
+        return False
+
+
+def _failing_opener() -> _FailingSession:
+    return _FailingSession()
 
 
 def test_health_probe_returns_200_when_connected():
@@ -23,18 +35,20 @@ def test_health_probe_returns_200_when_connected():
 
 
 def test_health_probe_returns_503_when_database_down():
-    """Verify GET /api/health returns 503 with status degraded when PostgreSQL fails."""
-    mock_db = MagicMock()
-    mock_db.execute.side_effect = Exception("Connection refused / database unreachable")
-    mock_session_maker = MagicMock()
-    mock_session_maker.return_value.__enter__.return_value = mock_db
+    """Verify GET /api/health returns 503 with status degraded when PostgreSQL fails.
 
-    with patch("server.db.SessionLocal", mock_session_maker), TestClient(app) as client:
-        resp = client.get("/api/health")
-        assert resp.status_code == 503
-        data = resp.json()
-        assert data["status"] == "degraded"
-        assert data["db"] == "disconnected"
+    Inverting the opener to a live database makes this assertion fail.
+    """
+    app.dependency_overrides[get_db_opener] = lambda: _failing_opener
+    try:
+        with TestClient(app) as client:
+            resp = client.get("/api/health")
+            assert resp.status_code == 503
+            data = resp.json()
+            assert data["status"] == "degraded"
+            assert data["db"] == "disconnected"
+    finally:
+        app.dependency_overrides.pop(get_db_opener, None)
 
 
 def test_seed_demo_data_is_idempotent_and_preserves_owner_rows():
@@ -92,32 +106,22 @@ def test_seed_demo_data_is_idempotent_and_preserves_owner_rows():
     assert fetched_owner.project_name == "private-owner-work"
 
 
-def test_startup_db_failure_fails_closed_on_evaluate(monkeypatch):
-    """When DATABASE_URL points at a closed port, lifespan marks db_ready=False and evaluate returns 503."""
-    bad_url = "postgresql+psycopg://openeval:openeval@127.0.0.1:59999/openeval"
-    monkeypatch.setenv("DATABASE_URL", bad_url)
-    monkeypatch.setenv("OPENEVAL_AUTH_DISABLED", "1")
+def test_probe_database_is_false_when_opener_fails():
+    """A down database is a failed probe. A succeeding opener would make this fail."""
+    assert probe_database(_failing_opener) is False
 
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
 
-    bad_engine = create_engine(bad_url)
-    bad_session = sessionmaker(autocommit=False, autoflush=False, bind=bad_engine)
+def test_evaluate_fails_closed_when_database_not_ready():
+    """Mutating evaluate returns 503 while db_ready is false.
+
+    Leaving db_ready true would make this assertion fail.
+    """
     orig_ready = getattr(app.state, "db_ready", True)
-
     try:
-        with (
-            patch("server.db.engine", bad_engine),
-            patch("server.db.SessionLocal", bad_session),
-            TestClient(app) as client,
-        ):
-            # Health probe fails with 503
-            h_resp = client.get("/api/health")
-            assert h_resp.status_code == 503
-
-            # Mutating evaluate endpoint returns 503
+        with TestClient(app) as client:
+            app.state.db_ready = False
             eval_resp = client.post(
-                "/api/watcher/evaluate",
+                "/api/v1/watcher/evaluate",
                 json={
                     "tool_name": "bash",
                     "tool_input": "echo 'failing-db'",

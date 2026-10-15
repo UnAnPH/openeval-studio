@@ -1,11 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import {
-  IonApp,
-  IonPage,
-  IonSpinner,
-  IonToast,
-} from '@ionic/react';
-import { AlertCircle, Play } from 'lucide-react';
+import { AlertCircle, Loader2, Play } from 'lucide-react';
 
 import { Sidebar } from './components/Sidebar';
 import { LiveTrajectory } from './components/LiveTrajectory';
@@ -225,7 +219,7 @@ export function App() {
   // Connect to Watcher Live SSE Telemetry Stream
   useEffect(() => {
     try {
-      const sse = new EventSource('/api/watcher/stream');
+      const sse = new EventSource('/api/v1/watcher/stream');
       watcherSseRef.current = sse;
 
       sse.addEventListener('connected', (e) => {
@@ -246,7 +240,7 @@ export function App() {
       });
 
       sse.addEventListener('interception_resolved', () => {
-        fetch('/api/watcher/interceptions')
+        fetch('/api/v1/watcher/interceptions')
           .then((r) => r.json())
           .then((rows) => {
             if (Array.isArray(rows)) setLiveInterceptions(rows);
@@ -299,10 +293,10 @@ export function App() {
         fetch('/api/models').catch(() => null),
         fetch('/api/tasks').catch(() => null),
         fetch('/api/eval/runs').catch(() => null),
-        fetch('/api/watcher/findings').catch(() => null),
-        fetch('/api/watcher/config').catch(() => null),
+        fetch('/api/v1/watcher/findings').catch(() => null),
+        fetch('/api/v1/watcher/config').catch(() => null),
         fetch('/api/v1/watcher/sessions?min_messages=1').catch(() => null),
-        fetch('/api/watcher/interceptions?limit=40').catch(() => null),
+        fetch('/api/v1/watcher/interceptions?limit=40').catch(() => null),
       ]);
 
       const demoActive = isDemoSurface();
@@ -647,7 +641,7 @@ export function App() {
 
   const handleUpdateWatcherConfig = async (newConfig: Partial<WatcherConfig>) => {
     try {
-      const res = await fetch('/api/watcher/config', {
+      const res = await fetch('/api/v1/watcher/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newConfig),
@@ -1079,8 +1073,8 @@ export function App() {
   );
 
   return (
-    <IonApp className="light">
-      <IonPage className="bg-[#F6F5F9] text-text-primary font-sans flex flex-row overflow-hidden">
+    <div className="min-h-screen w-full light">
+      <div className="min-h-screen w-full bg-[#F6F5F9] text-text-primary font-sans flex flex-row overflow-hidden">
         {/* Left Navigation Sidebar */}
         <Sidebar
           activeTab={navTab}
@@ -1415,7 +1409,7 @@ export function App() {
                         onClick={handleStopEval}
                         className="px-4 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
                       >
-                        <IonSpinner name="dots" className="w-3 h-3 text-white" />
+                        <Loader2 className="w-3 h-3 text-white animate-spin" />
                         <span>Stop Run</span>
                       </button>
                     ) : (
@@ -1570,14 +1564,18 @@ export function App() {
         </div>
 
         {/* Error Toast */}
-        <IonToast
-          isOpen={!!errorMsg}
-          message={errorMsg || ''}
-          color="danger"
-          duration={5000}
-          onDidDismiss={() => setErrorMsg(null)}
-          buttons={[{ text: 'Dismiss', role: 'cancel' }]}
-        />
+        {errorMsg ? (
+          <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 bg-red-600 text-white px-4 py-2.5 rounded-xl shadow-lg text-sm font-medium">
+            <span>{errorMsg}</span>
+            <button
+              type="button"
+              onClick={() => setErrorMsg(null)}
+              className="ml-2 font-bold underline opacity-80 hover:opacity-100 cursor-pointer"
+            >
+              Dismiss
+            </button>
+          </div>
+        ) : null}
 
         {/* Auth Modal (Sign In / Register) */}
         <AuthModal
@@ -1585,9 +1583,9 @@ export function App() {
           onLoginSuccess={handleLoginSuccess}
           onRegisterSuccess={handleRegisterSuccess}
         />
-      </IonPage>
+      </div>
 
-    </IonApp>
+    </div>
   );
 }
 

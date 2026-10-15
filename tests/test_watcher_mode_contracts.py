@@ -16,7 +16,7 @@ def client() -> TestClient:
 
 def _set_mode(client: TestClient, mode: str) -> None:
     res = client.post(
-        "/api/watcher/config",
+        "/api/v1/watcher/config",
         json={
             "mode": mode,
             "deny_threshold": 0.8,
@@ -42,23 +42,23 @@ def test_mode_contracts_enforce_observe_paused(client: TestClient):
     }
 
     _set_mode(client, "enforce")
-    r = client.post("/api/watcher/evaluate", json={**bad, "session_id": "gold-enforce"})
+    r = client.post("/api/v1/watcher/evaluate", json={**bad, "session_id": "gold-enforce"})
     assert r.status_code == 200
     assert r.json()["decision"] in ("deny", "escalate")
 
     _set_mode(client, "observe")
-    r = client.post("/api/watcher/evaluate", json={**bad, "session_id": "gold-observe"})
+    r = client.post("/api/v1/watcher/evaluate", json={**bad, "session_id": "gold-observe"})
     body = r.json()
     assert body["decision"] == "allow"
     assert body.get("shadow_decision") in ("deny", "escalate")
 
     _set_mode(client, "paused")
-    r = client.post("/api/watcher/evaluate", json={**bad, "session_id": "gold-paused"})
+    r = client.post("/api/v1/watcher/evaluate", json={**bad, "session_id": "gold-paused"})
     assert r.json()["decision"] == "allow"
 
     _set_mode(client, "enforce")
     r = client.post(
-        "/api/watcher/evaluate",
+        "/api/v1/watcher/evaluate",
         json={
             "tool_name": "bash",
             "arguments": {"cmd": "echo hello"},
@@ -72,7 +72,7 @@ def test_mode_contracts_enforce_observe_paused(client: TestClient):
     assert "gold-enforce" in sessions
     assert "gold-observe" in sessions
 
-    findings = client.get("/api/watcher/findings").json()
+    findings = client.get("/api/v1/watcher/findings").json()
     assert any(f["session_id"] == "gold-enforce" for f in findings)
 
 

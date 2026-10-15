@@ -1,15 +1,14 @@
+import { Icon } from '../lib/icon';
+import {
+  Clock,
+  Flame,
+  Layers,
+  Play,
+  Search,
+  Server,
+} from 'lucide-react';
 import React, { useState } from 'react';
-import {
-  IonIcon,
-} from '@ionic/react';
-import {
-  playSharp,
-  searchOutline,
-  serverOutline,
-  layersOutline,
-  timeOutline,
-} from 'ionicons/icons';
-import { Flame } from 'lucide-react';
+
 import { RunRecord, TaskSummary } from '../types';
 import { RedTeamWorkbenchModal } from './RedTeamWorkbenchModal';
 
@@ -143,8 +142,8 @@ export const BenchmarksList: React.FC<BenchmarksListProps> = ({
               placeholder="Search benchmark tasks..."
               className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-8 py-2 text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono placeholder:text-slate-400 shadow-xs"
             />
-            <IonIcon
-              icon={searchOutline}
+            <Icon
+              icon={Search}
               className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"
             />
             {searchText && (
@@ -221,15 +220,15 @@ export const BenchmarksList: React.FC<BenchmarksListProps> = ({
                 <div className="space-y-2 pt-2 border-t border-border-subtle/60 text-[11px] font-mono text-text-secondary">
                   <div className="flex items-center justify-between">
                     <span className="flex items-center gap-1">
-                      <IonIcon icon={timeOutline} className="text-xs text-text-muted" />
+                      <Icon icon={Clock} className="text-xs text-text-muted" />
                       Limit: <strong>{task.timeout_sec || 600}s</strong>
                     </span>
                     <span className="flex items-center gap-1">
-                      <IonIcon icon={layersOutline} className="text-xs text-text-muted" />
+                      <Icon icon={Layers} className="text-xs text-text-muted" />
                       Turns: <strong>{task.max_steps || 25} max</strong>
                     </span>
                     <span className="flex items-center gap-1">
-                      <IonIcon icon={serverOutline} className="text-xs text-text-muted" />
+                      <Icon icon={Server} className="text-xs text-text-muted" />
                       RAM: <strong>{task.memory_mb || 2048}MB</strong>
                     </span>
                   </div>
@@ -281,7 +280,7 @@ export const BenchmarksList: React.FC<BenchmarksListProps> = ({
                     onClick={() => onLaunchTask(task.task_id)}
                     className="px-3.5 py-1.5 rounded-xl bg-dark-base text-white text-xs font-bold flex items-center gap-1.5 hover:bg-black transition-all shadow-sm active:scale-95 cursor-pointer"
                   >
-                    <IonIcon icon={playSharp} className="text-[10px]" />
+                    <Icon icon={Play} className="text-[10px]" />
                     <span>Launch</span>
                   </button>
                 </div>

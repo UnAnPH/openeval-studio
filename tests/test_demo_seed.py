@@ -128,7 +128,7 @@ def test_demo_mode_isolation_and_new_fixtures(monkeypatch):
         assert "redteam-cipher-obfuscation" in run_ids
 
         # Interceptions poll must never trigger host scans or leak non-demo sessions
-        intercept_resp = client.get("/api/watcher/interceptions?limit=40", headers=demo_headers)
+        intercept_resp = client.get("/api/v1/watcher/interceptions?limit=40", headers=demo_headers)
         assert intercept_resp.status_code == 200
         interceptions = intercept_resp.json()
         assert len(interceptions) > 0

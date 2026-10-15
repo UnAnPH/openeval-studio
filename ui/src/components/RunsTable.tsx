@@ -1,25 +1,23 @@
+import { Icon } from '../lib/icon';
+import {
+  AlertTriangle,
+  ArrowRight,
+  CheckCircle,
+  CircleDollarSign,
+  Clock,
+  Copy,
+  Download,
+  Filter,
+  GitCompare,
+  Hourglass,
+  Play,
+  Search,
+  ShieldCheck,
+  Sparkles,
+  Trash2,
+  XCircle,
+} from 'lucide-react';
 import React, { useState, useMemo } from 'react';
-import {
-  IonIcon,
-} from '@ionic/react';
-import {
-  checkmarkCircle,
-  closeCircle,
-  copyOutline,
-  downloadOutline,
-  filterOutline,
-  gitCompareOutline,
-  hourglassOutline,
-  searchOutline,
-  shieldCheckmarkOutline,
-  trashOutline,
-  arrowForwardOutline,
-  playSharp,
-  sparklesOutline,
-  cashOutline,
-  timeOutline,
-  warningOutline,
-} from 'ionicons/icons';
 import { RunRecord, TaskSummary } from '../types';
 
 interface RunsTableProps {
@@ -143,7 +141,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
               onClick={onNavigateToStudio}
               className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold bg-slate-900 text-white rounded-xl hover:bg-black transition-all shadow-xs cursor-pointer"
             >
-              <IonIcon icon={playSharp} className="text-xs" />
+              <Icon icon={Play} className="text-xs" />
               <span>New Run</span>
             </button>
           )}
@@ -164,7 +162,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
         >
           <div className="text-[11px] text-text-muted font-medium flex items-center justify-between">
             <span>Total Runs</span>
-            <IonIcon icon={sparklesOutline} className="text-brand-purple text-xs" />
+            <Icon icon={Sparkles} className="text-brand-purple text-xs" />
           </div>
           <div className="text-xl font-bold font-mono text-text-primary mt-1">{totalRuns}</div>
           <div className="text-[10px] text-text-muted mt-0.5">
@@ -184,7 +182,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
         >
           <div className="text-[11px] text-text-muted font-medium flex items-center justify-between">
             <span>Passed</span>
-            <IonIcon icon={checkmarkCircle} className="text-status-cleared text-xs" />
+            <Icon icon={CheckCircle} className="text-status-cleared text-xs" />
           </div>
           <div className="text-xl font-bold font-mono text-emerald-700 mt-1">{passedRuns}</div>
           <div className="text-[10px] text-text-muted mt-0.5">
@@ -204,7 +202,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
         >
           <div className="text-[11px] text-text-muted font-medium flex items-center justify-between">
             <span>Failed</span>
-            <IonIcon icon={closeCircle} className="text-risk-high text-xs" />
+            <Icon icon={XCircle} className="text-risk-high text-xs" />
           </div>
           <div className="text-xl font-bold font-mono text-rose-700 mt-1">{failedRuns}</div>
           <div className="text-[10px] text-text-muted mt-0.5">
@@ -224,7 +222,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
         >
           <div className="text-[11px] text-text-muted font-medium flex items-center justify-between">
             <span>Safety Flagged</span>
-            <IonIcon icon={shieldCheckmarkOutline} className="text-brand-purple text-xs" />
+            <Icon icon={ShieldCheck} className="text-brand-purple text-xs" />
           </div>
           <div className="text-xl font-bold font-mono text-brand-purple mt-1">{flaggedRuns}</div>
           <div className="text-[10px] text-text-muted mt-0.5">
@@ -236,7 +234,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
         <div className="bg-white p-4 rounded-xl border border-border-subtle shadow-sm space-y-1">
           <div className="text-[11px] text-text-muted font-medium flex items-center justify-between">
             <span>Avg Duration</span>
-            <IonIcon icon={timeOutline} className="text-accent-orange text-xs" />
+            <Icon icon={Clock} className="text-accent-orange text-xs" />
           </div>
           <div className="text-xl font-bold font-mono text-text-primary mt-1">{avgDuration}s</div>
           <div className="text-[10px] text-text-muted mt-0.5">Overall runs</div>
@@ -246,7 +244,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
         <div className="bg-white p-4 rounded-xl border border-border-subtle shadow-sm space-y-1">
           <div className="text-[11px] text-text-muted font-medium flex items-center justify-between">
             <span>Est. Spend</span>
-            <IonIcon icon={cashOutline} className="text-emerald-600 text-xs" />
+            <Icon icon={CircleDollarSign} className="text-emerald-600 text-xs" />
           </div>
           <div className="text-xl font-bold font-mono text-emerald-700 mt-1">${totalCost.toFixed(4)}</div>
           <div className="text-[10px] text-text-secondary font-mono">{totalTokens.toLocaleString()} tok</div>
@@ -328,8 +326,8 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                 placeholder="Search run ID, task, model..."
                 className="w-full bg-canvas border border-border-subtle rounded-xl pl-7 pr-3 py-1.5 text-xs text-text-primary focus:outline-none focus:border-brand-primary font-sans"
               />
-              <IonIcon
-                icon={searchOutline}
+              <Icon
+                icon={Search}
                 className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted text-xs pointer-events-none"
               />
             </div>
@@ -345,7 +343,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                 className="px-3 py-1.5 rounded-xl bg-white text-rose-600 hover:bg-rose-50 border border-rose-200 text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer"
                 title="Clear All Runs"
               >
-                <IonIcon icon={trashOutline} className="text-xs" />
+                <Icon icon={Trash2} className="text-xs" />
                 <span>Clear All</span>
               </button>
             )}
@@ -368,7 +366,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                   onClick={() => onCompareSelected([selectedRunIds[0], selectedRunIds[1]])}
                   className="px-3.5 py-1.5 rounded-xl bg-slate-900 text-white text-xs font-semibold flex items-center gap-1.5 hover:bg-black transition-all shadow-xs cursor-pointer"
                 >
-                  <IonIcon icon={gitCompareOutline} className="text-xs" />
+                  <Icon icon={GitCompare} className="text-xs" />
                   <span>Compare Top 2 Selected</span>
                 </button>
               )}
@@ -380,7 +378,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                   onClick={() => onExportSFT(selectedRecords)}
                   className="px-3 py-1.5 rounded-lg bg-white border border-border-subtle text-brand-purple text-xs font-bold flex items-center gap-1.5 hover:bg-surface-subtle transition-all cursor-pointer"
                 >
-                  <IonIcon icon={downloadOutline} className="text-xs" />
+                  <Icon icon={Download} className="text-xs" />
                   <span>Export SFT JSONL ({selectedRunIds.length})</span>
                 </button>
               )}
@@ -392,7 +390,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                   onClick={() => setShowBatchDeleteModal(true)}
                   className="px-3 py-1.5 rounded-lg bg-rose-100 text-rose-800 hover:bg-rose-200 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
                 >
-                  <IonIcon icon={trashOutline} className="text-xs" />
+                  <Icon icon={Trash2} className="text-xs" />
                   <span>Delete Selected ({selectedRunIds.length})</span>
                 </button>
               )}
@@ -414,7 +412,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
         {filteredRuns.length === 0 ? (
           <div className="p-12 text-center space-y-3">
             <div className="w-12 h-12 rounded-2xl bg-canvas border border-border-subtle mx-auto flex items-center justify-center text-text-muted">
-              <IonIcon icon={filterOutline} className="text-2xl" />
+              <Icon icon={Filter} className="text-2xl" />
             </div>
             <h3 className="text-sm font-bold text-text-primary">No evaluation runs found</h3>
             <p className="text-xs text-text-secondary max-w-sm mx-auto">
@@ -492,15 +490,15 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                       {/* Status */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
                         <div className="flex items-center gap-1.5">
-                          <IonIcon
+                          <Icon
                             icon={
                               isPassed
-                                ? checkmarkCircle
+                                ? CheckCircle
                                 : isFailed
-                                ? closeCircle
+                                ? XCircle
                                 : isRunning
-                                ? hourglassOutline
-                                : closeCircle
+                                ? Hourglass
+                                : XCircle
                             }
                             className={`text-sm ${
                               isPassed
@@ -538,7 +536,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                             className="p-1 text-text-muted hover:text-text-primary rounded transition-colors cursor-pointer"
                             title="Copy Run ID"
                           >
-                            <IonIcon icon={copyOutline} className="text-xs" />
+                            <Icon icon={Copy} className="text-xs" />
                           </button>
                           {copiedId === run.run_id && (
                             <span className="text-[9px] text-emerald-600 font-bold">Copied!</span>
@@ -577,7 +575,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                             className="px-3 py-1 rounded-lg bg-surface-subtle text-brand-purple text-xs font-bold flex items-center gap-1 hover:bg-purple-100 transition-colors cursor-pointer"
                           >
                             <span>Inspect</span>
-                            <IonIcon icon={arrowForwardOutline} className="text-[11px]" />
+                            <Icon icon={ArrowRight} className="text-[11px]" />
                           </button>
 
                           {onDeleteRun && (
@@ -590,7 +588,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                               className="p-1.5 rounded-lg text-text-muted hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                               title="Delete run"
                             >
-                              <IonIcon icon={trashOutline} className="text-xs pointer-events-none" />
+                              <Icon icon={Trash2} className="text-xs pointer-events-none" />
                             </button>
                           )}
                         </div>
@@ -616,7 +614,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
           >
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 flex items-center justify-center flex-shrink-0">
-                <IonIcon icon={trashOutline} className="text-xl text-rose-600" />
+                <Icon icon={Trash2} className="text-xl text-rose-600" />
               </div>
               <div>
                 <h3 className="text-base font-bold text-text-primary">Delete Evaluation Run?</h3>
@@ -669,7 +667,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
           >
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 flex items-center justify-center flex-shrink-0">
-                <IonIcon icon={trashOutline} className="text-xl text-rose-600" />
+                <Icon icon={Trash2} className="text-xl text-rose-600" />
               </div>
               <div>
                 <h3 className="text-base font-bold text-text-primary">Delete {selectedRunIds.length} Selected Runs?</h3>
@@ -719,7 +717,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
           >
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 flex items-center justify-center flex-shrink-0">
-                <IonIcon icon={warningOutline} className="text-xl text-rose-600" />
+                <Icon icon={AlertTriangle} className="text-xl text-rose-600" />
               </div>
               <div>
                 <h3 className="text-base font-bold text-text-primary">Purge All Evaluation Runs?</h3>

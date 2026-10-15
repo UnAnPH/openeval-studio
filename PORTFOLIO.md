@@ -25,7 +25,7 @@ Autonomous coding agents like Cursor, Claude Code, and Antigravity issue hundred
 1. **Tier 1: Synchronous In-Process Fast Triage (`~1.1 µs` at p95)**  
    Implemented as pure in-process regex heuristics within client hook scripts (`scripts/cursor_watcher_gate.py`, `scripts/antigravity_watcher_gate.py`). Known benign developer commands bypass network dispatch entirely with zero human-perceptible delay ($<3\mu\text{s}$). Destructive commands (`rm -rf /`, credential harvesting) are trapped instantaneously.
 2. **Tier 2: Synchronous Policy Gateway Evaluation (`~5.3 ms` at p95)**  
-   Client hooks forward non-trivial actions to the FastAPI Gateway (`POST /api/watcher/evaluate`). The gateway evaluates deterministic rules, dynamic tool thresholds (1–10 scale), and prior session context in sub-6ms roundtrip time, well within the $<50\text{ms}$ budget.
+   Client hooks forward non-trivial actions to the FastAPI Gateway (`POST /api/v1/watcher/evaluate`). The gateway evaluates deterministic rules, dynamic tool thresholds (1–10 scale), and prior session context in sub-6ms roundtrip time, well within the $<50\text{ms}$ budget.
 3. **Tier 3: Synchronous-with-Timeout LLM Deep Review (`800 ms – 1500 ms`)**  
    When frontier LLM reasoning is wired (`OPENEVAL_WATCHER_USE_LLM=1`), the gate executes synchronously in the tool execution path, bounded by an enforced **1.5s hard client timeout** and configurable **fail-open semantics** (`FAIL_OPEN=true`). Rather than framing this as unblocking background processing, we explicitly acknowledge that the agent blocks and waits up to the timeout. The 1.5s client-side cutoff guarantees that slow model inference or network latency never hangs developer terminals indefinitely.
 
@@ -66,6 +66,49 @@ A security tool must not introduce new attack surfaces.
 
 ---
 
+### Challenge 5: Resolving Fail-Open Vulnerabilities with Stateful Circuit Breaking
+A naive fail-open gate creates a major vulnerability: an adversarial model or network failure could intentionally stall the gateway to bypass all checks. Conversely, strict fail-closed locks developers out of their tools on minor network blips.
+
+**Our Solution:**
+- **Atomic Sliding-Window Circuit Breaker**: Client hooks maintain local failure timestamps in an atomic JSON state file (`~/.openeval/circuit_breaker.json`).
+- **Adaptive Fallback**: Transient network blips (< 3 timeouts in 60s) fail-open with a warning to preserve developer flow.
+- **Threshold Tripping**: If 3 consecutive failures occur within the 60s sliding window, the circuit breaker trips, returning `force_ask` (Antigravity) or `ask` (Cursor) to halt autonomous loops pending operator sign-off.
+- **Auto-Recovery**: A single successful HTTP 200 from `/api/v1/watcher/evaluate` automatically resets the breaker.
+
+---
+
+### Challenge 6: Adversarial Evasion Resistance
+Adversarial coding agents attempt to evade simple regex blacklists through command obfuscation, flag manipulation, or subshell interpreters.
+
+**Our Solution:**
+- **Obfuscated Pipeline Interception**: Detects Base64, hex (`xxd -r`), and OpenSSL encoded payloads piped into shell interpreters (`RULE_OBFUSCATED_EXECUTION`).
+- **Subprocess Reflection Trapping**: Intercepts Python, Node, Ruby, and Perl inline execution scripts that attempt filesystem wipes (`shutil.rmtree`, `fs.rmdirSync`) or secret reading (`RULE_SUBPROCESS_REFLECTION`).
+- **Separated & Multi-Flag Normalization**: Catches split flags (`rm -r -f /`, `rm -f -r /var`, `rm --recursive --force /`).
+- **Exfiltration via HTTP Uploads**: Flags upload vectors targeting credentials (`curl -d @.env`, `wget --post-file=id_rsa`).
+- **Automated Verification**: Backed by a 60-vector red-teaming test suite (`tests/test_gate_adversarial_evasion.py`) verifying both local hooks and gateway rules.
+
+---
+
+### Challenge 7: Red-Teaming Codex Auto-Review: Provenance, Reversibility, & Informed Consent
+Derived from Apollo Research's September 2026 red-teaming paper (*"Reflections from red-teaming Codex auto-review"*), automated AI monitors face three structural vulnerabilities during real-time auto-review:
+
+1. **Authorization Provenance**:
+   - *Problem*: Subagents often inherit broad permissions from parent agents, masking agent-generated instructions as human requests.
+   - *Decision*: We introduced structured `ProvenanceMetadata` (`call_origin`, `parent_session_id`, `delegation_depth`, `delegated_by`). Client hooks implement multi-signal detection across environment variables (`ANTIGRAVITY_SUBAGENT_ID`, `CURSOR_SUBAGENT_ID`, `AGENT_ROLE`), payload metadata, and atomic registry tracking (`~/.openeval/subagent_registry.json`).
+   - *Enforcement*: Subagent delegates face a strict threshold ceiling (score $\ge 6 \implies$ block, score $\ge 4 \implies$ escalate), cannot bypass review via `auto_approve` policies, and are barred with score $\ge 9$ from sensitive credential access or privilege escalation.
+
+2. **Reversibility ≠ Authorization**:
+   - *Problem*: Monitors frequently grant generous user-intent discounts (-4/-2) or cap risk scores at 6 under the rationale that git commits, local tags, or file edits are easily undoable.
+   - *Decision*: Reversibility reduces recovery cost but does not establish authorization. We implemented natural language extraction of explicit negative constraints (*"do not touch tags"*, *"never run rm"*, *"strictly prohibited to edit .env"*).
+   - *Enforcement*: Any tool call violating an explicit constraint enforces an absolute non-discountable floor (score $\ge 8 \implies$ block) and strictly disqualifies user-intent deductions and prior-state capping in Triage and Deep Review.
+
+3. **Informed Consent in Lockouts**:
+   - *Problem*: Generic lockout alerts fail to explain what data is being shared or the blast radius of the proposed action.
+   - *Decision*: We emit structured `ConsentDisclosure` (`target_resources`, `destination`, `disclosed_data_types`, `blast_radius`, `reversibility_summary`, `discovered_context`) and render an interactive formatted terminal consent box matching Apollo's specification during `force_ask` lockouts in Antigravity and Cursor.
+   - *Verification*: Backed by `tests/test_codex_autoreview_safeguards.py` (26 passing tests).
+
+---
+
 ## 3. Empirical Latency Profile (Verified)
 
 Empirically profiled using `scripts/benchmark_gate_latency.py` across 5,000 local iterations and 400 Gateway API roundtrips:
@@ -82,9 +125,9 @@ Empirically profiled using `scripts/benchmark_gate_latency.py` across 5,000 loca
 
 ## 4. Engineering Trade-offs & Limitations (Honest)
 
-1. **Fail-Open vs. Fail-Closed**:
-   - *Current choice:* Default to fail-open on network timeouts (`FAIL_OPEN=true`).
-   - *Trade-off:* Maximizes developer velocity and prevents agent deadlock, but introduces a risk window if the gateway is intentionally overwhelmed or unreachable. Production enterprise security teams may configure `FAIL_OPEN=false` for high-assurance environments.
+1. **Fail-Open vs. Fail-Closed (Resolved via Circuit Breaker)**:
+   - *Current choice:* Adaptive hybrid via stateful local circuit breaker.
+   - *Trade-off:* Transient single blips fail-open to preserve developer flow, while repeated timeouts (≥ 3 in 60s) trip to `force_ask` to stop autonomous runaway loops during outages. Configurable via `OPENEVAL_MAX_GATEWAY_FAILURES` and `OPENEVAL_FAILURE_WINDOW_SEC`.
 2. **Context Stripping**:
    - *Current choice:* We strip large tool outputs (`stdout`/`stderr`) when formatting prior trajectory context for triage.
    - *Trade-off:* Reduces token consumption by $>80\%$ and keeps latency low, but could miss subtle steganographic leaks hidden inside voluminous tool output strings.
@@ -100,12 +143,15 @@ Empirically profiled using `scripts/benchmark_gate_latency.py` across 5,000 loca
 # 1. Automated test suite (160+ tests passing)
 uv run pytest tests/ -m "not slow" -q
 
-# 2. Static typing & linting (0 errors across 109 files)
+# 2. Stateful Circuit Breaker, Adversarial Evasion, & Apollo Codex Safeguards (90 tests passing)
+uv run pytest tests/test_circuit_breaker.py tests/test_gate_adversarial_evasion.py tests/test_codex_autoreview_safeguards.py -q
+
+# 3. Static typing & linting (0 errors across 109 files)
 make check
 
-# 3. Gate latency benchmark
+# 4. Gate latency benchmark
 make benchmark
 
-# 4. End-to-end terminal demo
+# 5. End-to-end terminal demo
 make portfolio-demo
 ```

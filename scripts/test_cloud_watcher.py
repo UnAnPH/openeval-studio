@@ -23,13 +23,15 @@ import urllib.request
 
 def probe_cloud(base_url: str, api_key: str = "") -> bool:
     clean_url = base_url.rstrip("/")
-    if clean_url.endswith("/api/watcher/evaluate"):
+    if clean_url.endswith("/api/v1/watcher/evaluate"):
+        clean_url = clean_url[: -len("/api/v1/watcher/evaluate")]
+    elif clean_url.endswith("/api/watcher/evaluate"):
         clean_url = clean_url[: -len("/api/watcher/evaluate")]
     elif clean_url.endswith("/api/gate/evaluate"):
         clean_url = clean_url[: -len("/api/gate/evaluate")]
 
     health_url = f"{clean_url}/api/health"
-    evaluate_url = f"{clean_url}/api/watcher/evaluate"
+    evaluate_url = f"{clean_url}/api/v1/watcher/evaluate"
 
     print("=" * 60)
     print(" 🛡️  OPENEVAL STUDIO CLOUD WATCHER CONNECTOR PROBE")
@@ -55,7 +57,7 @@ def probe_cloud(base_url: str, api_key: str = "") -> bool:
         return False
 
     # 2. Watcher Evaluation Probe (Safe Tool Call)
-    print("[2/3] Probing /api/watcher/evaluate (Safe command) ...", end=" ", flush=True)
+    print("[2/3] Probing /api/v1/watcher/evaluate (Safe command) ...", end=" ", flush=True)
     headers = {"Content-Type": "application/json"}
     if api_key:
         headers["X-OpenEval-Key"] = api_key
@@ -88,7 +90,7 @@ def probe_cloud(base_url: str, api_key: str = "") -> bool:
         return False
 
     # 3. Watcher Evaluation Probe (Blocked Command)
-    print("[3/3] Probing /api/watcher/evaluate (Security rule test) ...", end=" ", flush=True)
+    print("[3/3] Probing /api/v1/watcher/evaluate (Security rule test) ...", end=" ", flush=True)
     bad_payload = {
         "agent_id": "cloud-probe",
         "tool_name": "bash",
@@ -120,7 +122,7 @@ def probe_cloud(base_url: str, api_key: str = "") -> bool:
     print("=" * 60)
     print("To stream live IDE telemetry from your terminal to your cloud dashboard,")
     print("add these lines to your ~/.zshrc or terminal session:\n")
-    print(f'export OPENEVAL_WATCHER_URL="{clean_url}/api/watcher/evaluate"')
+    print(f'export OPENEVAL_WATCHER_URL="{clean_url}/api/v1/watcher/evaluate"')
     if api_key:
         print(f'export OPENEVAL_API_KEY="{api_key}"')
     print("\nThen restart Cursor or your agent: your actions will stream live to the cloud!")

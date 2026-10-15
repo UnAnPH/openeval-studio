@@ -53,8 +53,8 @@ export const HookSetupView: React.FC<HookSetupViewProps> = ({
   const displayKey =
     localApiKey || apiKey || (_isDemo ? 'oe_live_demo_readonly_token' : '<rotate to issue a one-time key>');
   const watcherUrl = typeof window !== 'undefined'
-    ? `${window.location.origin}/api/watcher/evaluate`
-    : 'https://openeval.studio/api/watcher/evaluate';
+    ? `${window.location.origin}/api/v1/watcher/evaluate`
+    : 'https://openeval.studio/api/v1/watcher/evaluate';
 
   const copyToClipboard = async (text: string, isKey = false) => {
     try {

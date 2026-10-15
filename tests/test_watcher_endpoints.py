@@ -120,7 +120,7 @@ def test_watcher_policy_and_rules_endpoints(client: TestClient) -> None:
 
 
 def test_policy_reset_and_evaluate_uses_store_thresholds(client: TestClient) -> None:
-    """Saved tool thresholds must drive /api/watcher/evaluate deny decisions."""
+    """Saved tool thresholds must drive /api/v1/watcher/evaluate deny decisions."""
     reset = client.post("/api/v1/watcher/policy/reset")
     assert reset.status_code == 200
 
@@ -139,7 +139,7 @@ def test_policy_reset_and_evaluate_uses_store_thresholds(client: TestClient) -> 
 
     # Destructive command should be blocked by store-backed gateway
     res = client.post(
-        "/api/watcher/evaluate",
+        "/api/v1/watcher/evaluate",
         json={
             "agent_id": "claude_code",
             "tool_name": "Bash",
@@ -164,7 +164,7 @@ def test_policy_reset_and_evaluate_uses_store_thresholds(client: TestClient) -> 
         },
     )
     res2 = client.post(
-        "/api/watcher/evaluate",
+        "/api/v1/watcher/evaluate",
         json={
             "agent_id": "claude_code",
             "tool_name": "Bash",
@@ -236,7 +236,7 @@ def test_watcher_tool_result_endpoint(client: TestClient) -> None:
 
     # Report tool result
     res = client.post(
-        "/api/watcher/result",
+        "/api/v1/watcher/result",
         json={
             "session_id": "test-result-sess-1",
             "agent_id": "antigravity",
@@ -272,7 +272,7 @@ def test_resolve_all_watcher_reviews_endpoint(client: TestClient) -> None:
 
     # 1. Trigger a policy denial to create a blocked review
     client.post(
-        "/api/watcher/config",
+        "/api/v1/watcher/config",
         json={
             "mode": "enforce",
             "deny_threshold": 0.8,
@@ -283,7 +283,7 @@ def test_resolve_all_watcher_reviews_endpoint(client: TestClient) -> None:
         },
     )
     eval_res = client.post(
-        "/api/watcher/evaluate",
+        "/api/v1/watcher/evaluate",
         json={
             "session_id": sess_id,
             "agent_id": "cursor",

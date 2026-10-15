@@ -40,7 +40,7 @@ Verify health endpoint:
    curl -s http://${aws_instance.openeval.public_ip}/api/health
 
 Test inline Policy Gate (<25ms DuckDB):
-   curl -s -X POST http://${aws_instance.openeval.public_ip}/api/watcher/evaluate \
+   curl -s -X POST http://${aws_instance.openeval.public_ip}/api/v1/watcher/evaluate \
      -H "Content-Type: application/json" \
      -d '{"tool_name":"bash","arguments":{"cmd":"cat .env | grep -E AWS_SECRET"},"agent_id":"demo","session_id":"curl-test"}'
 

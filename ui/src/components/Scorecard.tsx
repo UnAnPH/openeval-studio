@@ -1,17 +1,15 @@
+import { Icon } from '../lib/icon';
+import {
+  CheckCircle,
+  CircleDollarSign,
+  Clock,
+  GitCommit,
+  HelpCircle,
+  Hourglass,
+  Sparkles,
+  XCircle,
+} from 'lucide-react';
 import React from 'react';
-import {
-  IonIcon,
-} from '@ionic/react';
-import {
-  checkmarkCircle,
-  closeCircle,
-  helpCircleOutline,
-  hourglassOutline,
-  sparklesOutline,
-  cashOutline,
-  timeOutline,
-  gitCommitOutline,
-} from 'ionicons/icons';
 import { RunRecord } from '../types';
 
 interface ScorecardProps {
@@ -23,7 +21,7 @@ export const Scorecard: React.FC<ScorecardProps> = ({ run }) => {
     return (
       <div className="py-12 px-4 text-center text-text-muted space-y-2">
         <div className="w-12 h-12 rounded-2xl bg-canvas flex items-center justify-center mx-auto mb-2 text-text-muted border border-border-subtle">
-          <IonIcon icon={helpCircleOutline} className="text-2xl text-text-muted" />
+          <Icon icon={HelpCircle} className="text-2xl text-text-muted" />
         </div>
         <p className="text-xs font-bold font-mono uppercase tracking-wider text-text-primary">No Evaluation Scorecard Yet</p>
         <p className="text-xs text-text-secondary max-w-xs mx-auto">
@@ -60,8 +58,8 @@ export const Scorecard: React.FC<ScorecardProps> = ({ run }) => {
           }`}
         >
           <div className="flex items-center gap-3">
-            <IonIcon
-              icon={isPassed ? checkmarkCircle : isFailed ? closeCircle : hourglassOutline}
+            <Icon
+              icon={isPassed ? CheckCircle : isFailed ? XCircle : Hourglass}
               className={`text-3xl ${
                 isPassed ? 'text-emerald-600' : isFailed ? 'text-rose-600' : 'text-brand-purple'
               }`}
@@ -106,28 +104,28 @@ export const Scorecard: React.FC<ScorecardProps> = ({ run }) => {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 font-mono">
           <div className="p-3 rounded-xl bg-canvas border border-border-subtle text-center">
             <div className="text-[10px] uppercase font-semibold text-text-muted mb-1 flex items-center justify-center gap-1">
-              <IonIcon icon={timeOutline} className="text-text-muted text-xs" /> Duration
+              <Icon icon={Clock} className="text-text-muted text-xs" /> Duration
             </div>
             <div className="text-sm font-bold text-text-primary">{run.total_duration_sec.toFixed(1)}s</div>
           </div>
 
           <div className="p-3 rounded-xl bg-canvas border border-border-subtle text-center">
             <div className="text-[10px] uppercase font-semibold text-text-muted mb-1 flex items-center justify-center gap-1">
-              <IonIcon icon={sparklesOutline} className="text-brand-purple text-xs" /> Tokens
+              <Icon icon={Sparkles} className="text-brand-purple text-xs" /> Tokens
             </div>
             <div className="text-sm font-bold text-text-primary">{run.total_tokens.toLocaleString()}</div>
           </div>
 
           <div className="p-3 rounded-xl bg-canvas border border-border-subtle text-center">
             <div className="text-[10px] uppercase font-semibold text-text-muted mb-1 flex items-center justify-center gap-1">
-              <IonIcon icon={cashOutline} className="text-emerald-600 text-xs" /> Est. Cost
+              <Icon icon={CircleDollarSign} className="text-emerald-600 text-xs" /> Est. Cost
             </div>
             <div className="text-sm font-bold text-emerald-700">${run.estimated_cost_usd.toFixed(4)}</div>
           </div>
 
           <div className="p-3 rounded-xl bg-canvas border border-border-subtle text-center">
             <div className="text-[10px] uppercase font-semibold text-text-muted mb-1 flex items-center justify-center gap-1">
-              <IonIcon icon={gitCommitOutline} className="text-text-muted text-xs" /> Turns
+              <Icon icon={GitCommit} className="text-text-muted text-xs" /> Turns
             </div>
             <div className="text-sm font-bold text-text-primary">{run.total_steps} steps</div>
           </div>

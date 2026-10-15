@@ -4,11 +4,11 @@ install:
 
 .PHONY: db-up
 db-up:
-	docker compose up -d postgres
+	docker compose up -d postgres redis
 
 .PHONY: db-down
 db-down:
-	docker compose stop postgres
+	docker compose stop postgres redis
 
 .PHONY: db-migrate
 db-migrate:
@@ -25,6 +25,10 @@ serve:
 .PHONY: ui
 ui:
 	cd ui && npm run dev
+
+.PHONY: ingest-logs
+ingest-logs:
+	uv run python scripts/ingest_local_agent_logs.py
 
 .PHONY: install-dev
 install-dev:

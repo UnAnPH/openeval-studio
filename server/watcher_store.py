@@ -16,8 +16,10 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal, cast
+from uuid import uuid4
 
 from sqlalchemy import text
+from sqlalchemy.orm import Session as DbSession
 
 from engine.approval_policy import WatcherConfig
 from schemas.watcher_models import (
@@ -30,6 +32,7 @@ from schemas.watcher_models import (
     ReviewRecord,
     ReviewStage,
     Session,
+    SessionEventRecord,
     ToolCall,
     ToolResult,
     ToolThreshold,
@@ -49,6 +52,16 @@ def _to_jsonable(value: Any) -> Any:
     if isinstance(value, (list, tuple)):
         return [_to_jsonable(v) for v in value]
     return value
+
+
+class AwaitableReviewRecord(ReviewRecord):
+    """Subclass of ReviewRecord that is also directly awaitable for backwards compatibility."""
+
+    def __await__(self) -> Any:
+        async def _ret():
+            return self
+
+        return _ret().__await__()
 
 
 class CompatResult:
@@ -103,6 +116,11 @@ class WatcherStore:
         self._trajectories: dict[str, Trajectory] = {}
         self._reviews: dict[str, list[ReviewRecord]] = {}
         self._session_owners: dict[str, int | None] = {}
+
+        # Append-only event log tracking & debounced materialization
+        self._dirty_sessions: set[str] = set()
+        self._debounce_tasks: dict[str, asyncio.Task[Any]] = {}
+        self._step_indices: dict[str, int] = {}
 
         # Multi-tenant Policy, WatcherConfig, and Grader Prompt registries
         self._user_policies: dict[int, Policy] = {}
@@ -339,12 +357,19 @@ class WatcherStore:
 
     def get_session(self, session_id: str) -> Session | None:
         """Retrieve a session by ID scoped to the active tenant."""
+        key = self.memory_key(session_id)
         with self._lock:
+            is_dirty = key in self._dirty_sessions
             cached = self._cached_session(session_id)
+            if cached is not None and not is_dirty:
+                return cached
             if cached is not None and (
                 current_user_slug.get() == "demo" or getattr(cached, "org_id", "") == "demo"
             ):
                 return cached
+
+        if is_dirty:
+            return self.materialize_session(session_id)
 
         with SessionLocal() as db:
             user_id = get_current_user_id(db)
@@ -360,7 +385,10 @@ class WatcherStore:
             if isinstance(payload, str):
                 payload = json.loads(payload)
             try:
-                return Session.model_validate(payload)
+                sess = Session.model_validate(payload)
+                with self._lock:
+                    self._cache_session(sess)
+                return sess
             except Exception as e:
                 logger.warning("Error validating session model %s: %s", session_id, e)
                 return None
@@ -380,6 +408,11 @@ class WatcherStore:
 
         session.updated_at = datetime.now(UTC).isoformat()
         self._write_session_to_db(session)
+
+        terminal_statuses = {"completed", "failed", "aborted", "lockout", "error", "cancelled"}
+        if getattr(session, "status", "") in terminal_statuses:
+            self.materialize_session(session_id)
+
         self.broadcast_sync(session_id, "session_updated", _to_jsonable(updates))
         return session
 
@@ -475,14 +508,115 @@ class WatcherStore:
         return purged
 
     # -------------------------------------------------------------------------
-    # Reviews & Decisions
+    # Reviews, Decisions & Append-Only Event Log
     # -------------------------------------------------------------------------
 
-    def record_decision(self, review: ReviewRecord) -> ReviewRecord:
-        """Record a security/policy review decision on a session."""
-        with SessionLocal() as db:
+    def _get_next_step_index(self, session_id: str, db: DbSession | None = None) -> int:
+        """Get the next sequential step_index for a session event."""
+        with self._lock:
+            key = self.memory_key(session_id)
+            if key in self._step_indices:
+                self._step_indices[key] += 1
+                return self._step_indices[key]
+
+        sql = (
+            "SELECT COALESCE(MAX(step_index), -1) FROM session_events "
+            "WHERE session_id = :session_id AND user_id = :uid"
+        )
+        if db is not None:
             user_id = get_current_user_id(db)
+            row = db.execute(text(sql), {"session_id": session_id, "uid": user_id}).fetchone()
+        else:
+            with SessionLocal() as sdb:
+                user_id = get_current_user_id(sdb)
+                row = sdb.execute(text(sql), {"session_id": session_id, "uid": user_id}).fetchone()
+
+        max_idx = int(row[0]) if row and row[0] is not None else -1
+        next_idx = max_idx + 1
+        with self._lock:
+            self._step_indices[key] = next_idx
+        return next_idx
+
+    def append_event(self, event: SessionEventRecord) -> None:
+        """Insert an immutable event row into session_events for the active tenant."""
+        with SessionLocal() as db:
+            user_id = current_user_id.get()
+            if user_id is None:
+                user_id = get_current_user_id(db)
+
+            # Strictly enforce tenant isolation: event.user_id must match active tenant
+            event.user_id = user_id
+
+            payload_data = event.payload
+            if hasattr(payload_data, "model_dump"):
+                payload_data = payload_data.model_dump()
+            payload_json = json.dumps(_to_jsonable(payload_data))
+
+            db.execute(
+                text(
+                    """
+                    INSERT INTO session_events (
+                        id, user_id, session_id, step_index, event_type, payload, created_at
+                    ) VALUES (
+                        :id, :user_id, :session_id, :step_index, :event_type,
+                        CAST(:payload AS jsonb), NOW()
+                    )
+                    """
+                ),
+                {
+                    "id": event.id,
+                    "user_id": user_id,
+                    "session_id": event.session_id,
+                    "step_index": event.step_index,
+                    "event_type": event.event_type,
+                    "payload": payload_json,
+                },
+            )
+            db.commit()
+
+        key = self.memory_key(event.session_id)
+        with self._lock:
+            self._dirty_sessions.add(key)
+
+    async def arecord_decision(self, review: ReviewRecord) -> ReviewRecord:
+        """Asynchronously record a security/policy review decision with Redis distributed mutex and atomic JSONB append."""
+        from server.event_bus import get_event_bus
+
+        user_id = current_user_id.get()
+        if user_id is None:
+            user_id = get_current_user_id()
+
+        async with get_event_bus().session_lock(user_id, review.session_id, timeout=5.0):
+            return self._apply_record_decision(review, user_id, publish_async=True)
+
+    def record_decision_sync(self, review: ReviewRecord) -> ReviewRecord:
+        """Synchronously record a security/policy review decision with Redis distributed mutex and atomic JSONB append."""
+        from server.event_bus import get_event_bus
+
+        user_id = current_user_id.get()
+        if user_id is None:
+            user_id = get_current_user_id()
+
+        with get_event_bus().session_lock_sync(user_id, review.session_id, timeout=5.0):
+            return self._apply_record_decision(review, user_id, publish_async=False)
+
+    def record_decision(self, review: ReviewRecord) -> ReviewRecord:
+        """Record a review decision with Redis distributed mutex and atomic JSONB append."""
+        return self.record_decision_sync(review)
+
+    def _apply_record_decision(
+        self,
+        review: ReviewRecord,
+        user_id: int,
+        publish_async: bool = False,
+    ) -> ReviewRecord:
+        from server.event_bus import get_event_bus
+
+        with SessionLocal() as db:
+            uid = user_id if user_id is not None else get_current_user_id(db)
             rule_name = str(review.rule_name or getattr(review, "threat_category", "") or "")
+
+            # 1. Insert or update the normalized reviews relational row within the transaction
             db.execute(
                 text(
                     """
@@ -504,7 +638,7 @@ class WatcherStore:
                 ),
                 {
                     "id": review.id,
-                    "user_id": user_id,
+                    "user_id": uid,
                     "session_id": review.session_id,
                     "tool_name": review.tool_name,
                     "tool_input": review.tool_input or "",
@@ -517,16 +651,438 @@ class WatcherStore:
                     "latency_ms": review.latency_ms,
                 },
             )
+
+            # 2. Atomic PostgreSQL JSONB update on sessions.payload
+            new_review_json = json.dumps(_to_jsonable([review.model_dump()]))
+            res = db.execute(
+                text(
+                    """
+                    UPDATE sessions
+                    SET payload = jsonb_set(
+                        CASE
+                            WHEN payload IS NULL THEN '{"trajectory": {}}'::jsonb
+                            WHEN payload->'trajectory' IS NULL THEN jsonb_set(payload, '{trajectory}', '{}'::jsonb)
+                            ELSE payload
+                        END,
+                        '{trajectory,reviews}',
+                        COALESCE(payload->'trajectory'->'reviews', '[]'::jsonb) || CAST(:new_review_json AS jsonb)
+                    ),
+                    updated_at = NOW()
+                    WHERE user_id = :user_id AND id = :session_id;
+                    """
+                ),
+                {
+                    "new_review_json": new_review_json,
+                    "user_id": uid,
+                    "session_id": review.session_id,
+                },
+            )
+            if getattr(res, "rowcount", 0) == 0:
+                self.ensure_live_session(review.session_id)
+                db.execute(
+                    text(
+                        """
+                        UPDATE sessions
+                        SET payload = jsonb_set(
+                            CASE
+                                WHEN payload IS NULL THEN '{"trajectory": {}}'::jsonb
+                                WHEN payload->'trajectory' IS NULL THEN jsonb_set(payload, '{trajectory}', '{}'::jsonb)
+                                ELSE payload
+                            END,
+                            '{trajectory,reviews}',
+                            COALESCE(payload->'trajectory'->'reviews', '[]'::jsonb) || CAST(:new_review_json AS jsonb)
+                        ),
+                        updated_at = NOW()
+                        WHERE user_id = :user_id AND id = :session_id;
+                        """
+                    ),
+                    {
+                        "new_review_json": new_review_json,
+                        "user_id": uid,
+                        "session_id": review.session_id,
+                    },
+                )
             db.commit()
 
-        # Update session payload in background/inline
-        session = self.get_session(review.session_id)
-        if session:
-            session.trajectory.reviews.append(review)
-            self.record_session(session)
+        # 3. Update in-memory session cache directly
+        with self._lock:
+            key = self.memory_key(review.session_id)
+            cached = self._sessions.get(key)
+            if cached is not None and not any(r.id == review.id for r in cached.trajectory.reviews):
+                cached.trajectory.reviews.append(review)
+            if key in self._reviews and not any(r.id == review.id for r in self._reviews[key]):
+                self._reviews[key].append(review)
 
-        self.broadcast_sync(review.session_id, "review_decision", review.model_dump())
-        return review
+        # 4. Write immutable event to session_events
+        step_idx = self._get_next_step_index(review.session_id)
+        event = SessionEventRecord(
+            id=str(uuid4()),
+            user_id=uid,
+            session_id=review.session_id,
+            step_index=step_idx,
+            event_type="review_decision",
+            payload=review.model_dump(),
+        )
+        self.append_event(event)
+
+        # 5. Broadcast to local sync subscribers and Redis Streams
+        review_dump = review.model_dump()
+        self.broadcast_sync(review.session_id, "review_decision", review_dump)
+        get_event_bus().xadd_sync("review_decision", review_dump, user_id=uid)
+
+        # 6. Trigger materialization: synchronously if terminal, asynchronously with debounce otherwise
+        terminal_statuses = {"completed", "failed", "aborted", "lockout", "error", "cancelled"}
+        cached_sess = self._cached_session(review.session_id)
+        if cached_sess and getattr(cached_sess, "status", "") in terminal_statuses:
+            self.materialize_session(review.session_id)
+        else:
+            self.schedule_materialize(review.session_id)
+
+        return AwaitableReviewRecord.model_validate(review.model_dump())
+
+    def record_tool_result(self, session_id: str, result: ToolResult) -> None:
+        """Record an execution tool result in session_events without rewriting sessions.payload."""
+        from server.event_bus import get_event_bus
+
+        user_id = current_user_id.get()
+        if user_id is None:
+            user_id = get_current_user_id()
+
+        # Update in-memory session cache directly
+        with self._lock:
+            key = self.memory_key(session_id)
+            cached = self._sessions.get(key)
+            if cached is not None and not any(
+                tr.tool_id == result.tool_id for tr in cached.trajectory.tool_results
+            ):
+                cached.trajectory.tool_results.append(result)
+
+        # Append immutable event to session_events
+        step_idx = self._get_next_step_index(session_id)
+        event = SessionEventRecord(
+            id=str(uuid4()),
+            user_id=user_id,
+            session_id=session_id,
+            step_index=step_idx,
+            event_type="tool_result",
+            payload=result.model_dump(),
+        )
+        self.append_event(event)
+
+        # Publish to subscribers and Redis Pub/Sub bus
+        result_dump = result.model_dump()
+        self.broadcast_sync(session_id, "tool_result", result_dump)
+        get_event_bus().publish_sync("tool_result", result_dump, user_id=user_id)
+
+        # Materialization trigger
+        terminal_statuses = {"completed", "failed", "aborted", "lockout", "error", "cancelled"}
+        cached_sess = self._cached_session(session_id)
+        if cached_sess and getattr(cached_sess, "status", "") in terminal_statuses:
+            self.materialize_session(session_id)
+        else:
+            self.schedule_materialize(session_id)
+
+    def materialize_session(self, session_id: str, db: DbSession | None = None) -> Session:
+        """Fold/reduce all append-only session_events into the base Session and upsert sessions.payload."""
+        if db is not None:
+            return self._execute_materialize(session_id, db)
+        with SessionLocal() as sdb:
+            return self._execute_materialize(session_id, sdb)
+
+    def _execute_materialize(self, session_id: str, db: DbSession) -> Session:
+        user_id = current_user_id.get()
+        if user_id is None:
+            user_id = get_current_user_id(db)
+
+        # 1. Fetch base session row from DB or memory
+        row = db.execute(
+            text(
+                """
+                SELECT payload, status, agent_type, project_name, model, provider,
+                       title, working_dir, current_activity, failure_reason,
+                       passed, reward, total_tokens, total_duration_sec, estimated_cost_usd
+                FROM sessions
+                WHERE id = :id AND user_id = :uid
+                """
+            ),
+            {"id": session_id, "uid": user_id},
+        ).fetchone()
+
+        base_session: Session | None = None
+        if row and row[0]:
+            payload = row[0] if isinstance(row[0], dict) else json.loads(row[0])
+            with contextlib.suppress(Exception):
+                base_session = Session.model_validate(payload)
+
+        if base_session is None:
+            with self._lock:
+                cached = self._cached_session(session_id)
+                if cached is not None:
+                    base_session = cached.model_copy(deep=True)
+
+        if base_session is None:
+            agent = "antigravity"
+            if row and row[2]:
+                agent = cast(AgentType, str(row[2]))
+            base_session = Session(
+                session_id=session_id,
+                agent_type=agent,
+                status=row[1] if row and row[1] else "working",
+                project_name=row[3] if row and row[3] else "",
+                title=row[6] if row and row[6] else f"Session ({session_id[:8]})",
+                trajectory=Trajectory(session_id=session_id),
+            )
+
+        # 2. Query all events from session_events ordered by step_index ASC, created_at ASC
+        event_rows = db.execute(
+            text(
+                """
+                SELECT id, step_index, event_type, payload, created_at
+                FROM session_events
+                WHERE user_id = :uid AND session_id = :session_id
+                ORDER BY step_index ASC, created_at ASC
+                """
+            ),
+            {"uid": user_id, "session_id": session_id},
+        ).fetchall()
+
+        # 3. Fold/reduce events into base_session
+        reviews_map: dict[str, ReviewRecord] = {r.id: r for r in base_session.trajectory.reviews}
+        tool_calls_map: dict[str, ToolCall] = {
+            tc.tool_id: tc for tc in base_session.trajectory.tool_calls
+        }
+        tool_results_map: dict[str, ToolResult] = {
+            tr.tool_id: tr for tr in base_session.trajectory.tool_results
+        }
+        steps_list: list[Any] = list(getattr(base_session, "steps", []) or [])
+
+        for erow in event_rows:
+            eid, step_idx, etype, epayload, ecreated_at = erow
+            if isinstance(epayload, str):
+                epayload = json.loads(epayload)
+
+            if etype == "review_decision":
+                with contextlib.suppress(Exception):
+                    rev = ReviewRecord.model_validate(epayload)
+                    if rev.id not in reviews_map:
+                        base_session.trajectory.reviews.append(rev)
+                        reviews_map[rev.id] = rev
+                    else:
+                        idx = next(
+                            (
+                                i
+                                for i, r in enumerate(base_session.trajectory.reviews)
+                                if r.id == rev.id
+                            ),
+                            None,
+                        )
+                        if idx is not None:
+                            base_session.trajectory.reviews[idx] = rev
+                        reviews_map[rev.id] = rev
+                    steps_list.append(
+                        {"type": "review_decision", "step_index": step_idx, "data": epayload}
+                    )
+
+            elif etype == "tool_call":
+                with contextlib.suppress(Exception):
+                    tc = ToolCall.model_validate(epayload)
+                    if tc.tool_id not in tool_calls_map:
+                        base_session.trajectory.tool_calls.append(tc)
+                        tool_calls_map[tc.tool_id] = tc
+                    else:
+                        idx = next(
+                            (
+                                i
+                                for i, x in enumerate(base_session.trajectory.tool_calls)
+                                if x.tool_id == tc.tool_id
+                            ),
+                            None,
+                        )
+                        if idx is not None:
+                            base_session.trajectory.tool_calls[idx] = tc
+                        tool_calls_map[tc.tool_id] = tc
+                    base_session.current_activity = f"Call {tc.tool_name}"
+                    steps_list.append(
+                        {"type": "tool_call", "step_index": step_idx, "data": epayload}
+                    )
+
+            elif etype == "tool_result":
+                with contextlib.suppress(Exception):
+                    tr = ToolResult.model_validate(epayload)
+                    if tr.tool_id not in tool_results_map:
+                        base_session.trajectory.tool_results.append(tr)
+                        tool_results_map[tr.tool_id] = tr
+                    else:
+                        idx = next(
+                            (
+                                i
+                                for i, x in enumerate(base_session.trajectory.tool_results)
+                                if x.tool_id == tr.tool_id
+                            ),
+                            None,
+                        )
+                        if idx is not None:
+                            base_session.trajectory.tool_results[idx] = tr
+                        tool_results_map[tr.tool_id] = tr
+                    steps_list.append(
+                        {"type": "tool_result", "step_index": step_idx, "data": epayload}
+                    )
+
+            elif etype == "operator_resolution":
+                rev_id = epayload.get("id") or epayload.get("review_id")
+                idx = next(
+                    (i for i, r in enumerate(base_session.trajectory.reviews) if r.id == rev_id),
+                    None,
+                )
+                if idx is not None:
+                    target_rev = base_session.trajectory.reviews[idx].model_copy()
+                    if "decision" in epayload:
+                        target_rev.decision = epayload["decision"]
+                    if "explanation" in epayload:
+                        target_rev.explanation = epayload["explanation"]
+                    if "human_override" in epayload:
+                        target_rev.human_override = epayload["human_override"]
+                    if "resolution_status" in epayload:
+                        target_rev.resolution_status = epayload["resolution_status"]
+                    base_session.trajectory.reviews[idx] = target_rev
+                    if rev_id:
+                        reviews_map[rev_id] = target_rev
+                steps_list.append(
+                    {"type": "operator_resolution", "step_index": step_idx, "data": epayload}
+                )
+
+            elif etype == "message":
+                with contextlib.suppress(Exception):
+                    msg = Message.model_validate(epayload)
+                    if not any(
+                        m.role == msg.role and m.content == msg.content
+                        for m in base_session.trajectory.messages
+                    ):
+                        base_session.trajectory.messages.append(msg)
+                    steps_list.append({"type": "message", "step_index": step_idx, "data": epayload})
+
+        base_session.steps = steps_list
+        base_session.total_steps = len(base_session.trajectory.tool_calls) + len(
+            base_session.trajectory.messages
+        )
+        base_session.updated_at = datetime.now(UTC).isoformat()
+
+        # 4. Upsert the materialized JSON into sessions.payload with updated_at = NOW()
+        payload_json = json.dumps(_to_jsonable(base_session.model_dump()))
+        res = db.execute(
+            text(
+                """
+                UPDATE sessions
+                SET payload = CAST(:payload AS jsonb),
+                    current_activity = COALESCE(:current_activity, current_activity),
+                    updated_at = NOW()
+                WHERE id = :id AND user_id = :uid
+                """
+            ),
+            {
+                "id": session_id,
+                "uid": user_id,
+                "payload": payload_json,
+                "current_activity": base_session.current_activity,
+            },
+        )
+        if getattr(res, "rowcount", 0) == 0:
+            db.execute(
+                text(
+                    """
+                    INSERT INTO sessions (
+                        id, user_id, agent_type, project_name, model, provider,
+                        status, title, working_dir, current_activity, failure_reason,
+                        passed, reward, total_tokens, total_duration_sec,
+                        estimated_cost_usd, payload, created_at, updated_at
+                    ) VALUES (
+                        :id, :user_id, :agent_type, :project_name, :model, :provider,
+                        :status, :title, :working_dir, :current_activity, :failure_reason,
+                        :passed, :reward, :total_tokens, :total_duration_sec,
+                        :estimated_cost_usd, CAST(:payload AS jsonb), NOW(), NOW()
+                    )
+                    ON CONFLICT (user_id, id) DO UPDATE SET
+                        payload = EXCLUDED.payload,
+                        updated_at = NOW()
+                    WHERE sessions.user_id = EXCLUDED.user_id;
+                    """
+                ),
+                {
+                    "id": base_session.session_id,
+                    "user_id": user_id,
+                    "agent_type": base_session.agent_type,
+                    "project_name": base_session.project_name or "",
+                    "model": base_session.model or "",
+                    "provider": base_session.provider or "",
+                    "status": base_session.status,
+                    "title": base_session.title or "",
+                    "working_dir": base_session.working_dir or "",
+                    "current_activity": base_session.current_activity or "",
+                    "failure_reason": base_session.failure_reason or "",
+                    "passed": base_session.passed,
+                    "reward": base_session.reward,
+                    "total_tokens": base_session.total_tokens,
+                    "total_duration_sec": base_session.total_duration_sec,
+                    "estimated_cost_usd": base_session.estimated_cost_usd,
+                    "payload": payload_json,
+                },
+            )
+        db.commit()
+
+        # Update disk JSON cache
+        with contextlib.suppress(Exception):
+            target = self.storage_dir / f"{base_session.session_id}.json"
+            target.write_text(base_session.model_dump_json(indent=2), encoding="utf-8")
+
+        with self._lock:
+            self._cache_session(base_session)
+            key = self.memory_key(session_id)
+            self._dirty_sessions.discard(key)
+
+        return base_session
+
+    def schedule_materialize(self, session_id: str, delay: float = 0.5) -> None:
+        """Schedule materialization in a non-blocking background task with debounce/coalescing."""
+        key = self.memory_key(session_id)
+        with self._lock:
+            self._dirty_sessions.add(key)
+
+        user_id = current_user_id.get()
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # Synchronous context: materialize immediately
+            self.materialize_session(session_id)
+            return
+
+        # Coalesce / debounce: cancel existing pending task if any
+        existing_task = self._debounce_tasks.get(key)
+        if existing_task and not existing_task.done():
+            existing_task.cancel()
+
+        task = loop.create_task(self._debounced_materialize(session_id, user_id, delay))
+        self._debounce_tasks[key] = task
+
+    async def _debounced_materialize(
+        self, session_id: str, user_id: int | None, delay: float
+    ) -> None:
+        try:
+            await asyncio.sleep(delay)
+
+            def _worker() -> None:
+                if user_id is not None:
+                    current_user_id.set(user_id)
+                self.materialize_session(session_id)
+
+            await asyncio.to_thread(_worker)
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.warning("Background materialization error for %s: %s", session_id, e)
+        finally:
+            key = self.memory_key(session_id)
+            self._debounce_tasks.pop(key, None)
 
     def get_session_decisions(self, session_id: str) -> list[ReviewRecord]:
         """Get all review decisions for a given session."""
@@ -587,6 +1143,8 @@ class WatcherStore:
         notes: str | None = None,
     ) -> ReviewRecord | None:
         """Resolve an escalated or blocked decision via human oversight."""
+        from server.event_bus import get_event_bus
+
         decisions = self.get_session_decisions(session_id)
         target_review: ReviewRecord | None = None
         if review_id:
@@ -630,16 +1188,36 @@ class WatcherStore:
             )
             db.commit()
 
-        # Update session model
-        session = self.get_session(session_id)
-        if session:
-            for rev in session.trajectory.reviews:
-                if rev.id == target_review.id:
-                    rev.decision = target_review.decision
-                    rev.explanation = target_review.explanation
-            self.record_session(session)
+        # Update in-memory session model
+        with self._lock:
+            key = self.memory_key(session_id)
+            cached = self._sessions.get(key)
+            if cached is not None:
+                for rev in cached.trajectory.reviews:
+                    if rev.id == target_review.id:
+                        rev.decision = target_review.decision
+                        rev.explanation = target_review.explanation
 
-        self.broadcast_sync(session_id, "decision_resolved", target_review.model_dump())
+        # Append immutable operator_resolution event
+        step_idx = self._get_next_step_index(session_id)
+        event = SessionEventRecord(
+            id=str(uuid4()),
+            user_id=user_id,
+            session_id=session_id,
+            step_index=step_idx,
+            event_type="operator_resolution",
+            payload=target_review.model_dump(),
+        )
+        self.append_event(event)
+
+        # Broadcast and publish to Pub/Sub bus
+        rev_dump = target_review.model_dump()
+        self.broadcast_sync(session_id, "decision_resolved", rev_dump)
+        get_event_bus().publish_sync("decision_resolved", rev_dump, user_id=user_id)
+
+        # Schedule materialization
+        self.schedule_materialize(session_id)
+
         return target_review
 
     # -------------------------------------------------------------------------
@@ -651,8 +1229,13 @@ class WatcherStore:
         session_id: str,
         event: Message | ToolCall | ToolResult,
     ) -> None:
-        """Append a message, tool call, or tool result to a session trajectory."""
+        """Append a message, tool call, or tool result to a session trajectory without full payload rewrite."""
+        from server.event_bus import get_event_bus
+
         session = self.get_session(session_id)
+        if not session:
+            with self._lock:
+                session = self._cached_session(session_id)
         if not session:
             return
 
@@ -671,7 +1254,7 @@ class WatcherStore:
             session.trajectory.tool_results.append(event)
             self.broadcast_sync(session_id, "tool_result", event.model_dump())
 
-        # Save to trajectory_events table and update session payload
+        # Save to trajectory_events table for backward compatibility
         with SessionLocal() as db:
             user_id = get_current_user_id(db)
             db.execute(
@@ -690,7 +1273,23 @@ class WatcherStore:
             )
             db.commit()
 
-        self.record_session(session)
+        # Append immutable event to session_events
+        step_idx = self._get_next_step_index(session_id)
+        sevent = SessionEventRecord(
+            id=str(uuid4()),
+            user_id=user_id,
+            session_id=session_id,
+            step_index=step_idx,
+            event_type=kind,
+            payload=event.model_dump(),
+        )
+        self.append_event(sevent)
+
+        # Publish to Redis Pub/Sub bus
+        get_event_bus().publish_sync(kind, event.model_dump(), user_id=user_id)
+
+        # Schedule debounced materialization (replaces immediate full sessions.payload rewrite)
+        self.schedule_materialize(session_id)
 
     def get_trajectory(self, session_id: str) -> Trajectory | None:
         """Get the full trajectory for a session."""

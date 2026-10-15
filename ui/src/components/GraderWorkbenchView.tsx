@@ -1,19 +1,19 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { IonIcon } from '@ionic/react';
+import { Icon } from '../lib/icon';
 import {
-  pulseOutline,
-  refreshOutline,
-  shieldCheckmark,
-  speedometerOutline,
-  alertCircleOutline,
-  playOutline,
-  documentTextOutline,
-  gitCompareOutline,
-  sparklesOutline,
-  chevronDownOutline,
-  chevronUpOutline,
-} from 'ionicons/icons';
-import { ChevronDown } from 'lucide-react';
+  Activity,
+  AlertCircle,
+  ChevronDown,
+  ChevronUp,
+  FileText,
+  Gauge,
+  GitCompare,
+  Play,
+  RotateCw,
+  ShieldCheck,
+  Sparkles,
+} from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+
 import { WatcherSession } from '../types';
 import { SessionPickerModal, sessionIsBlocked } from './SessionPickerModal';
 
@@ -381,7 +381,7 @@ export const GraderWorkbenchView: React.FC = () => {
         {/* Real Telemetry Pills (Truthful: no fake fallbacks) */}
         <div className="flex flex-wrap items-center gap-3 text-xs font-mono">
           <div className="bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-200 flex items-center gap-2">
-            <IonIcon icon={speedometerOutline} className="text-teal-600" />
+            <Icon icon={Gauge} className="text-teal-600" />
             <span className="text-gray-500">Triage p50:</span>
             <span className="font-bold text-gray-900">
               {telemetry && telemetry.triage_latency?.count > 0
@@ -390,7 +390,7 @@ export const GraderWorkbenchView: React.FC = () => {
             </span>
           </div>
           <div className="bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-200 flex items-center gap-2">
-            <IonIcon icon={pulseOutline} className="text-purple-600" />
+            <Icon icon={Activity} className="text-purple-600" />
             <span className="text-gray-500">Deep p95:</span>
             <span className="font-bold text-gray-900">
               {telemetry && telemetry.deep_review_latency?.count > 0
@@ -399,7 +399,7 @@ export const GraderWorkbenchView: React.FC = () => {
             </span>
           </div>
           <div className="bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200 flex items-center gap-2 text-emerald-800">
-            <IonIcon icon={shieldCheckmark} className="text-emerald-600" />
+            <Icon icon={ShieldCheck} className="text-emerald-600" />
             <span>F1 Score:</span>
             <span className="font-bold">
               {telemetry && telemetry.grader_metrics?.total_evaluated > 0
@@ -531,7 +531,7 @@ export const GraderWorkbenchView: React.FC = () => {
                     : 'text-gray-600 hover:bg-gray-100'
                 }`}
               >
-                <IonIcon icon={playOutline} />
+                <Icon icon={Play} />
                 <span>Live Session Audit</span>
               </button>
               {/* <button
@@ -542,7 +542,7 @@ export const GraderWorkbenchView: React.FC = () => {
                     : 'text-gray-600 hover:bg-gray-100'
                 }`}
               >
-                <IonIcon icon={documentTextOutline} />
+                <Icon icon={FileText} />
                 <span>Rubric Calibration Scale</span>
               </button> */}
               <button
@@ -553,7 +553,7 @@ export const GraderWorkbenchView: React.FC = () => {
                     : 'text-gray-600 hover:bg-gray-100'
                 }`}
               >
-                <IonIcon icon={gitCompareOutline} />
+                <Icon icon={GitCompare} />
                 <span>Golden Benchmark</span>
                 {report && (
                   <span className="ml-1 w-2 h-2 rounded-full bg-emerald-500 inline-block" />
@@ -568,7 +568,7 @@ export const GraderWorkbenchView: React.FC = () => {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-100 min-w-0">
                 <div className="min-w-0">
                   <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2 truncate">
-                    <IonIcon icon={sparklesOutline} className="text-indigo-600 shrink-0" />
+                    <Icon icon={Sparkles} className="text-indigo-600 shrink-0" />
                     Audit Monitored Agent Session
                   </h3>
                   <p className="text-[11px] text-gray-500 mt-0.5 truncate">
@@ -655,7 +655,7 @@ export const GraderWorkbenchView: React.FC = () => {
                   disabled={isAuditing || !selectedSessionId}
                   className="min-h-[41px] h-[41px] px-4 sm:px-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50 shrink-0 whitespace-nowrap"
                 >
-                  <IonIcon icon={isAuditing ? refreshOutline : playOutline} className={isAuditing ? 'animate-spin text-[15px]' : 'text-[15px]'} />
+                  <Icon icon={isAuditing ? RotateCw : Play} className={isAuditing ? 'animate-spin text-[15px]' : 'text-[15px]'} />
                   <span>{isAuditing ? 'Auditing...' : 'Audit Live Session'}</span>
                 </button>
               </div>
@@ -663,7 +663,7 @@ export const GraderWorkbenchView: React.FC = () => {
               {/* Error Banner */}
               {auditError && (
                 <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-center gap-2">
-                  <IonIcon icon={alertCircleOutline} className="text-base shrink-0" />
+                  <Icon icon={AlertCircle} className="text-base shrink-0" />
                   <span>{auditError}</span>
                 </div>
               )}
@@ -717,10 +717,10 @@ export const GraderWorkbenchView: React.FC = () => {
                       className="w-full p-3 bg-gray-50 hover:bg-gray-100/70 border-b border-gray-200 flex items-center justify-between text-xs font-bold text-purple-900 transition-colors cursor-pointer"
                     >
                       <span className="flex items-center gap-2">
-                        <IonIcon icon={documentTextOutline} className="text-purple-600" />
+                        <Icon icon={FileText} className="text-purple-600" />
                         Forced 4-Step Reasoning Chain (&lt;thinking&gt;)
                       </span>
-                      <IonIcon icon={showFullThinking ? chevronUpOutline : chevronDownOutline} className="text-gray-500" />
+                      <Icon icon={showFullThinking ? ChevronUp : ChevronDown} className="text-gray-500" />
                     </button>
                     {showFullThinking && (
                       <div className="p-4 text-xs font-mono text-gray-700 whitespace-pre-wrap leading-relaxed max-h-80 overflow-y-auto bg-slate-50/50">
@@ -732,7 +732,7 @@ export const GraderWorkbenchView: React.FC = () => {
               ) : (
                 <div className="flex-1 flex flex-col items-center justify-center text-center p-8 border border-dashed border-gray-200 rounded-xl bg-gray-50/50 space-y-2">
                   <div className="w-10 h-10 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center text-lg">
-                    <IonIcon icon={shieldCheckmark} />
+                    <Icon icon={ShieldCheck} />
                   </div>
                   <h4 className="text-xs font-bold text-gray-800">Ready for Live Session Evaluation</h4>
                   <p className="text-[11px] text-gray-500 max-w-sm">
@@ -818,7 +818,7 @@ export const GraderWorkbenchView: React.FC = () => {
               <div className="bg-white p-4 sm:p-5 rounded-2xl border border-border-subtle shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2">
-                    <IonIcon icon={gitCompareOutline} className="text-indigo-600" />
+                    <Icon icon={GitCompare} className="text-indigo-600" />
                     Golden Incident Benchmark
                   </h3>
                   <p className="text-[11px] text-gray-500 mt-0.5">
@@ -831,7 +831,7 @@ export const GraderWorkbenchView: React.FC = () => {
                   disabled={isRunningBacktest}
                   className="py-2 px-4 rounded-xl bg-slate-900 hover:bg-black text-white font-semibold text-xs shadow-xs transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50 shrink-0"
                 >
-                  <IonIcon icon={refreshOutline} className={isRunningBacktest ? 'animate-spin' : ''} />
+                  <Icon icon={RotateCw} className={isRunningBacktest ? 'animate-spin' : ''} />
                   <span>{isRunningBacktest ? 'Evaluating Incidents...' : 'Run Golden Benchmark'}</span>
                 </button>
               </div>
@@ -1015,7 +1015,7 @@ export const GraderWorkbenchView: React.FC = () => {
               ) : (
                 <div className="flex-1 flex flex-col items-center justify-center text-center p-8 border border-dashed border-gray-200 rounded-2xl bg-white space-y-2">
                   <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center text-lg">
-                    <IonIcon icon={gitCompareOutline} />
+                    <Icon icon={GitCompare} />
                   </div>
                   <h4 className="text-xs font-bold text-gray-800">No Golden Benchmark Executed Yet</h4>
                   <p className="text-[11px] text-gray-500 max-w-sm">

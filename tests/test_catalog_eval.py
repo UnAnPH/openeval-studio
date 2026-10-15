@@ -1,12 +1,10 @@
 """Tests for honest, genuine Inspect AI catalog evaluation worker."""
 
-from unittest.mock import AsyncMock, patch
-
 import pytest
 
 from engine.judges import JudgeVerdict
-from engine.llm_runner import LLMResponse, LLMUsage
-from server.app import _run_catalog_eval_worker, resolve_catalog_task
+from engine.llm_runner import ChatMessage, LLMConfig, LLMResponse, LLMUsage
+from server.routes.eval import _run_catalog_eval_worker, resolve_catalog_task
 from server.store import global_run_store
 
 
@@ -53,7 +51,10 @@ async def test_catalog_eval_fails_honestly_without_api_key():
 
 @pytest.mark.asyncio
 async def test_catalog_eval_runs_genuine_llm_and_audits():
-    """Verify genuine execution saves actual generated text and runs LLM audits."""
+    """Verify genuine execution saves actual generated text and runs LLM audits.
+
+    Dropping the injected completion text would fail the observation assertion.
+    """
     record = global_run_store.create_run(
         task_id="inspect_evals/humaneval",
         model="gemini-3.1-flash-lite",
@@ -78,25 +79,31 @@ async def test_catalog_eval_runs_genuine_llm_and_audits():
     class _FakeTask:
         dataset = [_FakeSample()]
 
-    with (
-        patch("server.app.resolve_catalog_task", return_value=lambda: _FakeTask()),
-        patch("server.app.AsyncLLMRunner.generate", new_callable=AsyncMock) as mock_gen,
-        patch(
-            "server.app.TrajectoryJudges.audit_full_trajectory", new_callable=AsyncMock
-        ) as mock_judges,
-        patch("server.app.SchemingScanners.scan_all", new_callable=AsyncMock) as mock_scanners,
-    ):
-        mock_gen.return_value = mock_llm_res
-        mock_judges.return_value = [mock_audit]
-        mock_scanners.return_value = []
+    class _Runner:
+        async def generate(
+            self,
+            messages: list[ChatMessage],
+            config: LLMConfig | None = None,
+        ) -> LLMResponse:
+            return mock_llm_res
 
-        await _run_catalog_eval_worker(
-            run_id=record.run_id,
-            task_id=record.task_id,
-            model=record.model,
-            provider="google",
-            api_key="test-mock-key",
-        )
+    async def _audit(*_args: object, **_kwargs: object) -> list[JudgeVerdict]:
+        return [mock_audit]
+
+    async def _scan(*_args: object, **_kwargs: object) -> list[JudgeVerdict]:
+        return []
+
+    await _run_catalog_eval_worker(
+        run_id=record.run_id,
+        task_id=record.task_id,
+        model=record.model,
+        provider="google",
+        api_key="test-mock-key",
+        task_resolver=lambda _task_id: lambda: _FakeTask(),
+        runner=_Runner(),
+        audit_trajectory=_audit,
+        scan_trajectory=_scan,
+    )
 
     updated = global_run_store.get_run(record.run_id)
     assert updated is not None

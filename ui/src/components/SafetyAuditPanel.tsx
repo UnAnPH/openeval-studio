@@ -1,22 +1,20 @@
+import { Icon } from '../lib/icon';
+import {
+  AlertCircle,
+  AlertTriangle,
+  ArrowRight,
+  CheckCircle,
+  Eye,
+  FileText,
+  Fingerprint,
+  GitCommit,
+  Save,
+  Shield,
+  Sparkles,
+  User,
+  XCircle,
+} from 'lucide-react';
 import React, { useState } from 'react';
-import {
-  IonIcon,
-} from '@ionic/react';
-import {
-  alertCircleOutline,
-  checkmarkCircle,
-  closeCircle,
-  documentTextOutline,
-  eyeOutline,
-  shieldOutline,
-  sparklesOutline,
-  warningOutline,
-  saveOutline,
-  gitCommitOutline,
-  personCircleOutline,
-  fingerPrintOutline,
-  arrowForwardOutline,
-} from 'ionicons/icons';
 import { JudgeVerdict } from '../types';
 
 interface SafetyAuditPanelProps {
@@ -52,21 +50,21 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({
   const getMetricIcon = (name: string) => {
     switch (name) {
       case 'situational_awareness':
-        return eyeOutline;
+        return Eye;
       case 'goal_guarding_scheming':
-        return warningOutline;
+        return AlertTriangle;
       case 'unfaithful_cot':
-        return gitCommitOutline;
+        return GitCommit;
       case 'plan_adherence':
-        return sparklesOutline;
+        return Sparkles;
       case 'hallucination_detection':
-        return fingerPrintOutline;
+        return Fingerprint;
       case 'reward_tampering':
-        return shieldOutline;
+        return Shield;
       case 'citation_grounding':
-        return documentTextOutline;
+        return FileText;
       default:
-        return alertCircleOutline;
+        return AlertCircle;
     }
   };
 
@@ -137,7 +135,7 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({
         <div className={`flex ${compact ? 'flex-col gap-2.5' : 'flex-col sm:flex-row sm:items-center justify-between gap-3'} border-b border-border-subtle pb-3`}>
           <div className="flex items-center gap-2 min-w-0">
             <div className="w-8 h-8 rounded-xl bg-purple-50 text-brand-purple flex items-center justify-center flex-shrink-0">
-              <IonIcon icon={personCircleOutline} className="text-xl" />
+              <Icon icon={User} className="text-xl" />
             </div>
             <div className="min-w-0 flex-1">
               <h3 className="text-xs sm:text-sm font-bold text-text-primary truncate">Human Auditor Sign-Off & Review</h3>
@@ -248,7 +246,7 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({
             disabled={isSaving}
             className={`px-4 py-2 rounded-xl bg-dark-base text-white text-xs font-bold hover:bg-black transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm disabled:opacity-50 ${compact ? 'w-full' : ''}`}
           >
-            <IonIcon icon={saveOutline} className="text-xs" />
+            <Icon icon={Save} className="text-xs" />
             <span>{isSaving ? 'Saving...' : 'Save & Submit Sign-Off'}</span>
           </button>
         </div>
@@ -260,7 +258,7 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({
         <div className="flex items-center justify-between gap-2 border-b border-border-subtle pb-3 min-w-0">
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-800 flex items-center justify-center flex-shrink-0">
-              <IonIcon icon={warningOutline} className="text-lg" />
+              <Icon icon={AlertTriangle} className="text-lg" />
             </div>
             <div className="min-w-0 flex-1">
               <h3 className="text-xs sm:text-sm font-bold text-text-primary truncate">Scheming & Deception Scanners</h3>
@@ -296,7 +294,7 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({
                     {/* Header with Title and Pass/Flag Badge */}
                     <div className="flex items-start justify-between gap-2 min-w-0">
                       <div className="flex items-center gap-1.5 font-bold font-mono text-xs text-text-primary min-w-0 flex-1">
-                        <IonIcon icon={getMetricIcon(verdict.metric_name)} className="text-brand-purple text-sm flex-shrink-0" />
+                        <Icon icon={getMetricIcon(verdict.metric_name)} className="text-brand-purple text-sm flex-shrink-0" />
                         <span className="break-words leading-tight">{getMetricTitle(verdict.metric_name)}</span>
                       </div>
                       <span
@@ -337,7 +335,7 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({
                               title={`Jump to turn #${turnNum}`}
                             >
                               <span>Turn #{turnNum}</span>
-                              <IonIcon icon={arrowForwardOutline} className="text-[9px]" />
+                              <Icon icon={ArrowRight} className="text-[9px]" />
                             </button>
                           ))}
                         </div>
@@ -394,7 +392,7 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({
         <div className="flex items-center justify-between gap-2 border-b border-border-subtle pb-3 min-w-0">
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <div className="w-8 h-8 rounded-xl bg-purple-50 text-brand-purple flex items-center justify-center flex-shrink-0">
-              <IonIcon icon={shieldOutline} className="text-lg" />
+              <Icon icon={Shield} className="text-lg" />
             </div>
             <div className="min-w-0 flex-1">
               <h3 className="text-xs sm:text-sm font-bold text-text-primary truncate">Core Safety & Alignment Judges</h3>
@@ -428,8 +426,8 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
                     <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <IonIcon
-                        icon={effectivePassed ? checkmarkCircle : closeCircle}
+                      <Icon
+                        icon={effectivePassed ? CheckCircle : XCircle}
                         className={`text-base flex-shrink-0 ${effectivePassed ? 'text-status-cleared' : 'text-risk-high'}`}
                       />
                       <span className="font-bold text-xs font-mono text-text-primary truncate">

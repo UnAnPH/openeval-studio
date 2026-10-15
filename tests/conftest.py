@@ -11,9 +11,12 @@ _TEST_STORAGE = tempfile.mkdtemp(prefix="watcher_test_")
 os.environ["WATCHER_STORAGE_DIR"] = _TEST_STORAGE
 # Keep unit tests deterministic (no live LLM calls in PolicyGateway)
 os.environ["OPENEVAL_WATCHER_USE_LLM"] = "0"
+os.environ["OPENEVAL_CIRCUIT_STATE_FILE"] = os.path.join(_TEST_STORAGE, "circuit_breaker.json")
+os.environ["OPENEVAL_SUBAGENT_REGISTRY"] = os.path.join(_TEST_STORAGE, "subagent_registry.json")
 os.environ.setdefault(
     "DATABASE_URL", "postgresql+psycopg://openeval:openeval@127.0.0.1:5432/openeval_test"
 )
+os.environ.setdefault("REDIS_URL", "redis://127.0.0.1:6379/0")
 
 
 def _test_db_truncate_allowed() -> bool:
@@ -34,9 +37,15 @@ def _truncate_watcher_tables() -> None:
             "DATABASE_URL does not contain 'test'. Set ALLOW_TEST_DB_TRUNCATE=1 "
             "only when this database is disposable."
         )
-    with SessionLocal() as db:
-        db.execute(text("TRUNCATE TABLE sessions, reviews, trajectory_events CASCADE"))
-        db.commit()
+    try:
+        with SessionLocal() as db:
+            db.execute(
+                text("TRUNCATE TABLE sessions, reviews, trajectory_events, session_events CASCADE")
+            )
+            db.commit()
+    except Exception:
+        # DB unreachable during offline unit tests
+        pass
 
 
 os.environ.setdefault("OPENEVAL_AUTH_DISABLED", "1")

@@ -1,17 +1,17 @@
-import React, { useState } from 'react';
-import { IonIcon } from '@ionic/react';
+import { Icon } from '../lib/icon';
 import {
-  arrowBackOutline,
-  alertCircle,
-  documentTextOutline,
-  copyOutline,
-  checkmarkOutline,
-  timeOutline,
-  personOutline,
-  codeSlashOutline,
-  chevronDownOutline,
-  chevronUpOutline,
-} from 'ionicons/icons';
+  AlertCircle,
+  ArrowLeft,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  Code,
+  Copy,
+  FileText,
+  User,
+} from 'lucide-react';
+import React, { useState } from 'react';
 import { FindingRecord, IncidentSessionDetail } from '../types';
 
 interface IncidentDetailViewProps {
@@ -45,7 +45,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
   if (!finding) {
     return (
       <div className="p-8 text-center bg-white rounded-2xl border border-border-subtle">
-        <IonIcon icon={alertCircle} className="text-3xl text-accent-orange mb-2" />
+        <Icon icon={AlertCircle} className="text-3xl text-accent-orange mb-2" />
         <h3 className="text-sm font-bold text-text-primary">Session Not Found</h3>
         <button
           type="button"
@@ -83,7 +83,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
               onClick={onBack}
               className="flex items-center gap-1 text-gray-600 hover:text-gray-900 font-medium cursor-pointer"
             >
-              <IonIcon icon={arrowBackOutline} className="text-xs" />
+              <Icon icon={ArrowLeft} className="text-xs" />
               <span>Dashboard</span>
             </button>
             <span>&gt;</span>
@@ -96,12 +96,12 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
 
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1">
-              <IonIcon icon={personOutline} className="text-xs" />
+              <Icon icon={User} className="text-xs" />
               <span>{finding.developer || 'Operator'}</span>
             </div>
             <span>·</span>
             <div className="flex items-center gap-1">
-              <IonIcon icon={timeOutline} className="text-xs" />
+              <Icon icon={Clock} className="text-xs" />
               <span>{reviewedAt}</span>
             </div>
             <span>·</span>
@@ -132,7 +132,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
           {/* Card 1: Automated Analysis */}
           <div className="bg-white p-5 rounded-2xl border border-border-subtle shadow-sm space-y-3">
             <div className="flex items-center gap-2 text-xs font-bold text-gray-900">
-              <IonIcon icon={documentTextOutline} className="text-indigo-600 text-sm" />
+              <Icon icon={FileText} className="text-indigo-600 text-sm" />
               <h3>Automated analysis</h3>
             </div>
             <p className="text-xs text-gray-600 leading-relaxed">
@@ -177,7 +177,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
         <div className="lg:col-span-7 bg-white p-5 rounded-2xl border border-border-subtle shadow-sm space-y-4">
           <div className="flex items-center justify-between border-b border-gray-100 pb-3">
             <div className="flex items-center gap-2">
-              <IonIcon icon={codeSlashOutline} className="text-indigo-600 text-sm" />
+              <Icon icon={Code} className="text-indigo-600 text-sm" />
               <h3 className="text-xs font-bold text-gray-900">Full Transcript</h3>
             </div>
             <span className="text-[11px] font-mono text-gray-400">
@@ -226,7 +226,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
                         onClick={() => toggleReasoning(turn.step_number)}
                         className="flex items-center gap-1 text-[11px] font-bold text-purple-900 hover:text-purple-700 cursor-pointer"
                       >
-                        <IonIcon icon={isReasoningOpen ? chevronUpOutline : chevronDownOutline} className="text-xs" />
+                        <Icon icon={isReasoningOpen ? ChevronUp : ChevronDown} className="text-xs" />
                         <span>Internal reasoning</span>
                       </button>
                       {isReasoningOpen && (
@@ -259,7 +259,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
                           onClick={() => handleCopy(String(turn.arguments?.command || JSON.stringify(turn.arguments)), tIdx)}
                           className="absolute top-2 right-2 px-2 py-1 rounded bg-white/10 text-white hover:bg-white/20 text-[10px] font-sans flex items-center gap-1 cursor-pointer"
                         >
-                          <IonIcon icon={copiedIndex === tIdx ? checkmarkOutline : copyOutline} className="text-xs" />
+                          <Icon icon={copiedIndex === tIdx ? Check : Copy} className="text-xs" />
                           <span>{copiedIndex === tIdx ? 'Copied' : 'Copy'}</span>
                         </button>
                       </div>
@@ -270,7 +270,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
                   {isBlocked ? (
                     <div className="p-3.5 rounded-xl border border-rose-200 bg-rose-50/60 space-y-1.5">
                       <div className="flex items-center gap-1.5 text-xs font-bold text-rose-700">
-                        <IonIcon icon={alertCircle} className="text-sm text-rose-600" />
+                        <Icon icon={AlertCircle} className="text-sm text-rose-600" />
                         <span>Blocked / escalated</span>
                       </div>
                       {turn.rule_violation_tag && (

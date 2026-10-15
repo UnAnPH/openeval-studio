@@ -17,7 +17,7 @@ from schemas.watcher_models import Policy
 from server.auth import current_user_id
 from server.watcher_store import get_watcher_store
 
-router = APIRouter()
+router = APIRouter(prefix="/api/v1/watcher", tags=["watcher"])
 logger = logging.getLogger("openeval.server.watcher_policy")
 
 
@@ -78,19 +78,13 @@ class UpdateThresholdsResponse(BaseModel):
     count: int
 
 
-@router.get("/api/watcher/config", response_model=WatcherConfig)
+@router.get("/config", response_model=WatcherConfig)
 async def get_watcher_config() -> WatcherConfig:
     """Get Watcher mode settings for active user. Thresholds live in /api/v1/watcher/policy."""
     return get_watcher_store().get_user_config()
 
 
-@router.get("/api/v1/watcher/config", response_model=WatcherConfig)
-async def get_watcher_config_v1() -> WatcherConfig:
-    """v1 alias for mode config (same handler backing as /api/watcher/config)."""
-    return await get_watcher_config()
-
-
-@router.get("/api/v1/watcher/analyzer", response_model=FleetOverviewResponse)
+@router.get("/analyzer", response_model=FleetOverviewResponse)
 async def watcher_analyzer_lite() -> FleetOverviewResponse:
     """Analyzer-lite: org-level blocked/escalated counts from WatcherStore."""
     store = get_watcher_store()
@@ -105,7 +99,7 @@ async def watcher_analyzer_lite() -> FleetOverviewResponse:
     )
 
 
-@router.post("/api/watcher/config", response_model=WatcherConfig)
+@router.post("/config", response_model=WatcherConfig)
 async def update_watcher_config(new_config: WatcherConfig) -> WatcherConfig:
     """Update runtime mode (enforce/observe/paused) for active user."""
     from server.app import broadcast_watcher_event
@@ -118,20 +112,14 @@ async def update_watcher_config(new_config: WatcherConfig) -> WatcherConfig:
     return updated
 
 
-@router.post("/api/v1/watcher/config", response_model=WatcherConfig)
-async def update_watcher_config_v1(new_config: WatcherConfig) -> WatcherConfig:
-    """v1 alias for mode config updates."""
-    return await update_watcher_config(new_config)
-
-
-@router.get("/api/v1/watcher/policy", response_model=Policy)
+@router.get("/policy", response_model=Policy)
 async def get_watcher_policy() -> Policy:
     """Retrieve active policy configuration, 63 command rules, and tool thresholds."""
     store = get_watcher_store()
     return store.get_default_policy()
 
 
-@router.post("/api/v1/watcher/policy/reset", response_model=ResetPolicyResponse)
+@router.post("/policy/reset", response_model=ResetPolicyResponse)
 async def reset_watcher_policy() -> ResetPolicyResponse:
     """Reset command rules and tool thresholds to built-in Watcher defaults."""
     store = get_watcher_store()
@@ -139,7 +127,7 @@ async def reset_watcher_policy() -> ResetPolicyResponse:
     return ResetPolicyResponse(policy=policy)
 
 
-@router.post("/api/v1/watcher/policy/rule", response_model=UpdateRuleResponse)
+@router.post("/policy/rule", response_model=UpdateRuleResponse)
 async def update_rule(payload: RuleUpdatePayload) -> UpdateRuleResponse:
     """Update action on a specific command rule."""
     store = get_watcher_store()
@@ -149,7 +137,7 @@ async def update_rule(payload: RuleUpdatePayload) -> UpdateRuleResponse:
     return UpdateRuleResponse(rule_name=payload.rule_name, action=payload.action)
 
 
-@router.post("/api/v1/watcher/policy/threshold", response_model=UpdateThresholdResponse)
+@router.post("/policy/threshold", response_model=UpdateThresholdResponse)
 async def update_threshold(payload: ThresholdUpdatePayload) -> UpdateThresholdResponse:
     """Update threshold limits for a tool."""
     store = get_watcher_store()
@@ -168,7 +156,7 @@ async def update_threshold(payload: ThresholdUpdatePayload) -> UpdateThresholdRe
     return UpdateThresholdResponse(threshold=payload)
 
 
-@router.post("/api/v1/watcher/policy/thresholds", response_model=UpdateThresholdsResponse)
+@router.post("/policy/thresholds", response_model=UpdateThresholdsResponse)
 async def update_thresholds(payloads: list[ThresholdUpdatePayload]) -> UpdateThresholdsResponse:
     """Bulk update threshold limits for multiple tools."""
     store = get_watcher_store()

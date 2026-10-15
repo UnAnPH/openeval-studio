@@ -11,11 +11,11 @@
 OpenEval Studio is:
 
 1. An **eval IDE** (tasks, sandboxes, Inspect bridge, compare, search).  
-2. A **runtime safety gate** for Antigravity / Claude Code / Cursor hooks → `/api/gate/evaluate` (alias `/api/watcher/evaluate`).
+2. A **runtime safety gate** for Antigravity / Claude Code / Cursor hooks → `/api/v1/watcher/evaluate`.
 
 Do not describe it as enterprise SaaS, multi-tenant MDM, or “Deep LLM always-on” unless LLM env flags are enabled and wired.
 
-> **Naming & Architecture Note:** All visitor-facing copy, UI labels, and user documentation use **OpenEval Studio** and **runtime gate**. Internal code artifacts (`server/watcher_store.py`, `/api/watcher/*` aliases, and hook script filenames such as `antigravity_watcher_gate.py`) are deliberately maintained for backward compatibility with existing agent integrations and tests.
+> **Naming & Architecture Note:** All visitor-facing copy, UI labels, and user documentation use **OpenEval Studio** and **runtime gate**. Internal code artifacts (`server/watcher_store.py`, `/api/v1/watcher/*` routes, and hook script filenames such as `antigravity_watcher_gate.py`) provide the canonical safety engine and telemetry layer.
 
 ---
 
@@ -28,6 +28,7 @@ Do not describe it as enterprise SaaS, multi-tenant MDM, or “Deep LLM always-o
 5. **Design system** — `lucide-react` only in new/edited views; cards `bg-white rounded-2xl border border-border-subtle shadow-sm`.
 6. **Command rules only on command tools** — when applying shell regexes in `evaluate_action_watcher_gateway`, do not treat file-write payloads as shell commands.
 7. **Quality before done:** `make check`, `uv run pytest tests/`, `cd ui && npm run build` (0 TypeScript/Vite errors).
+8. **Circuit Breaker Statefulness** — Client hooks must never fail-open indefinitely on repeated gateway outages. Hook state must use atomic replace (`tmp` -> `os.replace`) and trip to `force_ask` after 3 consecutive failures in 60s. Unit tests involving hooks must isolate `OPENEVAL_CIRCUIT_STATE_FILE` per test.
 
 ---
 
@@ -35,9 +36,10 @@ Do not describe it as enterprise SaaS, multi-tenant MDM, or “Deep LLM always-o
 
 | Piece | Status |
 | --- | --- |
-| Antigravity hook | `scripts/antigravity_watcher_gate.py` + `install_antigravity_watcher_hook.sh` (matcher `.*`, `force_ask` lockout) |
+| Antigravity hook | `scripts/antigravity_watcher_gate.py` + `install_antigravity_watcher_hook.sh` (matcher `.*`, `force_ask` lockout, stateful circuit breaker) |
 | Claude Code hook | `scripts/claude_code_watcher_hook.py` (settings.json PreToolUse, interactive prompt on deny) |
-| Cursor hook | `scripts/cursor_watcher_gate.py` + `install_cursor_watcher_hook.sh` (`.cursor/hooks.json`, `force_ask` lockout) |
+| Cursor hook | `scripts/cursor_watcher_gate.py` + `install_cursor_watcher_hook.sh` (`.cursor/hooks.json`, `ask` prompt lockout, stateful circuit breaker) |
+| Adversarial Evasion | Traps base64/hex/openssl pipelines, interpreter reflection (`python/node -c`), split flags (`rm -r -f`), and secret upload exfil |
 | Operator Override | Single-action approval (`/api/v1/watcher/gate/resolve`) and bulk resolution (`/api/v1/watcher/reviews/resolve-all`) |
 | Live Session Ingest | Automatic discovery of active sessions (`working`, `active`, `running`) into Sessions `Live` tab |
 | Thresholds UI | Safety → Policy → Tool Thresholds (wired to store + evaluate) |

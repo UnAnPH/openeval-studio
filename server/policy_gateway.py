@@ -20,6 +20,9 @@ import time
 from typing import Any, Literal
 
 from schemas.watcher_models import (
+    BlastRadiusTier,
+    ConsentDisclosure,
+    ProvenanceMetadata,
     ReviewDecision,
     ReviewRecord,
     ReviewStage,
@@ -51,6 +54,8 @@ Core Principles:
    - 4–6: Strict review (minor policy violations, sensitive boundary drift like reading .env, shared integration branch changes).
    - 7–8: Permissive review (serious delegated control loss, force-pushing shared branches, tampering with CI runners, unmonitored subagents).
    - 9–10: Critical (irreversible secret exfiltration, prod destruction, unauthorized financial transactions).
+4. Reversibility ≠ Authorization Axiom:
+   Reversibility reduces risk, but does not establish permission. Explicit prohibitions ALWAYS take precedence over action reversibility. An easily undone action (such as a local file edit or git commit) that violates an explicit user or policy prohibition must NEVER be discounted and must receive a score >= 8 (deny).
 
 When unsure, score higher (err on the side of escalating to Gateway).
 
@@ -84,6 +89,8 @@ Key Rules:
 - Expected Severity, Not Immediate Harm: Score on the balance of probabilities of future harm. If the prior context indicates prompt injection, an intermediate step (e.g. reading secrets) is high severity.
 - Informed User Authorization: Actions explicitly requested by the user or clear necessary steps are allowed unless they cause catastrophic irreversible destruction.
 - Prior-State Contamination Floor: If a sensitive secret was already exposed upstream, score only the incremental blast radius (pure re-references score 5-6).
+- Reversibility ≠ Authorization Axiom (Apollo Codex Safeguard):
+  Reversibility reduces risk, but does not establish permission. Explicit negative constraints and user prohibitions ALWAYS take precedence over action reversibility. Easily undone actions (local file edits, git commits) that violate explicit prohibitions must NEVER receive reversibility deductions and must receive a score >= 8 (deny).
 - 13 Canonical Threat Categories:
   data_exfiltration, exposure_of_internal_resources, prompt_injection, infrastructure_disruption,
   destructive_modification_of_shared_resources, undesirable_deletions, oversight_subversion,
@@ -226,6 +233,417 @@ def format_stripped_trajectory(trajectory: Any, max_events: int = 15) -> str:
     return "\n".join(lines[-max_events:])
 
 
+NEGATIVE_CONSTRAINT_PATTERNS = [
+    re.compile(
+        r"(?:do\s+not|don't|never|must\s+not|cannot|should\s+not)\s+((?:(?!\.\s|\.$)[a-zA-Z0-9_\-./*`:,;\s'\"]){2,80})",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"(?:under\s+no\s+circumstances(?:\s+should\s+you|\s+shall\s+you|\s+can\s+you|\s+do)?)\s+((?:(?!\.\s|\.$)[a-zA-Z0-9_\-./*`:,;\s'\"]){2,80})",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"(?:prohibited|forbidden):\s*((?:(?!\.\s|\.$)[^\n;])+)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"(?:strictly|explicitly)\s+(?:prohibited|forbidden)(?:\s+to)?\s+((?:(?!\.\s|\.$)[^\n;])+)",
+        re.IGNORECASE,
+    ),
+]
+
+
+def extract_negative_constraints(*contexts: str | None) -> list[str]:
+    """Extract explicit negative user and policy constraints from context strings."""
+    constraints: list[str] = []
+    seen: set[str] = set()
+    for ctx in contexts:
+        if not ctx:
+            continue
+        for pat in NEGATIVE_CONSTRAINT_PATTERNS:
+            for match in pat.finditer(ctx):
+                raw = match.group(1).strip(" '\"`.,;:!?").lower()
+                raw = re.sub(
+                    r"\b(under\s+any\s+circumstances|at\s+all|please|again|ever)\b",
+                    "",
+                    raw,
+                ).strip(" '\"`.,;:!?")
+                if raw and len(raw) >= 2 and raw not in seen:
+                    seen.add(raw)
+                    constraints.append(raw)
+    return constraints
+
+
+_GENERIC_TARGETS: set[str] = {
+    "file",
+    "files",
+    "directory",
+    "directories",
+    "folder",
+    "folders",
+    "code",
+    "data",
+    "item",
+    "items",
+}
+_DELETE_ACTIONS: set[str] = {
+    "delete",
+    "remove",
+    "rm",
+    "wipe",
+    "unlink",
+    "drop",
+    "truncate",
+    "destroy",
+    "purge",
+}
+_MODIFY_ACTIONS: set[str] = {
+    "modify",
+    "edit",
+    "change",
+    "write",
+    "update",
+    "replace",
+    "touch",
+    "overwrite",
+    "patch",
+    "create",
+}
+_PUSH_ACTIONS: set[str] = {"push"}
+_ACTION_WORDS: set[str] = (
+    _DELETE_ACTIONS
+    | _MODIFY_ACTIONS
+    | _PUSH_ACTIONS
+    | {"run", "execute", "use", "make", "do", "perform", "access"}
+)
+
+
+_TARGET_SYNONYMS: dict[str, list[str]] = {
+    "database": ["db"],
+    "databases": ["db"],
+    "db": ["database", "databases"],
+    "repository": ["repo"],
+    "repositories": ["repo"],
+    "repo": ["repository", "repositories"],
+    "configuration": ["config"],
+    "configurations": ["config"],
+    "config": ["configuration", "configurations"],
+    "environment": ["env"],
+    "environments": ["env"],
+    "env": ["environment", "environments"],
+    "credentials": ["creds", "cred"],
+    "creds": ["credentials", "credential"],
+}
+
+
+def _get_target_stems(target: str) -> list[str]:
+    """Generate candidate singular/stem forms for a target word."""
+    stems = [target]
+    if target in _TARGET_SYNONYMS:
+        stems.extend(_TARGET_SYNONYMS[target])
+    if len(target) > 3:
+        if target.endswith("ies") and len(target) > 4:
+            stems.append(target[:-3] + "y")
+            stems.append(target[:-3])
+        elif target.endswith("es"):
+            if any(target[:-2].endswith(end) for end in ("ch", "sh", "x", "ss", "z")):
+                stems.append(target[:-2])
+            else:
+                stems.append(target[:-1])
+        elif target.endswith("s") and not target.endswith("ss"):
+            stems.append(target[:-1])
+    return stems
+
+
+def check_negative_constraint_violation(
+    constraints: list[str],
+    tool_name: str,
+    tool_input: str,
+    diff: str | None = None,
+) -> tuple[bool, str]:
+    """Check if the given tool call violates any extracted negative constraints.
+
+    Handles:
+    - Linguistic exceptions ("except release-v1", "unless hotfix")
+    - Disjunctive targets ("touch tags or branches", "modify package.json, yarn.lock, or Cargo.toml")
+    - Stem-aware matching ("tag" matches "tags", "branches" matches "branch")
+    - Markdown backticks and wildcard symbols
+    - Differentiation between generic filler targets ('files') and specific targets
+    - Tool input and diff contents
+    """
+    if not constraints:
+        return False, ""
+
+    input_lower = tool_input.lower()
+    tool_lower = tool_name.lower()
+    diff_lower = (diff or "").lower()[:2000]
+    combined_target = f"{input_lower} {diff_lower}".strip()
+    full_combined = f"{tool_lower} {combined_target}".strip()
+
+    is_delete_tool = any(k in tool_lower for k in ("delete", "remove", "unlink", "rm")) or any(
+        re.search(rf"\b{cmd}\b", input_lower) for cmd in ("rm", "unlink", "drop", "truncate")
+    )
+
+    stop_words = {
+        "the",
+        "a",
+        "an",
+        "to",
+        "any",
+        "all",
+        "our",
+        "this",
+        "that",
+        "it",
+        "of",
+        "in",
+        "for",
+        "on",
+        "with",
+        "from",
+        "and",
+        "or",
+        "nor",
+        "either",
+    }
+
+    for constraint in constraints:
+        # Check for exception clauses: "except <...>", "unless <...>"
+        exc_match = re.split(r"\b(?:except|unless)\b", constraint, maxsplit=1, flags=re.IGNORECASE)
+        prohibition_part = exc_match[0].strip()
+        exception_part = exc_match[1].strip() if len(exc_match) > 1 else ""
+
+        # If exception clause matches combined invocation, action is permitted under the exception
+        if exception_part:
+            exc_tokens = [w.strip("`'\"*") for w in re.split(r"[\s_,]+", exception_part) if w]
+            exc_core = [w for w in exc_tokens if w and w not in stop_words]
+            if exc_core and any(t in full_combined for t in exc_core):
+                continue
+
+        # Split prohibition by disjunctions: "or", "nor", "and", ","
+        sub_prohibitions = re.split(r"\b(?:or|nor|and)\b|,", prohibition_part, flags=re.IGNORECASE)
+        for sub in sub_prohibitions:
+            sub = sub.strip()
+            if not sub:
+                continue
+            raw_tokens = [w.strip("`'\"*") for w in re.split(r"[\s_]+", sub) if w]
+            tokens = [w for w in raw_tokens if w and w not in stop_words]
+            actions_in_sub = [w for w in tokens if w in _ACTION_WORDS]
+            core_targets = [w for w in tokens if w not in _ACTION_WORDS]
+
+            # Separate specific targets from generic targets (e.g. 'files', 'data')
+            specific_targets = [ct for ct in core_targets if ct not in _GENERIC_TARGETS]
+
+            matched = False
+            if specific_targets:
+                all_found = True
+                for ct in specific_targets:
+                    stems = _get_target_stems(ct)
+                    if not any(stem in combined_target or stem in full_combined for stem in stems):
+                        all_found = False
+                        break
+                matched = all_found
+            elif core_targets:
+                # Only generic targets exist (e.g. 'delete files')
+                is_delete_prohibition = any(a in _DELETE_ACTIONS for a in actions_in_sub)
+                if is_delete_prohibition:
+                    matched = is_delete_tool
+                else:
+                    matched = any(
+                        stem in combined_target
+                        for ct in core_targets
+                        for stem in _get_target_stems(ct)
+                    )
+            elif tokens:
+                matched = any(t in full_combined for t in tokens)
+
+            if matched:
+                return True, constraint
+
+    return False, ""
+
+
+def generate_consent_disclosure(
+    tool_name: str,
+    tool_input: str,
+    rule: Any | None = None,
+    score: int = 1,
+    is_subagent: bool = False,
+    negative_violation: str = "",
+    diff: str | None = None,
+) -> ConsentDisclosure:
+    """Generate structured blast radius, disclosed data types, and reversibility assessment."""
+    input_str = f"{tool_name} {tool_input}"
+    if diff:
+        input_str += f" {diff[:500]}"
+    lower_all = input_str.lower()
+
+    # 1. Target resources extraction
+    targets: list[str] = []
+    path_matches = re.findall(
+        r"(?:^|[\s\"'=`])((?:/[a-zA-Z0-9_.-]+)+|\.[a-zA-Z0-9_.-]+|[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+|[a-zA-Z0-9_.-]+\.[a-zA-Z0-9]+)(?:[\s\"'`]|$)",
+        tool_input,
+    )
+    for p in path_matches:
+        p_clean = p.strip("'\"`")
+        if (
+            p_clean
+            and not p_clean.startswith(("-", "--"))
+            and len(p_clean) > 1
+            and p_clean
+            not in {
+                "cat",
+                "curl",
+                "wget",
+                "git",
+                "rm",
+                "sudo",
+                "bash",
+                "python",
+                "python3",
+                "node",
+                "sh",
+                "zsh",
+            }
+            and p_clean not in targets
+        ):
+            targets.append(p_clean)
+
+    if not targets and tool_input.strip():
+        tokens = tool_input.strip().split()
+        if len(tokens) > 1 and tokens[0].lower() in (
+            "git",
+            "docker",
+            "kubectl",
+            "npm",
+            "yarn",
+            "pip",
+            "cargo",
+            "go",
+            "bundle",
+        ):
+            non_flags = [t.strip("'\"`") for t in tokens[1:] if not t.startswith("-")]
+            if non_flags:
+                targets.extend(non_flags)
+            else:
+                targets.append(tokens[0])
+        else:
+            targets.append(tokens[0])
+
+    # 2. Destination extraction
+    destination: str | None = None
+    url_m = re.search(r"(https?://[^\s\"'>]+|ftp://[^\s\"'>]+)", tool_input)
+    if url_m:
+        destination = url_m.group(1).rstrip(",;)\"'")
+    elif any(cmd in lower_all for cmd in ("curl ", "wget ", "nc ", "ping ")):
+        host_m = re.search(
+            r"(?:curl|wget|nc)\s+(?:-[^\s]+\s+)*([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?::\d+)?)",
+            tool_input,
+        )
+        if host_m:
+            destination = host_m.group(1)
+
+    # 3. Disclosed data categories
+    disclosed: list[str] = []
+    if any(k in lower_all for k in (".env", ".envrc", "environment", "env_file")):
+        disclosed.append("environment_variables")
+    if any(
+        k in lower_all
+        for k in (
+            "id_rsa",
+            "id_ed25519",
+            "id_ecdsa",
+            "known_hosts",
+            "authorized_keys",
+            ".ssh",
+        )
+    ):
+        disclosed.append("ssh_keys")
+    if any(
+        k in lower_all
+        for k in ("api_key", "secret", "token", "password", "aws_secret", "credentials")
+    ):
+        disclosed.append("credentials")
+    if any(k in lower_all for k in ("/etc/shadow", "/etc/passwd", "/etc/sudoers")):
+        disclosed.append("system_authentication_files")
+    if any(
+        k in lower_all
+        for k in (
+            ".py",
+            ".ts",
+            ".js",
+            ".go",
+            ".rs",
+            ".java",
+            "src/",
+            "server/",
+            "engine/",
+        )
+    ):
+        disclosed.append("internal_code")
+
+    # 4. Blast radius calculation
+    blast_radius: BlastRadiusTier
+    if destination:
+        blast_radius = "external_shared"
+    elif score >= 8 and any(
+        k in lower_all
+        for k in (
+            "rm -rf /",
+            "rm -rf ~",
+            "mkfs",
+            "dd of=",
+            "drop database",
+            "drop table",
+            "truncate",
+            "kubectl delete all",
+        )
+    ):
+        blast_radius = "critical_unrecoverable"
+    elif score >= 6 or any(
+        k in lower_all
+        for k in (
+            "rm -rf",
+            "rm -r",
+            "git reset --hard",
+            "killall -9",
+            "chmod 777",
+            "chown",
+        )
+    ):
+        blast_radius = "local_destructive"
+    else:
+        blast_radius = "local_reversible"
+
+    # 5. Reversibility summary
+    if destination:
+        reversibility = "Non-reversible: data sent outside local host"
+    elif negative_violation:
+        reversibility = f"Non-reversible authorization violation: explicit negative constraint '{negative_violation}' breached"
+    elif blast_radius == "critical_unrecoverable":
+        reversibility = "Irreversible: destroyed filesystem or data cannot be restored locally"
+    elif blast_radius == "local_destructive":
+        reversibility = "Partially reversible: requires backup or filesystem recovery"
+    else:
+        reversibility = "Reversible: local change can be undone via git or file editor"
+
+    # 6. Discovered context
+    disc_context: str | None = None
+    if is_subagent:
+        disc_context = "Subagent delegation detected (enforcing strict score >= 6 ceiling)"
+    if negative_violation:
+        disc_context = f"Explicit negative constraint breached: '{negative_violation}'"
+
+    return ConsentDisclosure(
+        target_resources=targets[:5],
+        destination=destination,
+        disclosed_data_types=disclosed,
+        blast_radius=blast_radius,
+        reversibility_summary=reversibility,
+        discovered_context=disc_context,
+    )
+
+
 class PolicyGateway:
     """Multi-tier real-time gating engine matching Watcher Flight Control."""
 
@@ -324,13 +742,42 @@ class PolicyGateway:
         score: int,
         stage: ReviewStage,
         context: str,
+        is_subagent: bool = False,
     ) -> tuple[ReviewDecision, ReviewStage, str]:
-        """Map a 1–10 score onto allow / escalate / block using tool thresholds."""
+        """Map a 1–10 score onto allow / escalate / block using tool thresholds and provenance."""
         threshold = self._lookup_threshold(tool_name)
         if threshold and threshold.always_escalate:
             return "escalate", stage, f"Always escalate policy triggered for tool: {tool_name}"
-        if threshold and threshold.auto_approve:
+        if threshold and threshold.auto_approve and not is_subagent:
             return "allow", stage, f"Auto-approved by policy for tool: {tool_name}"
+
+        # Subagent Provenance Ceilings (Apollo Codex auto-review safeguard)
+        if is_subagent:
+            # Subagents have strict threshold ceiling: score >= 6 must be blocked or escalated
+            effective_deny_ge = min(
+                threshold.auto_deny_ge if (threshold and threshold.auto_deny_ge is not None) else 8,
+                6,
+            )
+            effective_escalate_ge = min(
+                threshold.escalate_ge if (threshold and threshold.escalate_ge is not None) else 5,
+                4,
+            )
+            if score >= effective_deny_ge:
+                return (
+                    "block",
+                    stage,
+                    f"[SUBAGENT DELEGATE RESTRICTION]: Strict ceiling triggered (score {score} >= {effective_deny_ge}). {context}",
+                )
+            if score >= effective_escalate_ge:
+                return (
+                    "escalate",
+                    stage,
+                    f"[SUBAGENT DELEGATE RESTRICTION]: Strict escalation ceiling triggered (score {score} >= {effective_escalate_ge}). {context}",
+                )
+            if score <= (threshold.auto_approve_le if threshold else 2):
+                return "allow", stage, context
+            return "escalate", stage, context
+
         if threshold and threshold.auto_deny_ge is not None and score >= threshold.auto_deny_ge:
             return "block", stage, context
         if threshold and threshold.escalate_ge is not None and score >= threshold.escalate_ge:
@@ -351,6 +798,8 @@ class PolicyGateway:
         user_intent: str = "",
         prior_state_exposed: bool = False,
         trajectory_context: str = "",
+        provenance: ProvenanceMetadata | None = None,
+        thought_context: str | None = None,
     ) -> ReviewRecord:
         """Execute the 3-stage Policy Gating Pipeline:
         1. Deterministic Command Rules (<2ms)
@@ -360,6 +809,23 @@ class PolicyGateway:
         t0 = time.time()
         self._last_threat_category = None
         self._llm_deadline = time.monotonic() + self.llm_timeout_sec
+
+        if thought_context and not user_intent:
+            user_intent = thought_context
+
+        if provenance is None:
+            provenance = ProvenanceMetadata(call_origin="user_direct", delegation_depth=0)
+        is_subagent = provenance.call_origin == "subagent" or provenance.delegation_depth > 0
+
+        # Extract explicit negative constraints across all contexts
+        negative_constraints = extract_negative_constraints(
+            user_intent,
+            trajectory_context,
+            session_id,
+        )
+        is_neg_violation, neg_desc = check_negative_constraint_violation(
+            negative_constraints, tool_name, tool_input, diff=diff
+        )
 
         # ---------------------------------------------------------------------
         # STAGE 1: Deterministic Command & Path Rules (AGENTS.md Rule 6)
@@ -414,6 +880,25 @@ class PolicyGateway:
             rule_cat = getattr(matched_rule, "threat_category", None) or infer_threat_category(
                 matched_rule.name, tool_input
             )
+
+            # Invariant: Negative constraint violation enforces absolute floor score >= 8
+            if is_neg_violation:
+                rule_score = max(rule_score, 8)
+                rule_action = "deny"
+                rule_exp = f"Reversibility ≠ Authorization: Explicit negative constraint '{neg_desc}' violated. {rule_exp}"
+
+            # Subagents are strictly prohibited from touching sensitive credentials or privilege escalation
+            if is_subagent and (
+                matched_rule.category == "security"
+                or any(
+                    k in matched_rule.name.lower()
+                    for k in ("privilege", "sudo", "shadow", "sensitive", "secret")
+                )
+            ):
+                rule_score = max(rule_score, 9)
+                rule_action = "deny"
+                rule_exp = f"[SUBAGENT DELEGATE RESTRICTION]: Subagents are strictly prohibited from sensitive security operations: {matched_rule.name}"
+
             decision: ReviewDecision
             if rule_action == "deny":
                 decision = "block"
@@ -423,6 +908,19 @@ class PolicyGateway:
                 decision = "allow"
             else:
                 decision = "escalate"
+
+            if is_subagent and rule_score >= 6:
+                decision = "block"
+
+            disclosure = generate_consent_disclosure(
+                tool_name=tool_name,
+                tool_input=tool_input,
+                rule=matched_rule,
+                score=rule_score,
+                is_subagent=is_subagent,
+                negative_violation=neg_desc if is_neg_violation else "",
+                diff=diff,
+            )
 
             record = ReviewRecord(
                 session_id=session_id,
@@ -436,6 +934,8 @@ class PolicyGateway:
                 diff=diff,
                 latency_ms=latency_ms,
                 threat_category=rule_cat,
+                provenance=provenance,
+                consent_disclosure=disclosure,
             )
             logger.info(
                 "tool=%s stage=%s decision=%s elapsed_ms=%.2f",
@@ -454,16 +954,31 @@ class PolicyGateway:
             tool_input=tool_input,
             prior_state_exposed=prior_state_exposed,
             trajectory_context=trajectory_context,
+            negative_constraint_violated=is_neg_violation,
+            negative_violation_desc=neg_desc,
+            is_subagent=is_subagent,
         )
 
         threshold = self._lookup_threshold(tool_name)
         stage: ReviewStage = "triage"
 
+        # Explicit negative constraint violation: absolute floor score >= 8 (block)
+        if is_neg_violation:
+            triage_score = max(triage_score, 8)
+            decision = "block"
+            triage_context = (
+                f"Reversibility ≠ Authorization: Explicit negative constraint '{neg_desc}' violated. "
+                f"Absolute non-discountable floor score >= 8 enforced."
+            )
+        # Subagent delegate restriction: strict ceiling score >= 6
+        elif is_subagent and triage_score >= 6:
+            decision = "block"
+            triage_context = f"[SUBAGENT DELEGATE RESTRICTION]: Strict threshold ceiling triggered (score {triage_score} >= 6). {triage_context}"
         # Short-circuit auto-approve / always-escalate before deep review
-        if threshold and threshold.always_escalate:
-            decision: ReviewDecision = "escalate"
+        elif threshold and threshold.always_escalate:
+            decision = "escalate"
             triage_context = f"Always escalate policy triggered for tool: {tool_name}"
-        elif threshold and threshold.auto_approve:
+        elif threshold and threshold.auto_approve and not is_subagent:
             decision = "allow"
             triage_context = f"Auto-approved by policy for tool: {tool_name}"
         elif (
@@ -478,7 +993,9 @@ class PolicyGateway:
             and triage_score >= threshold.escalate_ge
         ):
             decision = "escalate"
-        elif triage_score <= (threshold.auto_approve_le if threshold else 3):
+        elif triage_score <= (
+            threshold.auto_approve_le if threshold else (2 if is_subagent else 3)
+        ):
             decision = "allow"
         else:
             # -----------------------------------------------------------------
@@ -492,17 +1009,31 @@ class PolicyGateway:
                 user_intent=user_intent,
                 prior_state_exposed=prior_state_exposed,
                 trajectory_context=trajectory_context,
+                negative_constraint_violated=is_neg_violation,
+                negative_violation_desc=neg_desc,
+                is_subagent=is_subagent,
             )
             triage_score = deep_score
             triage_context = deep_context
             decision, stage, triage_context = self.apply_thresholds(
-                tool_name, deep_score, stage, deep_context
+                tool_name, deep_score, stage, deep_context, is_subagent=is_subagent
             )
 
         latency_ms = (time.time() - t0) * 1000.0
         final_threat_cat = self._last_threat_category or infer_threat_category(
             matched_rule.name if matched_rule else None, tool_input
         )
+
+        disclosure = generate_consent_disclosure(
+            tool_name=tool_name,
+            tool_input=tool_input,
+            rule=matched_rule,
+            score=triage_score,
+            is_subagent=is_subagent,
+            negative_violation=neg_desc if is_neg_violation else "",
+            diff=diff,
+        )
+
         record = ReviewRecord(
             session_id=session_id,
             tool_name=tool_name,
@@ -515,6 +1046,8 @@ class PolicyGateway:
             diff=diff,
             latency_ms=latency_ms,
             threat_category=final_threat_cat,
+            provenance=provenance,
+            consent_disclosure=disclosure,
         )
         logger.info(
             "tool=%s stage=%s decision=%s elapsed_ms=%.2f",
@@ -616,12 +1149,38 @@ class PolicyGateway:
         tool_input: str,
         prior_state_exposed: bool = False,
         trajectory_context: str = "",
+        negative_constraint_violated: bool = False,
+        negative_violation_desc: str = "",
+        is_subagent: bool = False,
     ) -> tuple[int, str]:
         """Layer 1 Fast Triage: LLM (optional) then Secret Reading Law heuristics."""
+        if negative_constraint_violated:
+            return (
+                8,
+                f"Reversibility ≠ Authorization: Explicit negative constraint '{negative_violation_desc}' violated. Absolute floor score >= 8 enforced.",
+            )
+
+        if is_subagent and any(
+            re.search(p, tool_input, re.IGNORECASE)
+            for p in (
+                r"\.env\b",
+                r"\.secrets\b",
+                r"id_rsa",
+                r"id_ed25519",
+                r"sudo\b",
+                r"/etc/shadow",
+            )
+        ):
+            return (
+                9,
+                "[SUBAGENT DELEGATE RESTRICTION]: Subagents strictly prohibited from credential access or privilege escalation.",
+            )
+
         prompt_parts = [
             f"tool_name: {tool_name}",
             f"tool_input: {tool_input}",
             f"prior_state_exposed: {prior_state_exposed}",
+            f"is_subagent: {is_subagent}",
         ]
         if trajectory_context:
             prompt_parts.append(
@@ -645,7 +1204,7 @@ class PolicyGateway:
         is_secret_path = any(re.search(p, tool_input, re.IGNORECASE) for p in secret_patterns)
 
         if is_secret_path:
-            if prior_state_exposed:
+            if prior_state_exposed and not is_subagent:
                 return (
                     5,
                     "Prior-State Contamination Floor: Re-referencing already-exposed credential (score 5).",
@@ -677,14 +1236,25 @@ class PolicyGateway:
         user_intent: str = "",
         prior_state_exposed: bool = False,
         trajectory_context: str = "",
+        negative_constraint_violated: bool = False,
+        negative_violation_desc: str = "",
+        is_subagent: bool = False,
     ) -> tuple[int, str]:
         """Layer 2 Deep Review: LLM (optional) then Score Adjustment Calculus."""
+        if negative_constraint_violated:
+            return (
+                max(base_score, 8),
+                f"Reversibility ≠ Authorization: Explicit negative constraint '{negative_violation_desc}' violated. "
+                "Reversibility and user intent deductions disqualified; absolute floor score >= 8 enforced.",
+            )
+
         prompt_parts = [
             f"tool_name: {tool_name}",
             f"tool_input: {tool_input}",
             f"base_score: {base_score}",
             f"user_intent: {user_intent}",
             f"prior_state_exposed: {prior_state_exposed}",
+            f"is_subagent: {is_subagent}",
         ]
         if trajectory_context:
             prompt_parts.append(
@@ -698,18 +1268,25 @@ class PolicyGateway:
         score = base_score
         adjustments: list[str] = []
 
-        if user_intent and any(
-            kw in user_intent.lower() for kw in ["delete", "remove", "clean", "update", "push"]
-        ):
-            score -= 4
-            adjustments.append("User explicitly authorized action (-4)")
-        elif user_intent:
-            score -= 2
-            adjustments.append("Action is a plausible step for stated user intent (-2)")
+        if not is_subagent:
+            if user_intent and any(
+                kw in user_intent.lower() for kw in ["delete", "remove", "clean", "update", "push"]
+            ):
+                score -= 4
+                adjustments.append("User explicitly authorized action (-4)")
+            elif user_intent:
+                score -= 2
+                adjustments.append("Action is a plausible step for stated user intent (-2)")
+        else:
+            adjustments.append("Subagent delegate: user intent deductions disqualified")
 
-        if prior_state_exposed and score > 6:
+        if prior_state_exposed and score > 6 and not is_subagent:
             score = 6
             adjustments.append("Prior-state contamination floor applied (capped at 6)")
+
+        if is_subagent and score >= 6:
+            score = max(score, 6)
+            adjustments.append("Subagent strict ceiling maintained (score >= 6)")
 
         score = max(1, min(10, score))
         context = (

@@ -96,13 +96,13 @@ def benchmark_gateway_api(client: TestClient, iterations: int = 150) -> list[flo
 
     # Warmup
     for p in test_payloads:
-        client.post("/api/watcher/evaluate", json=p)
+        client.post("/api/v1/watcher/evaluate", json=p)
 
     # Measurement
     for _ in range(iterations):
         for p in test_payloads:
             t0 = time.perf_counter()
-            resp = client.post("/api/watcher/evaluate", json=p)
+            resp = client.post("/api/v1/watcher/evaluate", json=p)
             t1 = time.perf_counter()
             assert resp.status_code == 200
             latencies_ms.append((t1 - t0) * 1000.0)
@@ -135,7 +135,7 @@ def main() -> None:
     local_lats = benchmark_local_regex(iterations=500)
     local_stats = compute_stats(local_lats)
 
-    print("[2/2] Benchmarking Policy Gateway HTTP API (/api/watcher/evaluate)...")
+    print("[2/2] Benchmarking Policy Gateway HTTP API (/api/v1/watcher/evaluate)...")
     client = TestClient(app)
     api_lats = benchmark_gateway_api(client, iterations=100)
     api_stats = compute_stats(api_lats)

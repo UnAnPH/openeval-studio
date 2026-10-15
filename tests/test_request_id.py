@@ -11,7 +11,7 @@ def client() -> TestClient:
     return TestClient(app)
 
 
-@pytest.mark.parametrize("path", ["/api/gate/evaluate", "/api/watcher/evaluate"])
+@pytest.mark.parametrize("path", ["/api/v1/watcher/evaluate"])
 def test_evaluate_endpoint_request_id_lifecycle(client: TestClient, path: str) -> None:
     """Fails if evaluate responses omit generated X-Request-ID or fail to echo client-supplied IDs."""
     payload = {
@@ -59,7 +59,7 @@ def test_evaluate_endpoint_logs_gate_decision_with_request_id(client: TestClient
     try:
         custom_id = "test-log-corr-id-123"
         resp = client.post(
-            "/api/gate/evaluate",
+            "/api/v1/watcher/evaluate",
             json={
                 "tool_name": "bash",
                 "arguments": {"cmd": "echo hello"},

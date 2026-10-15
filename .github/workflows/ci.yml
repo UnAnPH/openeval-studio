@@ -85,7 +85,7 @@ jobs:
           get_watcher_store().reset_policy_to_defaults()
 
           bad = client.post(
-              "/api/watcher/evaluate",
+              "/api/v1/watcher/evaluate",
               json={
                   "tool_name": "bash",
                   "arguments": {"cmd": "sudo rm -rf /"},
@@ -98,7 +98,7 @@ jobs:
           assert body["decision"] in ("deny", "escalate"), body
 
           good = client.post(
-              "/api/watcher/evaluate",
+              "/api/v1/watcher/evaluate",
               json={
                   "tool_name": "bash",
                   "arguments": {"cmd": "echo hello"},

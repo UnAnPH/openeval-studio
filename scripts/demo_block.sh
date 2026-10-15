@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Smoke-test Watcher blocking via /api/watcher/evaluate (no live agent required).
+# Smoke-test Watcher blocking via /api/v1/watcher/evaluate (no live agent required).
 set -euo pipefail
-BASE="${OPENEVAL_WATCHER_URL:-http://127.0.0.1:8000/api/watcher/evaluate}"
+BASE="${OPENEVAL_WATCHER_URL:-http://127.0.0.1:8000/api/v1/watcher/evaluate}"
+BASE="${BASE%/api/v1/watcher/evaluate}"
 BASE="${BASE%/api/watcher/evaluate}"
-URL="${BASE}/api/watcher/evaluate"
+URL="${BASE}/api/v1/watcher/evaluate"
 
 pass=0
 fail=0

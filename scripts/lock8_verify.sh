@@ -89,7 +89,7 @@ def log(**data: object) -> None:
 
 def set_mode(mode: str) -> None:
     client.post(
-        "/api/watcher/config",
+        "/api/v1/watcher/config",
         json={
             "mode": mode,
             "deny_threshold": 0.8,
@@ -103,7 +103,7 @@ def set_mode(mode: str) -> None:
 
 set_mode("enforce")
 r = client.post(
-    "/api/watcher/evaluate",
+    "/api/v1/watcher/evaluate",
     json={
         "tool_name": "bash",
         "arguments": {"cmd": "sudo rm -rf /"},
@@ -116,7 +116,7 @@ assert r["decision"] in ("deny", "escalate"), r
 
 set_mode("observe")
 r = client.post(
-    "/api/watcher/evaluate",
+    "/api/v1/watcher/evaluate",
     json={
         "tool_name": "bash",
         "arguments": {"cmd": "sudo rm -rf /"},
@@ -135,7 +135,7 @@ assert r["decision"] == "allow" and r.get("shadow_decision") in ("deny", "escala
 
 set_mode("paused")
 r = client.post(
-    "/api/watcher/evaluate",
+    "/api/v1/watcher/evaluate",
     json={
         "tool_name": "bash",
         "arguments": {"cmd": "sudo rm -rf /"},
@@ -148,7 +148,7 @@ assert r["decision"] == "allow", r
 
 set_mode("enforce")
 r = client.post(
-    "/api/watcher/evaluate",
+    "/api/v1/watcher/evaluate",
     json={
         "tool_name": "bash",
         "arguments": {"cmd": "echo hello"},

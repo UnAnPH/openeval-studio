@@ -1,18 +1,16 @@
+import { Icon } from '../lib/icon';
+import {
+  AlertTriangle,
+  ArrowLeftRight,
+  CheckCircle,
+  Code,
+  FileText,
+  Search,
+  Sparkles,
+  Terminal,
+  X,
+} from 'lucide-react';
 import React, { useMemo, useState } from 'react';
-import {
-  IonIcon,
-} from '@ionic/react';
-import {
-  checkmarkCircle,
-  codeSlashOutline,
-  documentTextOutline,
-  terminalOutline,
-  warningOutline,
-  searchOutline,
-  swapHorizontalOutline,
-  closeOutline,
-  sparklesOutline,
-} from 'ionicons/icons';
 import { AgentStep, RunRecord } from '../types';
 
 interface SemanticVerdict {
@@ -144,7 +142,7 @@ const RunPickerModal: React.FC<RunPickerModalProps> = ({
             onClick={onClose}
             className="w-8 h-8 rounded-xl bg-white border border-border-subtle hover:bg-canvas text-text-secondary flex items-center justify-center transition-colors cursor-pointer"
           >
-            <IonIcon icon={closeOutline} className="text-base" />
+            <Icon icon={X} className="text-base" />
           </button>
         </div>
 
@@ -160,8 +158,8 @@ const RunPickerModal: React.FC<RunPickerModalProps> = ({
               placeholder="Search by Task ID, Model, Run ID prefix, or failure reason..."
               className="w-full bg-canvas border border-border-subtle rounded-xl pl-9 pr-8 py-2 text-xs text-text-primary focus:outline-none focus:border-brand-primary placeholder:text-text-muted"
             />
-            <IonIcon
-              icon={searchOutline}
+            <Icon
+              icon={Search}
               className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted text-sm pointer-events-none"
             />
             {searchQuery && (
@@ -170,7 +168,7 @@ const RunPickerModal: React.FC<RunPickerModalProps> = ({
                 onClick={() => setSearchQuery('')}
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary text-xs cursor-pointer"
               >
-                <IonIcon icon={closeOutline} />
+                <Icon icon={X} />
               </button>
             )}
           </div>
@@ -260,7 +258,7 @@ const RunPickerModal: React.FC<RunPickerModalProps> = ({
         <div className="flex-1 overflow-y-auto divide-y divide-border-subtle p-2">
           {filteredRuns.length === 0 ? (
             <div className="p-12 text-center text-xs text-text-muted space-y-2">
-              <IonIcon icon={warningOutline} className="text-3xl text-accent-orange mb-1" />
+              <Icon icon={AlertTriangle} className="text-3xl text-accent-orange mb-1" />
               <div className="font-bold text-text-primary">No Runs Match Your Filter</div>
               <p>Try clearing your search query or adjusting your filters.</p>
             </div>
@@ -447,7 +445,7 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
     return (
       <div className="bg-white p-12 rounded-2xl border border-border-subtle shadow-sm text-center space-y-4 font-sans">
         <div className="w-12 h-12 rounded-2xl bg-canvas border border-border-subtle mx-auto flex items-center justify-center text-text-muted">
-          <IonIcon icon={warningOutline} className="text-2xl text-accent-orange" />
+          <Icon icon={AlertTriangle} className="text-2xl text-accent-orange" />
         </div>
         <h3 className="text-base font-bold text-text-primary">Need at Least 2 Runs to Compare</h3>
         <p className="text-xs text-text-secondary max-w-sm mx-auto">
@@ -575,18 +573,18 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
     switch (tool) {
       case 'execute_bash':
       case 'run_command':
-        return terminalOutline;
+        return Terminal;
       case 'view_file':
       case 'read_file':
-        return documentTextOutline;
+        return FileText;
       case 'write_file':
       case 'replace_file_content':
       case 'write_to_file':
-        return codeSlashOutline;
+        return Code;
       case 'finish':
-        return checkmarkCircle;
+        return CheckCircle;
       default:
-        return terminalOutline;
+        return Terminal;
     }
   };
 
@@ -661,7 +659,7 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700 transition-all shadow-xs cursor-pointer"
             title="Swap Run A (Candidate) and Run B (Baseline)"
           >
-            <IonIcon icon={swapHorizontalOutline} className="text-sm text-indigo-600" />
+            <Icon icon={ArrowLeftRight} className="text-sm text-indigo-600" />
             <span>Swap A ⇄ B</span>
           </button>
 
@@ -672,7 +670,7 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
               onClick={handleMatchSameTask}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-semibold transition-all shadow-xs cursor-pointer"
             >
-              <IonIcon icon={sparklesOutline} className="text-sm" />
+              <Icon icon={Sparkles} className="text-sm" />
               <span>Match Task</span>
             </button>
           )}
@@ -762,7 +760,7 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
               onClick={() => setPickerTarget('candidate')}
               className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer shrink-0"
             >
-              <IonIcon icon={searchOutline} className="text-sm" />
+              <Icon icon={Search} className="text-sm" />
               <span>Choose Run</span>
             </button>
           </div>
@@ -823,7 +821,7 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
               onClick={() => setPickerTarget('baseline')}
               className="px-4 py-2 rounded-xl bg-accent-orange hover:bg-orange-600 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer shrink-0"
             >
-              <IonIcon icon={searchOutline} className="text-sm" />
+              <Icon icon={Search} className="text-sm" />
               <span>Choose Run</span>
             </button>
           </div>
@@ -880,7 +878,7 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-subtle pb-3">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-purple-50 text-brand-purple flex items-center justify-center flex-shrink-0">
-              <IonIcon icon={sparklesOutline} className="text-lg" />
+              <Icon icon={Sparkles} className="text-lg" />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -903,14 +901,14 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
             disabled={isLoadingSemantic}
             className="px-4 py-2 rounded-xl bg-brand-purple hover:bg-purple-700 text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-50 flex-shrink-0"
           >
-            <IonIcon icon={sparklesOutline} className={`text-sm ${isLoadingSemantic ? 'animate-spin' : ''}`} />
+            <Icon icon={Sparkles} className={`text-sm ${isLoadingSemantic ? 'animate-spin' : ''}`} />
             <span>{isLoadingSemantic ? 'Evaluating Trajectory Delta...' : '⚡ Run AI Semantic Comparison'}</span>
           </button>
         </div>
 
         {semanticError && (
           <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl flex items-center gap-2">
-            <IonIcon icon={warningOutline} className="text-base flex-shrink-0" />
+            <Icon icon={AlertTriangle} className="text-base flex-shrink-0" />
             <span>{semanticError}</span>
           </div>
         )}
@@ -1000,7 +998,7 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
       {divergenceTurn !== null && (
         <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-900 flex items-center justify-between text-xs shadow-sm">
           <div className="flex items-center gap-2.5">
-            <IonIcon icon={warningOutline} className="text-accent-orange text-lg flex-shrink-0" />
+            <Icon icon={AlertTriangle} className="text-accent-orange text-lg flex-shrink-0" />
             <span>
               <strong>Execution Divergence Detected at Turn #{divergenceTurn}:</strong> Reasoning, tool selection, or parameters diverged between Model A (<code>{runA.model}</code>) and Model B (<code>{runB.model}</code>).
             </span>
@@ -1044,7 +1042,7 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
                   <div className="p-4 space-y-2.5">
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-mono font-bold text-brand-purple flex items-center gap-1.5">
-                        <IonIcon icon={getToolIcon(stepA?.action?.tool)} />
+                        <Icon icon={getToolIcon(stepA?.action?.tool)} />
                         {stepA ? stepA.action.tool : '(Turn not executed)'}
                       </span>
                       {stepA && (
@@ -1077,7 +1075,7 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
                   <div className="p-4 space-y-2.5 bg-canvas/30">
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-mono font-bold text-accent-orange flex items-center gap-1.5">
-                        <IonIcon icon={getToolIcon(stepB?.action?.tool)} />
+                        <Icon icon={getToolIcon(stepB?.action?.tool)} />
                         {stepB ? stepB.action.tool : '(Turn not executed)'}
                       </span>
                       {stepB && (
@@ -1117,7 +1115,7 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
         <div className="space-y-4">
           {allFilePaths.length === 0 ? (
             <div className="p-8 text-center bg-white rounded-2xl border border-border-subtle text-text-muted text-xs space-y-3">
-              <IonIcon icon={codeSlashOutline} className="text-3xl text-brand-purple mx-auto" />
+              <Icon icon={Code} className="text-3xl text-brand-purple mx-auto" />
               <div className="font-bold text-text-primary">No Direct File Write Mutations Recorded</div>
               <p className="text-text-secondary max-w-md mx-auto">
                 Neither run executed direct file-writing tools (e.g. <code>write_file</code>, <code>replace_file_content</code>). You can inspect the step-by-step bash commands and reasoning divergence in the <strong>Trajectory Timeline</strong> tab.

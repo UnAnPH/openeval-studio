@@ -9,12 +9,14 @@ import asyncio
 import json
 import logging
 import time
+from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict
 
 from engine.approval_policy import (
@@ -22,12 +24,12 @@ from engine.approval_policy import (
     WatcherVerdict,
     global_watcher_engine,
 )
-from schemas.watcher_models import ToolCall, ToolResult
+from schemas.watcher_models import ProvenanceMetadata, ToolCall, ToolResult
 from server.policy_gateway import PolicyGateway
 from server.watcher_store import get_watcher_store
 from server.webhook import emit_watcher_webhook
 
-router = APIRouter()
+router = APIRouter(prefix="/api/v1/watcher", tags=["watcher"])
 logger = logging.getLogger("openeval.server.watcher_gate")
 
 
@@ -100,8 +102,7 @@ def _active_tenant_id() -> int | None:
         return current_user_id.get()
 
 
-@router.post("/api/gate/evaluate", response_model=WatcherVerdict)
-@router.post("/api/watcher/evaluate", response_model=WatcherVerdict)
+@router.post("/evaluate", response_model=WatcherVerdict)
 async def evaluate_action_watcher_gateway(
     req: WatcherRequest,
     request: Request,
@@ -139,6 +140,7 @@ async def evaluate_action_watcher_gateway(
             action_preview=f"{req.tool_name}",
             agent_id=req.agent_id or "unknown",
             user_id=tenant_id,
+            provenance=req.provenance or ProvenanceMetadata(),
         )
         await broadcast_watcher_event("interception_event", verdict.model_dump())
         return verdict
@@ -259,9 +261,10 @@ async def evaluate_action_watcher_gateway(
         req.tool_name,
         tool_input,
         diff_content,
-        "",
+        req.thought_context or "",
         False,
         traj_context,
+        req.provenance,
     )
 
     # Decision persisted after session ensure (below) so record_decision is not a no-op.
@@ -311,6 +314,8 @@ async def evaluate_action_watcher_gateway(
         user_id=tenant_id,
         client_decision=client_decision,
         terminal_reason=terminal_reason,
+        provenance=rec.provenance,
+        consent_disclosure=rec.consent_disclosure,
     )
 
     # Observe mode: never deny, but record shadow decision
@@ -335,6 +340,8 @@ async def evaluate_action_watcher_gateway(
             tool_result=None,
             threat_category=rec.threat_category,
             user_id=tenant_id,
+            provenance=rec.provenance,
+            consent_disclosure=rec.consent_disclosure,
         )
 
     await broadcast_watcher_event("interception_event", verdict.model_dump())
@@ -352,6 +359,10 @@ async def evaluate_action_watcher_gateway(
                 "agent_id": req.agent_id,
                 "risk_score": verdict.risk_score,
                 "rule": verdict.rule_violation_tag,
+                "provenance": verdict.provenance.model_dump() if verdict.provenance else None,
+                "consent_disclosure": verdict.consent_disclosure.model_dump()
+                if verdict.consent_disclosure
+                else None,
             },
         )
 
@@ -389,8 +400,7 @@ async def evaluate_action_watcher_gateway(
     return verdict
 
 
-@router.post("/api/watcher/result")
-@router.post("/api/v1/watcher/result")
+@router.post("/result")
 async def record_tool_result_watcher(req: WatcherResultRequest) -> dict[str, Any]:
     """Report execution stdout/stderr from PostToolUse agent hooks back to Watcher immediately."""
     from server.app import broadcast_watcher_event
@@ -426,20 +436,17 @@ async def record_tool_result_watcher(req: WatcherResultRequest) -> dict[str, Any
         if not last.tool_result or "Awaiting" in str(last.tool_result):
             last.tool_result = tool_result_text
 
-    # 2. Update canonical store session if available
+    # 2. Update canonical store session via append-only event logging
     store = get_watcher_store()
     if req.session_id:
-        sess = store.get_session(req.session_id)
-        if sess:
-            tr = ToolResult(
-                tool_id=req.tool_id or str(uuid4())[:8],
-                tool_name=req.tool_name or "tool",
-                stdout=req.stdout or "",
-                stderr=req.stderr or (req.error or ""),
-                exit_code=req.exit_code or 0,
-            )
-            sess.trajectory.tool_results.append(tr)
-            store.record_session(sess)
+        tr = ToolResult(
+            tool_id=req.tool_id or str(uuid4())[:8],
+            tool_name=req.tool_name or "tool",
+            stdout=req.stdout or "",
+            stderr=req.stderr or (req.error or ""),
+            exit_code=req.exit_code or 0,
+        )
+        store.record_tool_result(req.session_id, tr)
 
     # 3. Broadcast SSE update so frontend live stream updates immediately
     await broadcast_watcher_event(
@@ -460,8 +467,7 @@ async def record_tool_result_watcher(req: WatcherResultRequest) -> dict[str, Any
     }
 
 
-@router.post("/api/v1/watcher/gate/resolve", response_model=ResolveInterceptionResponse)
-@router.post("/api/watcher/gate/resolve", response_model=ResolveInterceptionResponse)
+@router.post("/gate/resolve", response_model=ResolveInterceptionResponse)
 async def resolve_watcher_interception(
     req: ResolveInterceptionRequest,
 ) -> ResolveInterceptionResponse:
@@ -520,8 +526,7 @@ async def resolve_watcher_interception(
     return ResolveInterceptionResponse(status="ok", **payload)
 
 
-@router.post("/api/v1/watcher/reviews/resolve-all", response_model=ResolveAllReviewsResponse)
-@router.post("/api/watcher/reviews/resolve-all", response_model=ResolveAllReviewsResponse)
+@router.post("/reviews/resolve-all", response_model=ResolveAllReviewsResponse)
 async def resolve_all_watcher_reviews() -> ResolveAllReviewsResponse:
     """Resolve/allow all currently blocked or escalated reviews across all sessions for clarity."""
     from server.app import (
@@ -565,3 +570,128 @@ async def resolve_all_watcher_reviews() -> ResolveAllReviewsResponse:
     }
     await broadcast_watcher_event("interception_resolved", payload)
     return ResolveAllReviewsResponse(status="ok", **payload)
+
+
+_DEFAULT_STREAM_REQUEST: Any = None
+
+
+@router.get("/stream")
+async def stream_watcher_events(
+    request: Request = _DEFAULT_STREAM_REQUEST,
+    last_event_id: str | None = Query(default=None, alias="last_event_id"),
+) -> StreamingResponse:
+    """Server-Sent Events (SSE) endpoint streaming live Watcher telemetry & interceptions via Redis Streams."""
+    from server.app import (
+        _enrich_verdict_dict,
+        _verdicts_from_store_reviews,
+        sse_event_visible_to_user,
+    )
+    from server.auth import current_user_id, current_user_slug
+    from server.event_bus import get_event_bus
+
+    bus = get_event_bus()
+    uid = current_user_id.get()
+    if uid is None:
+        try:
+            uid = _active_tenant_id()
+        except Exception:
+            uid = None
+
+    header_last_id = None
+    if request is not None:
+        header_last_id = request.headers.get("Last-Event-ID") or request.headers.get(
+            "last-event-id"
+        )
+    last_id_str = last_event_id if isinstance(last_event_id, str) else None
+    effective_last_id = (header_last_id or last_id_str or "").strip()
+
+    async def sse_generator() -> AsyncGenerator[str, None]:
+        store = get_watcher_store()
+        stream_cursor = effective_last_id
+
+        if effective_last_id:
+            # Replay missed backlog from Redis Streams using XRANGE (<last_event_id> + COUNT 100
+            missed_events = await bus.xrange(uid, effective_last_id, count=100)
+            for stream_id, fields in missed_events:
+                event_uid = fields.get("user_id")
+                if not sse_event_visible_to_user(
+                    int(str(event_uid)) if str(event_uid).isdigit() else None, uid
+                ):
+                    continue
+                ev_type = fields.get("event", "message")
+                ev_data = fields.get("data", {})
+                data_str = json.dumps(ev_data) if not isinstance(ev_data, str) else ev_data
+                yield f"id: {stream_id}\nevent: {ev_type}\ndata: {data_str}\n\n"
+                stream_cursor = stream_id
+        else:
+            # Seed with in-memory live history + recent store blocks (survives API restart)
+            live_hist = [
+                v.model_dump()
+                for v in global_watcher_engine.get_history(20)
+                if (v.user_id is None and current_user_slug.get() in ("owner", "demo"))
+                or (v.user_id is not None and v.user_id == uid)
+            ]
+            if current_user_slug.get() == "demo":
+                live_hist = [
+                    v
+                    for v in live_hist
+                    if "demo" in str(v.get("session_id", ""))
+                    or str(v.get("session_id", "")).startswith("demo-")
+                ]
+            store_hist = _verdicts_from_store_reviews(limit=20)
+            seen: set[str] = set()
+            history: list[dict[str, Any]] = []
+            for row in live_hist + store_hist:
+                key = f"{row.get('agent_id')}|{row.get('decision')}|{row.get('action_preview')}|{row.get('timestamp')}"
+                if key in seen:
+                    continue
+                seen.add(key)
+                history.append(_enrich_verdict_dict(row))
+                if len(history) >= 40:
+                    break
+            init_data = {
+                "status": "connected",
+                "config": store.get_user_config().model_dump(),
+                "history": history,
+            }
+            tail_id = await bus.get_latest_stream_id(uid)
+            yield f"event: connected\ndata: {json.dumps(init_data)}\n\n"
+            stream_cursor = tail_id
+
+        # Continuous streaming via Redis Streams XREAD loop with 15-second heartbeat
+        try:
+            while True:
+                try:
+                    entries = await bus.xread(uid, stream_cursor, count=50, block_ms=15000)
+                    if not entries:
+                        yield "event: ping\ndata: {}\n\n"
+                        continue
+
+                    for stream_id, fields in entries:
+                        stream_cursor = stream_id
+                        event_uid = fields.get("user_id")
+                        if not sse_event_visible_to_user(
+                            int(str(event_uid)) if str(event_uid).isdigit() else None, uid
+                        ):
+                            continue
+                        ev_type = fields.get("event", "message")
+                        ev_data = fields.get("data", {})
+                        data_str = json.dumps(ev_data) if not isinstance(ev_data, str) else ev_data
+                        yield f"id: {stream_id}\nevent: {ev_type}\ndata: {data_str}\n\n"
+                except asyncio.CancelledError:
+                    break
+                except Exception as exc:
+                    logger.debug("Error in SSE stream loop: %s", exc)
+                    break
+        finally:
+            pass
+
+    return StreamingResponse(
+        sse_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )

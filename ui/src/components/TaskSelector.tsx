@@ -1,13 +1,11 @@
+import { Icon } from '../lib/icon';
+import {
+  Clock,
+  Layers,
+  Server,
+  Terminal,
+} from 'lucide-react';
 import React from 'react';
-import {
-  IonIcon,
-} from '@ionic/react';
-import {
-  layersOutline,
-  terminalOutline,
-  timeOutline,
-  serverOutline,
-} from 'ionicons/icons';
 import { TaskSummary } from '../types';
 
 interface TaskSelectorProps {
@@ -29,7 +27,7 @@ export const TaskSelector: React.FC<TaskSelectorProps> = ({
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <label className="text-xs font-mono font-bold uppercase tracking-wider text-text-secondary flex items-center gap-1.5">
-          <IonIcon icon={layersOutline} className="text-brand-purple text-sm" />
+          <Icon icon={Layers} className="text-brand-purple text-sm" />
           Benchmark Task Target
         </label>
         <span className="text-[10px] font-mono font-bold text-brand-purple bg-surface-subtle px-2 py-0.5 rounded-full border border-border-subtle">
@@ -60,7 +58,7 @@ export const TaskSelector: React.FC<TaskSelectorProps> = ({
             </optgroup>
           </select>
         <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-text-muted">
-          <IonIcon icon={layersOutline} className="text-brand-purple text-sm" />
+          <Icon icon={Layers} className="text-brand-purple text-sm" />
         </div>
       </div>
 
@@ -79,15 +77,15 @@ export const TaskSelector: React.FC<TaskSelectorProps> = ({
 
           <div className="flex flex-wrap items-center gap-2 text-text-muted pt-2 border-t border-border-subtle text-[11px] font-mono">
             <span className="px-2 py-0.5 rounded bg-white text-text-primary border border-border-subtle flex items-center gap-1">
-              <IonIcon icon={timeOutline} className="text-accent-orange" />
+              <Icon icon={Clock} className="text-accent-orange" />
               <span>{selectedTask.timeout_sec}s limit</span>
             </span>
             <span className="px-2 py-0.5 rounded bg-white text-text-primary border border-border-subtle flex items-center gap-1">
-              <IonIcon icon={terminalOutline} className="text-brand-purple" />
+              <Icon icon={Terminal} className="text-brand-purple" />
               <span>{selectedTask.max_steps} max turns</span>
             </span>
             <span className="px-2 py-0.5 rounded bg-white text-text-primary border border-border-subtle flex items-center gap-1">
-              <IonIcon icon={serverOutline} className="text-emerald-600" />
+              <Icon icon={Server} className="text-emerald-600" />
               <span>{selectedTask.memory_mb}MB RAM</span>
             </span>
           </div>

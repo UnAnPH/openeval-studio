@@ -1,14 +1,12 @@
+import { Icon } from '../lib/icon';
+import {
+  CheckCircle,
+  Hourglass,
+  Search,
+  Trophy,
+  XCircle,
+} from 'lucide-react';
 import React, { useState } from 'react';
-import {
-  IonIcon,
-} from '@ionic/react';
-import {
-  checkmarkCircle,
-  closeCircle,
-  hourglassOutline,
-  trophyOutline,
-  searchOutline,
-} from 'ionicons/icons';
 import { RunRecord } from '../types';
 
 interface LeaderboardProps {
@@ -53,7 +51,7 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-surface-subtle text-brand-purple flex items-center justify-center">
-              <IonIcon icon={trophyOutline} className="text-base" />
+              <Icon icon={Trophy} className="text-base" />
             </div>
             <div>
               <h3 className="text-sm font-bold text-text-primary tracking-tight">
@@ -79,8 +77,8 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
               placeholder="Search by Task ID, Model, or Run ID..."
               className="w-full bg-canvas border border-border-subtle rounded-xl pl-8 pr-3 py-1.5 text-xs text-text-primary placeholder-text-muted focus:outline-none focus:border-brand-primary transition-all"
             />
-            <IonIcon
-              icon={searchOutline}
+            <Icon
+              icon={Search}
               className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted text-xs pointer-events-none"
             />
           </div>
@@ -153,8 +151,8 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
                       {/* Status */}
                       <td className="py-3 px-4 whitespace-nowrap">
                         <div className="flex items-center gap-1.5">
-                          <IonIcon
-                            icon={isPassed ? checkmarkCircle : isFailed ? closeCircle : hourglassOutline}
+                          <Icon
+                            icon={isPassed ? CheckCircle : isFailed ? XCircle : Hourglass}
                             className={`text-sm ${
                               isPassed ? 'text-emerald-600' : isFailed ? 'text-rose-600' : 'text-brand-purple'
                             }`}

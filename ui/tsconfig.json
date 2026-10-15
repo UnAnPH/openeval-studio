@@ -15,11 +15,7 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "baseUrl": ".",
-    "paths": {
-      "@ionic/react": ["src/lib/ionic-compat.tsx"],
-      "ionicons/icons": ["src/lib/ionicons-compat.ts"]
-    }
+    "baseUrl": "."
   },
   "include": ["src"],
   "references": [{ "path": "./tsconfig.node.json" }]

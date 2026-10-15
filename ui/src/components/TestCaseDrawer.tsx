@@ -1,25 +1,22 @@
+import { Icon } from '../lib/icon';
+import {
+  AlertCircle,
+  CheckCircle,
+  Code,
+  Download,
+  Edit,
+  FileText,
+  Layers,
+  Save,
+  Shield,
+  ShieldCheck,
+  Terminal,
+  Trash2,
+  X,
+  XCircle,
+  Zap,
+} from 'lucide-react';
 import React, { useState } from 'react';
-import {
-  IonIcon,
-  IonModal,
-} from '@ionic/react';
-import {
-  alertCircleOutline,
-  checkmarkCircle,
-  closeCircle,
-  closeOutline,
-  codeSlashOutline,
-  createOutline,
-  documentTextOutline,
-  downloadOutline,
-  flashOutline,
-  layersOutline,
-  saveOutline,
-  shieldCheckmarkOutline,
-  shieldOutline,
-  terminalOutline,
-  trashOutline,
-} from 'ionicons/icons';
 import { RunRecord, TaskSummary } from '../types';
 
 interface TestCaseDrawerProps {
@@ -62,15 +59,15 @@ export const TestCaseDrawer: React.FC<TestCaseDrawerProps> = ({
   const getToolIcon = (tool: string) => {
     switch (tool) {
       case 'execute_bash':
-        return terminalOutline;
+        return Terminal;
       case 'view_file':
-        return documentTextOutline;
+        return FileText;
       case 'write_file':
-        return codeSlashOutline;
+        return Code;
       case 'finish':
-        return checkmarkCircle;
+        return CheckCircle;
       default:
-        return terminalOutline;
+        return Terminal;
     }
   };
 
@@ -175,8 +172,17 @@ ${v.override_reason || overrideReasons[v.metric_name] ? `- **Human Override Just
     URL.revokeObjectURL(url);
   };
 
+  if (!isOpen) return null;
+
   return (
-    <IonModal isOpen={isOpen} onDidDismiss={onClose} className="aegis-inspection-modal">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto"
+      onClick={onClose}
+    >
+    <div
+      className="relative w-full max-w-4xl max-h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+      onClick={(event) => event.stopPropagation()}
+    >
       <div className="flex flex-col h-full bg-[#F6F5F9] text-text-primary">
         {/* Drawer Header */}
         <div className="p-5 bg-white border-b border-border-subtle flex items-center justify-between shadow-sm">
@@ -190,8 +196,8 @@ ${v.override_reason || overrideReasons[v.metric_name] ? `- **Human Override Just
                   : 'bg-purple-50 text-brand-purple'
               }`}
             >
-              <IonIcon
-                icon={isPassed ? checkmarkCircle : isFailed ? closeCircle : flashOutline}
+              <Icon
+                icon={isPassed ? CheckCircle : isFailed ? XCircle : Zap}
                 className="text-xl"
               />
             </div>
@@ -229,7 +235,7 @@ ${v.override_reason || overrideReasons[v.metric_name] ? `- **Human Override Just
                 className="px-2.5 py-1.5 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
                 title="Delete this run"
               >
-                <IonIcon icon={trashOutline} className="text-sm" />
+                <Icon icon={Trash2} className="text-sm" />
                 <span>Delete Run</span>
               </button>
             )}
@@ -239,7 +245,7 @@ ${v.override_reason || overrideReasons[v.metric_name] ? `- **Human Override Just
               onClick={onClose}
               className="w-8 h-8 rounded-full bg-canvas text-text-secondary hover:text-text-primary hover:bg-surface-subtle flex items-center justify-center transition-colors"
             >
-              <IonIcon icon={closeOutline} className="text-xl" />
+              <Icon icon={X} className="text-xl" />
             </button>
           </div>
         </div>
@@ -276,7 +282,7 @@ ${v.override_reason || overrideReasons[v.metric_name] ? `- **Human Override Just
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {saveSuccessMsg && (
             <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl text-emerald-800 text-xs font-bold flex items-center gap-2 animate-fadeIn">
-              <IonIcon icon={checkmarkCircle} className="text-sm" />
+              <Icon icon={CheckCircle} className="text-sm" />
               <span>{saveSuccessMsg}</span>
             </div>
           )}
@@ -295,8 +301,8 @@ ${v.override_reason || overrideReasons[v.metric_name] ? `- **Human Override Just
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <IonIcon
-                    icon={isPassed ? checkmarkCircle : isFailed ? closeCircle : flashOutline}
+                  <Icon
+                    icon={isPassed ? CheckCircle : isFailed ? XCircle : Zap}
                     className="text-3xl"
                   />
                   <div>
@@ -330,7 +336,7 @@ ${v.override_reason || overrideReasons[v.metric_name] ? `- **Human Override Just
                 <div className="p-5 rounded-2xl bg-white border border-border-subtle shadow-aegis-card space-y-2">
                   <div className="flex items-center justify-between text-xs text-text-secondary">
                     <span className="font-bold uppercase tracking-wider flex items-center gap-1.5 font-mono text-text-primary">
-                      <IonIcon icon={layersOutline} className="text-brand-purple text-sm" />
+                      <Icon icon={Layers} className="text-brand-purple text-sm" />
                       Task Specification
                     </span>
                     <div className="flex items-center gap-2">
@@ -413,7 +419,7 @@ ${v.override_reason || overrideReasons[v.metric_name] ? `- **Human Override Just
                             Turn #{step.step_number}
                           </span>
                           <span className="text-xs font-mono font-bold text-text-primary flex items-center gap-1.5">
-                            <IonIcon icon={toolIcon} className="text-accent-orange" />
+                            <Icon icon={toolIcon} className="text-accent-orange" />
                             {step.action.tool}
                           </span>
                         </div>
@@ -428,7 +434,7 @@ ${v.override_reason || overrideReasons[v.metric_name] ? `- **Human Override Just
                       {isFirewallBlocked && (
                         <div className="p-3 rounded-xl bg-rose-50 border border-rose-300 text-xs text-rose-900 space-y-1">
                           <div className="flex items-center gap-1.5 font-bold font-mono text-rose-700">
-                            <IonIcon icon={shieldOutline} className="text-rose-600 text-sm" />
+                            <Icon icon={Shield} className="text-rose-600 text-sm" />
                             <span>⚠️ BLOCKED / REJECTED by Safety Firewall</span>
                           </div>
                           <p className="text-[11px] text-rose-800 leading-tight">
@@ -500,7 +506,7 @@ ${v.override_reason || overrideReasons[v.metric_name] ? `- **Human Override Just
               <div className="p-4 bg-white rounded-2xl border border-border-subtle shadow-sm flex items-center justify-between gap-3">
                 <div>
                   <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-text-primary flex items-center gap-2">
-                    <IonIcon icon={shieldCheckmarkOutline} className="text-brand-purple text-base" />
+                    <Icon icon={ShieldCheck} className="text-brand-purple text-base" />
                     <span>LLM-as-a-Judge & Human Sign-off</span>
                   </h3>
                   <p className="text-[11px] text-text-secondary mt-0.5">
@@ -518,7 +524,7 @@ ${v.override_reason || overrideReasons[v.metric_name] ? `- **Human Override Just
                         : 'bg-canvas text-brand-primary border border-border-subtle hover:bg-surface-subtle'
                     }`}
                   >
-                    <IonIcon icon={createOutline} />
+                    <Icon icon={Edit} />
                     <span>{isEditingAudit ? 'Done Editing' : 'Edit & Revise Audit'}</span>
                   </button>
 
@@ -527,7 +533,7 @@ ${v.override_reason || overrideReasons[v.metric_name] ? `- **Human Override Just
                     onClick={handleExportAuditReport}
                     className="px-3 py-1.5 rounded-xl bg-dark-base text-white text-xs font-bold hover:bg-black transition-all flex items-center gap-1.5 shadow-sm"
                   >
-                    <IonIcon icon={downloadOutline} />
+                    <Icon icon={Download} />
                     <span>Export Audit Report</span>
                   </button>
                 </div>
@@ -589,7 +595,7 @@ ${v.override_reason || overrideReasons[v.metric_name] ? `- **Human Override Just
 
                       {v.flagged_steps && v.flagged_steps.length > 0 && (
                         <div className="text-[10px] font-mono text-risk-high flex items-center gap-1">
-                          <IonIcon icon={alertCircleOutline} />
+                          <Icon icon={AlertCircle} />
                           <span>Flagged Step(s): {v.flagged_steps.join(', ')}</span>
                         </div>
                       )}
@@ -666,7 +672,7 @@ ${v.override_reason || overrideReasons[v.metric_name] ? `- **Human Override Just
                       onClick={handleSaveAudit}
                       className="px-4 py-2 rounded-xl bg-dark-base text-white text-xs font-bold hover:bg-black transition-all flex items-center gap-1.5 shadow-sm active:scale-98"
                     >
-                      <IonIcon icon={saveOutline} />
+                      <Icon icon={Save} />
                       <span>Save Revised Audit</span>
                     </button>
                   </div>
@@ -702,7 +708,8 @@ ${v.override_reason || overrideReasons[v.metric_name] ? `- **Human Override Just
           )}
         </div>
       </div>
-    </IonModal>
+    </div>
+    </div>
   );
 };
 

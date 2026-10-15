@@ -1,14 +1,14 @@
-import React, { useState } from 'react';
-import { IonIcon } from '@ionic/react';
+import { Icon } from '../lib/icon';
 import {
-  timeOutline,
-  chevronDownOutline,
-  chevronUpOutline,
-  copyOutline,
-  checkmarkOutline,
-  checkmarkCircleOutline,
-  terminalOutline,
-} from 'ionicons/icons';
+  Check,
+  CheckCircle,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  Copy,
+  Terminal,
+} from 'lucide-react';
+import React, { useState } from 'react';
 import { FindingRecord, RunRecord, WatcherConfig, WatcherVerdict } from '../types';
 
 interface FirewallGateViewProps {
@@ -379,11 +379,11 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
               onClick={() => toggleExpandAll(displayedLive.length)}
               className="px-2.5 py-1 rounded-lg bg-white border border-border-subtle hover:bg-canvas text-text-primary text-[11px] font-bold transition-all shadow-2xs flex items-center gap-1 cursor-pointer"
             >
-              <IonIcon
+              <Icon
                 icon={
                   expandedLiveIdxs.size === displayedLive.length && displayedLive.length > 0
-                    ? chevronUpOutline
-                    : chevronDownOutline
+                    ? ChevronUp
+                    : ChevronDown
                 }
                 className="text-xs"
               />
@@ -419,11 +419,11 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
                           className="text-text-muted hover:text-text-primary transition-colors flex-shrink-0"
                           title={isExpanded ? 'Collapse' : 'Expand full command'}
                         >
-                          <IonIcon icon={isExpanded ? chevronUpOutline : chevronDownOutline} className="text-sm" />
+                          <Icon icon={isExpanded ? ChevronUp : ChevronDown} className="text-sm" />
                         </button>
 
                         <div className="flex items-center gap-1.5 font-mono text-[11px] text-text-muted flex-shrink-0 bg-canvas px-2.5 py-1 rounded-md border border-border-subtle">
-                          <IonIcon icon={timeOutline} className="text-xs text-text-muted" />
+                          <Icon icon={Clock} className="text-xs text-text-muted" />
                           <span className="font-semibold text-text-primary">{timeInfo.time}</span>
                           <span className="text-[10px] text-text-muted">({timeInfo.relative})</span>
                         </div>
@@ -471,7 +471,7 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
                         <div className="space-y-1.5">
                           <div className="flex items-center justify-between text-[11px] font-mono font-bold text-text-secondary uppercase">
                             <div className="flex items-center gap-1.5">
-                              <IonIcon icon={terminalOutline} className="text-xs text-brand-purple" />
+                              <Icon icon={Terminal} className="text-xs text-brand-purple" />
                               <span>Complete Unclipped Action / Command Payload</span>
                             </div>
                             <button
@@ -479,8 +479,8 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
                               onClick={(e) => handleCopyText(v.full_command || v.action_preview, `cmd-${vIdx}`, e)}
                               className="px-2.5 py-0.5 rounded bg-white hover:bg-canvas text-text-primary border border-border-subtle flex items-center gap-1 text-[10px] font-mono cursor-pointer transition-all shadow-2xs"
                             >
-                              <IonIcon
-                                icon={copiedKey === `cmd-${vIdx}` ? checkmarkOutline : copyOutline}
+                              <Icon
+                                icon={copiedKey === `cmd-${vIdx}` ? Check : Copy}
                                 className="text-xs text-brand-purple"
                               />
                               <span>{copiedKey === `cmd-${vIdx}` ? 'Copied!' : 'Copy Command'}</span>
@@ -494,7 +494,7 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
                         <div className="space-y-1.5">
                           <div className="flex items-center justify-between text-[11px] font-mono font-bold text-text-secondary uppercase">
                             <div className="flex items-center gap-1.5">
-                              <IonIcon icon={checkmarkCircleOutline} className="text-xs text-emerald-600" />
+                              <Icon icon={CheckCircle} className="text-xs text-emerald-600" />
                               <span>Command Execution Result / Output</span>
                             </div>
                             {v.tool_result && (
@@ -503,8 +503,8 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
                                 onClick={(e) => handleCopyText(v.tool_result || '', `res-${vIdx}`, e)}
                                 className="px-2.5 py-0.5 rounded bg-white hover:bg-canvas text-text-primary border border-border-subtle flex items-center gap-1 text-[10px] font-mono cursor-pointer transition-all shadow-2xs"
                               >
-                                <IonIcon
-                                  icon={copiedKey === `res-${vIdx}` ? checkmarkOutline : copyOutline}
+                                <Icon
+                                  icon={copiedKey === `res-${vIdx}` ? Check : Copy}
                                   className="text-xs text-emerald-600"
                                 />
                                 <span>{copiedKey === `res-${vIdx}` ? 'Copied!' : 'Copy Output'}</span>

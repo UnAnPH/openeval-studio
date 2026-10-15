@@ -1,13 +1,11 @@
+import { Icon } from '../lib/icon';
+import {
+  CircleDollarSign,
+  Cpu,
+  Globe,
+  Sparkles,
+} from 'lucide-react';
 import React from 'react';
-import {
-  IonIcon,
-} from '@ionic/react';
-import {
-  hardwareChipOutline,
-  sparklesOutline,
-  cashOutline,
-  globeOutline,
-} from 'ionicons/icons';
 import { ModelSpec } from '../types';
 
 interface ModelPickerProps {
@@ -40,7 +38,7 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <label className="text-xs font-mono font-bold uppercase tracking-wider text-text-secondary flex items-center gap-1.5">
-          <IonIcon icon={hardwareChipOutline} className="text-brand-purple text-sm" />
+          <Icon icon={Cpu} className="text-brand-purple text-sm" />
           Target Evaluation Model
         </label>
         {selectedModel && (
@@ -115,7 +113,7 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
           )}
         </select>
         <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-text-muted">
-          <IonIcon icon={sparklesOutline} className="text-accent-orange text-sm" />
+          <Icon icon={Sparkles} className="text-accent-orange text-sm" />
         </div>
       </div>
 
@@ -124,15 +122,15 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
           <p className="text-text-secondary leading-relaxed text-xs">{selectedModel.description}</p>
           <div className="flex flex-wrap items-center gap-2 text-text-muted pt-1 border-t border-border-subtle">
             <span className="px-2 py-0.5 rounded bg-white text-text-primary text-[10px] font-mono border border-border-subtle flex items-center gap-1">
-              <IonIcon icon={cashOutline} className="text-emerald-600" />
+              <Icon icon={CircleDollarSign} className="text-emerald-600" />
               <span>In: <strong>${selectedModel.input_cost_per_m}</strong>/1M</span>
             </span>
             <span className="px-2 py-0.5 rounded bg-white text-text-primary text-[10px] font-mono border border-border-subtle flex items-center gap-1">
-              <IonIcon icon={cashOutline} className="text-emerald-600" />
+              <Icon icon={CircleDollarSign} className="text-emerald-600" />
               <span>Out: <strong>${selectedModel.output_cost_per_m}</strong>/1M</span>
             </span>
             <span className="px-2 py-0.5 rounded bg-white text-text-primary text-[10px] font-mono border border-border-subtle flex items-center gap-1">
-              <IonIcon icon={globeOutline} className="text-brand-purple" />
+              <Icon icon={Globe} className="text-brand-purple" />
               <span>Ctx: <strong>{selectedModel.context_window >= 1_000_000 ? `${selectedModel.context_window / 1_000_000}M` : `${selectedModel.context_window / 1000}k`}</strong></span>
             </span>
           </div>

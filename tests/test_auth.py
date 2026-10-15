@@ -218,14 +218,14 @@ def test_api_key_rotation(client):
 
 def test_unauthenticated_protected_route_fails(client):
     """Unauthenticated requests to protected endpoints return 401."""
-    resp = client.get("/api/watcher/sessions")
+    resp = client.get("/api/v1/watcher/sessions")
     assert resp.status_code == 401
 
 
 def test_demo_surface_read_allowed(client):
     """Read requests with X-OpenEval-Surface: demo succeed without credentials."""
     resp = client.get(
-        "/api/watcher/config",
+        "/api/v1/watcher/config",
         headers={"X-OpenEval-Surface": "demo"},
     )
     assert resp.status_code == 200
@@ -234,7 +234,7 @@ def test_demo_surface_read_allowed(client):
 def test_demo_surface_write_rejected_without_auth(client):
     """Mutating evaluate calls with X-OpenEval-Surface: demo reject unauthenticated writes with 401."""
     resp = client.post(
-        "/api/watcher/evaluate",
+        "/api/v1/watcher/evaluate",
         headers={"X-OpenEval-Surface": "demo"},
         json={
             "tool_name": "bash",
@@ -255,7 +255,7 @@ def test_demo_surface_write_with_auth_writes_as_user(client):
     api_key = reg.json()["api_key"]
 
     resp = client.post(
-        "/api/watcher/evaluate",
+        "/api/v1/watcher/evaluate",
         headers={
             "X-OpenEval-Surface": "demo",
             "Authorization": f"Bearer {api_key}",
@@ -320,7 +320,7 @@ def test_per_user_session_isolation_and_demo_fixtures(client):
         "/api/auth/register", json={"username": "user1_iso", "password": "passuser1"}
     ).json()
     client.post(
-        "/api/watcher/evaluate",
+        "/api/v1/watcher/evaluate",
         headers={"Authorization": f"Bearer {u1['api_key']}"},
         json={
             "tool_name": "bash",
@@ -334,7 +334,7 @@ def test_per_user_session_isolation_and_demo_fixtures(client):
         "/api/auth/register", json={"username": "user2_iso", "password": "passuser2"}
     ).json()
     client.post(
-        "/api/watcher/evaluate",
+        "/api/v1/watcher/evaluate",
         headers={"Authorization": f"Bearer {u2['api_key']}"},
         json={
             "tool_name": "bash",
@@ -389,7 +389,7 @@ def test_evaluate_persists_while_demo_seed_enabled(client, monkeypatch):
     api_key = reg.json()["api_key"]
 
     eval_resp = client.post(
-        "/api/watcher/evaluate",
+        "/api/v1/watcher/evaluate",
         headers={"Authorization": f"Bearer {api_key}"},
         json={
             "tool_name": "bash",

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Claude Code PreToolUse hook → OpenEval Watcher `/api/watcher/evaluate`.
+"""Claude Code PreToolUse hook → OpenEval Watcher `/api/v1/watcher/evaluate`.
 
 Claude Code settings.json example:
 {
@@ -31,7 +31,9 @@ import time
 import urllib.request
 from pathlib import Path
 
-WATCHER_URL = os.environ.get("OPENEVAL_WATCHER_URL", "http://127.0.0.1:8000/api/watcher/evaluate")
+WATCHER_URL = os.environ.get(
+    "OPENEVAL_WATCHER_URL", "http://127.0.0.1:8000/api/v1/watcher/evaluate"
+)
 OPENEVAL_API_KEY = os.environ.get("OPENEVAL_API_KEY", "").strip()
 TIMEOUT_SEC = float(os.environ.get("OPENEVAL_WATCHER_TIMEOUT", "1.5"))
 LOCKOUT_PERMISSION = os.environ.get("OPENEVAL_LOCKOUT_PERMISSION", "ask")
@@ -134,7 +136,9 @@ def _cmd_from_input(tool_name: str, tool_input: dict) -> str:
 def _report_tool_result(payload: dict) -> None:
     result_url = os.environ.get(
         "OPENEVAL_WATCHER_RESULT_URL",
-        WATCHER_URL.replace("/api/watcher/evaluate", "/api/watcher/result"),
+        WATCHER_URL.replace("/api/watcher/evaluate", "/api/v1/watcher/result").replace(
+            "/api/v1/watcher/evaluate", "/api/v1/watcher/result"
+        ),
     )
     hook_input = payload.get("hookSpecificInput") or payload
     tool_name = str(payload.get("tool_name") or hook_input.get("toolName") or "unknown")

@@ -586,7 +586,7 @@ class UniversalAgentLogLoader:
         from server.policy_gateway import PolicyGateway
 
         # Historical transcript ingest must stay fast/offline: rules + thresholds only.
-        # Live hooks (/api/watcher/evaluate) still use LLM when enabled.
+        # Live hooks (/api/v1/watcher/evaluate) still use LLM when enabled.
         gw = PolicyGateway.from_store(use_llm=False)
 
         messages: list[Message] = []

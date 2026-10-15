@@ -1,17 +1,15 @@
+import { Icon } from '../lib/icon';
+import {
+  CheckCircle,
+  Download,
+  Hourglass,
+  Play,
+  Search,
+  Shield,
+  Trash2,
+  XCircle,
+} from 'lucide-react';
 import React, { useState } from 'react';
-import {
-  IonIcon,
-} from '@ionic/react';
-import {
-  checkmarkCircle,
-  closeCircle,
-  downloadOutline,
-  hourglassOutline,
-  searchOutline,
-  shieldOutline,
-  playSharp,
-  trashOutline,
-} from 'ionicons/icons';
 import { RunRecord, TaskSummary } from '../types';
 
 interface TestCasesTableProps {
@@ -168,7 +166,7 @@ export const TestCasesTable: React.FC<TestCasesTableProps> = ({
                 : 'bg-purple-50 text-brand-purple hover:bg-purple-100'
             }`}
           >
-            <IonIcon icon={shieldOutline} className="text-xs" />
+            <Icon icon={Shield} className="text-xs" />
             <span>Safety Flagged ({safetyFlaggedCases})</span>
           </button>
 
@@ -193,7 +191,7 @@ export const TestCasesTable: React.FC<TestCasesTableProps> = ({
             onClick={handleExport}
             className="px-3.5 py-1.5 rounded-xl bg-dark-base text-white text-xs font-bold hover:bg-black transition-all flex items-center gap-1.5 shadow-sm active:scale-98"
           >
-            <IonIcon icon={downloadOutline} className="text-xs" />
+            <Icon icon={Download} className="text-xs" />
             <span>Export Passed SFT Data</span>
           </button>
         </div>
@@ -208,8 +206,8 @@ export const TestCasesTable: React.FC<TestCasesTableProps> = ({
           placeholder="Filter test cases by ID, category, or prompt..."
           className="w-full bg-white border border-border-subtle rounded-xl pl-8 pr-3 py-2 text-xs text-text-primary placeholder-text-muted focus:outline-none focus:border-brand-primary transition-all shadow-sm"
         />
-        <IonIcon
-          icon={searchOutline}
+        <Icon
+          icon={Search}
           className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted text-xs pointer-events-none"
         />
       </div>
@@ -243,8 +241,8 @@ export const TestCasesTable: React.FC<TestCasesTableProps> = ({
                     {/* Status */}
                     <td className="py-3 px-4 whitespace-nowrap">
                       <div className="flex items-center gap-1.5">
-                        <IonIcon
-                          icon={isPassed ? checkmarkCircle : isFailed ? closeCircle : hourglassOutline}
+                        <Icon
+                          icon={isPassed ? CheckCircle : isFailed ? XCircle : Hourglass}
                           className={`text-sm ${
                             isPassed ? 'text-status-cleared' : isFailed ? 'text-risk-high' : 'text-text-muted'
                           }`}
@@ -309,7 +307,7 @@ export const TestCasesTable: React.FC<TestCasesTableProps> = ({
                           onClick={() => onLaunchTask(task.task_id)}
                           className="px-3 py-1 rounded-lg bg-dark-base text-white text-[11px] font-bold flex items-center gap-1.5 hover:bg-black transition-all shadow-sm active:scale-95 cursor-pointer"
                         >
-                          <IonIcon icon={playSharp} className="text-[10px]" />
+                          <Icon icon={Play} className="text-[10px]" />
                           <span>{latestRun ? 'Re-run' : 'Run'}</span>
                         </button>
                         {latestRun && onDeleteRun && (
@@ -323,7 +321,7 @@ export const TestCasesTable: React.FC<TestCasesTableProps> = ({
                             className="p-1 rounded text-text-muted hover:text-rose-600 hover:bg-rose-50 transition-colors"
                             title="Delete this run"
                           >
-                            <IonIcon icon={trashOutline} className="text-xs" />
+                            <Icon icon={Trash2} className="text-xs" />
                           </button>
                         )}
                       </div>

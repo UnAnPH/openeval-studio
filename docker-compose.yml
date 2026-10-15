@@ -12,6 +12,13 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
 
+  redis:
+    image: redis:7-alpine
+    container_name: openeval-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-127.0.0.1:6379}:6379"
+
   api:
     build:
       context: .
@@ -24,13 +31,15 @@ services:
       - WATCHER_STORAGE_DIR=/data/watcher
       - WATCHER_WEBHOOK_URL=${WATCHER_WEBHOOK_URL:-}
       - OPENEVAL_API_KEY=${OPENEVAL_API_KEY:-}
-      - DATABASE_URL=${DATABASE_URL:-postgresql+psycopg://openeval:openeval@postgres:5432/openeval}
+      - DATABASE_URL=${DOCKER_DATABASE_URL:-postgresql+psycopg://openeval:openeval@postgres:5432/openeval}
+      - REDIS_URL=${DOCKER_REDIS_URL:-redis://redis:6379/0}
     volumes:
       - watcher-data:/data/watcher
       - ./tasks:/app/tasks:ro
     command: ["uv", "run", "uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "8000"]
     depends_on:
       - postgres
+      - redis
 
   ui:
     image: node:20-alpine

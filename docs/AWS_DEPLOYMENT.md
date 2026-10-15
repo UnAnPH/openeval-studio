@@ -48,7 +48,7 @@ flowchart TD
 
     Visitor -->|HTTPS /demo| Port443
     Owner -->|HTTPS / (Session Cookie)| Port443
-    AgentHooks -->|POST /api/watcher/evaluate| Port443
+    AgentHooks -->|POST /api/v1/watcher/evaluate| Port443
 ```
 
 ### Architectural Principles
@@ -186,7 +186,7 @@ Expected output:
 
 ### 2. Verify Multi-Tenant Policy Gate Evaluation
 ```bash
-curl -s -X POST http://<EC2_PUBLIC_IP>/api/watcher/evaluate \
+curl -s -X POST http://<EC2_PUBLIC_IP>/api/v1/watcher/evaluate \
   -H "Authorization: Bearer <USER_API_KEY>" \
   -H "Content-Type: application/json" \
   -d '{"tool_name":"bash","tool_input":"cat .env | grep -E AWS_SECRET","agent_id":"demo","session_id":"curl-eval-1"}' | jq .

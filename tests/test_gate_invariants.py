@@ -20,7 +20,7 @@ def client() -> TestClient:
 
 def _set_mode(client: TestClient, mode: str) -> None:
     res = client.post(
-        "/api/watcher/config",
+        "/api/v1/watcher/config",
         json={
             "mode": mode,
             "deny_threshold": 0.8,
@@ -34,7 +34,7 @@ def _set_mode(client: TestClient, mode: str) -> None:
     assert res.json()["mode"] == mode
 
 
-@pytest.mark.parametrize("endpoint", ["/api/gate/evaluate", "/api/watcher/evaluate"])
+@pytest.mark.parametrize("endpoint", ["/api/v1/watcher/evaluate"])
 @pytest.mark.parametrize(
     "cmd",
     [
@@ -68,7 +68,7 @@ def test_destructive_command_denied_or_escalated(
     assert verdict["decision"] != "allow"
 
 
-@pytest.mark.parametrize("endpoint", ["/api/gate/evaluate", "/api/watcher/evaluate"])
+@pytest.mark.parametrize("endpoint", ["/api/v1/watcher/evaluate"])
 @pytest.mark.parametrize(
     "cmd",
     [
@@ -102,7 +102,7 @@ def test_safe_shell_command_allowed(
     assert verdict["is_safe"] is True
 
 
-@pytest.mark.parametrize("endpoint", ["/api/gate/evaluate", "/api/watcher/evaluate"])
+@pytest.mark.parametrize("endpoint", ["/api/v1/watcher/evaluate"])
 @pytest.mark.parametrize(
     ("tool_name", "args"),
     [
@@ -146,7 +146,7 @@ def test_file_write_payload_not_blocked_by_shell_rules(
     assert verdict["is_safe"] is True
 
 
-@pytest.mark.parametrize("endpoint", ["/api/gate/evaluate", "/api/watcher/evaluate"])
+@pytest.mark.parametrize("endpoint", ["/api/v1/watcher/evaluate"])
 def test_enforce_mode_denied_command_lockout_signaling(
     client: TestClient,
     endpoint: str,
@@ -187,7 +187,7 @@ def test_stored_command_string_unclipped_in_trajectory(
 
     sess_id = f"sess-inv-unclipped-{cmd_length}"
     resp = client.post(
-        "/api/gate/evaluate",
+        "/api/v1/watcher/evaluate",
         json={
             "tool_name": "bash",
             "arguments": {"CommandLine": cmd, "command": cmd},

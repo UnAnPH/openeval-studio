@@ -17,6 +17,7 @@ if [ -f "$GATE" ]; then
   cp "$GATE" "$INSTALL_GATE"
 else
   SERVER_URL="${OPENEVAL_WATCHER_URL:-https://openeval.studio}"
+  SERVER_URL="${SERVER_URL%/api/v1/watcher/evaluate}"
   SERVER_URL="${SERVER_URL%/api/watcher/evaluate}"
   echo "Downloading cursor_watcher_gate.py from ${SERVER_URL}..."
   curl -fsSL "${SERVER_URL}/api/scripts/cursor_watcher_gate.py" -o "$INSTALL_GATE"

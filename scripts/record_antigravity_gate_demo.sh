@@ -44,7 +44,7 @@ def log(**data: object) -> None:
 
 def set_mode(mode: str) -> None:
     r = client.post(
-        "/api/watcher/config",
+        "/api/v1/watcher/config",
         json={
             "mode": mode,
             "deny_threshold": 0.8,
@@ -62,7 +62,7 @@ def run_hook(cmd: str, conversation_id: str) -> dict:
     # Point at a dead URL so only local blacklist / fail-open paths run for this demo.
     env = {
         **os.environ,
-        "OPENEVAL_WATCHER_URL": "http://127.0.0.1:9/api/watcher/evaluate",
+        "OPENEVAL_WATCHER_URL": "http://127.0.0.1:9/api/v1/watcher/evaluate",
         "OPENEVAL_WATCHER_TIMEOUT": "0.2",
         "OPENEVAL_WATCHER_GATE_LOG": str(ROOT / "artifacts" / "antigravity-watcher-gate.log"),
     }
@@ -84,7 +84,7 @@ def run_hook(cmd: str, conversation_id: str) -> dict:
 
 def evaluate(cmd: str, session_id: str) -> dict:
     return client.post(
-        "/api/watcher/evaluate",
+        "/api/v1/watcher/evaluate",
         json={
             "tool_name": "run_command",
             "arguments": {"CommandLine": cmd, "cmd": cmd},

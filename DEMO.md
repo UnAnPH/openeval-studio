@@ -72,8 +72,8 @@ Matcher notes:
 
 - Antigravity PreToolUse matcher must be `.*` (not `*`)  
 - Cursor: `beforeShellExecution` + `preToolUse` → `scripts/cursor_watcher_gate.py`  
-- Fail-open: server down → local blacklist still denies high-severity; else allow  
-- Local blacklist denies now also **report** to `/api/watcher/evaluate` so Control Live Stream / Sessions show the block  
+- Fail-open & Circuit Breaker: server down → transient single failure fails open, but 3 consecutive timeouts in 60s trip the local circuit breaker to `force_ask` / `ask` to halt unmonitored loops; local blacklist always denies high-severity commands offline instantly  
+- Local blacklist denies now also **report** to `/api/v1/watcher/evaluate` so Control Live Stream / Sessions show the block  
 
 Verify:
 

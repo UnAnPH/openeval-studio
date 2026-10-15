@@ -216,7 +216,7 @@ def cmd_on() -> None:
     print(" 💡 Direct Browser URL:")
     print(f"    {public_url}")
     print("\n 💡 Test inline Policy Gate (<25ms evaluation):")
-    print(f"    curl -s -X POST {public_url}/api/watcher/evaluate \\")
+    print(f"    curl -s -X POST {public_url}/api/v1/watcher/evaluate \\")
     print('      -H "Content-Type: application/json" \\')
     print(
         '      -d \'{"tool_name":"bash","arguments":{"cmd":"cat .env | grep -E AWS_SECRET"},"agent_id":"demo","session_id":"curl-test"}\''

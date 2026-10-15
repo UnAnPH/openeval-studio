@@ -63,7 +63,7 @@ Traditional safety filters (e.g., Llama Guard, input moderation) act as **pre-pr
 
 ```mermaid
 flowchart LR
-    LLM["Frontier Agent<br/>(Tool Call Request)"] --> Watcher{"Pre-Execution Watcher<br/>(/api/watcher/evaluate)"}
+    LLM["Frontier Agent<br/>(Tool Call Request)"] --> Watcher{"Pre-Execution Watcher<br/>(/api/v1/watcher/evaluate)"}
     Watcher -->|Deterministic Rule Match| FastPath["Safe Path (<10ms)<br/>decision: allow"]
     Watcher -->|Dangerous / Unrecognized| LLMJudge{"Safety Judge LLM<br/>(Policy & Context)"}
     LLMJudge -->|Low Confidence / Critical Action| Escalation["Human-In-The-Loop<br/>decision: escalate"]
@@ -74,6 +74,10 @@ flowchart LR
 - **`allow`**: Safe, non-destructive read actions (`git status`, `ls`, `pytest`). Minimal latency overhead.
 - **`escalate`**: Ambiguous or high-impact actions (`git push --force`, credential access, altering environment variables). Holds tool execution until human reviewer approves via dashboard.
 - **`deny`**: Prohibited destructive actions (`rm -rf /`, piping untrusted URLs directly to bash, exfiltrating private keys). Immediate denial with explanatory feedback returned to the model context.
+
+### Stateful Circuit Breaking & Evasion Resistance
+- **Adversarial Obfuscation Defense:** Prevents model evasion through base64/hex encoding piped to shell (`echo ... | base64 -d | sh`), interpreter subshell reflection (`python3 -c "import shutil; shutil.rmtree('/')"`), flag splitting (`rm -r -f /`), and HTTP upload vectors (`curl -d @.env`).
+- **Sliding-Window Circuit Breaker:** Resolves the vulnerability where models could exploit `FAIL_OPEN` during outages. Client hooks track failure timestamps in an atomic local state (`circuit_breaker.json`). Transient single failures fail open (<3 in 60s), but sustained outages immediately trip to `force_ask`, halting unmonitored execution loops.
 
 ---
 
