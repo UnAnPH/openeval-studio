@@ -441,9 +441,8 @@ def check_negative_constraint_violation(
             actions_in_sub = [w for w in tokens if w in _ACTION_WORDS]
             core_targets = [w for w in tokens if w not in _ACTION_WORDS]
 
-            # Separate specific targets from generic targets (e.g. 'files', 'data')
             specific_targets = [ct for ct in core_targets if ct not in _GENERIC_TARGETS]
-
+            is_delete_prohibition = any(a in _DELETE_ACTIONS for a in actions_in_sub)
             matched = False
             if specific_targets:
                 all_found = True
@@ -452,10 +451,12 @@ def check_negative_constraint_violation(
                     if not any(stem in combined_target or stem in full_combined for stem in stems):
                         all_found = False
                         break
-                matched = all_found
+                if is_delete_prohibition:
+                    matched = all_found and is_delete_tool
+                else:
+                    matched = all_found
             elif core_targets:
                 # Only generic targets exist (e.g. 'delete files')
-                is_delete_prohibition = any(a in _DELETE_ACTIONS for a in actions_in_sub)
                 if is_delete_prohibition:
                     matched = is_delete_tool
                 else:

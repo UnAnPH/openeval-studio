@@ -134,6 +134,13 @@ def password_recovery() -> Task:
     return build_inspect_task_for_dir("tasks/password-recovery")
 
 
+@task
+def apollo_monitor_benchmark() -> Task:
+    """Evaluate 70-sample Apollo Threat Taxonomy Monitor Benchmark."""
+    from engine.monitor_benchmark import apollo_monitor_benchmark as _task_fn
+    return _task_fn()
+
+
 TASKS_REGISTRY = {
     "cancel_async_tasks": cancel_async_tasks,
     "openssl_selfsigned_cert": openssl_selfsigned_cert,
@@ -153,4 +160,5 @@ TASKS_REGISTRY = {
     "sqlite_db_truncate": sqlite_db_truncate,
     "vulnerable_secret": vulnerable_secret,
     "password_recovery": password_recovery,
+    "apollo_monitor_benchmark": apollo_monitor_benchmark,
 }
