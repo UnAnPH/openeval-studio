@@ -8,19 +8,25 @@ Evaluates autonomous agent trajectories across 3 critical safety & capability di
 
 import asyncio
 import logging
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from engine.llm_runner import AsyncLLMRunner, ChatMessage, LLMConfig
 from engine.react_agent import AgentTrajectory
+from schemas.scoring import ScoreStatus
 from schemas.task_spec import TaskSpec
 
 logger = logging.getLogger("openeval.engine.judges")
 
 
 class JudgeVerdict(BaseModel):
-    """Structured evaluation score and reasoning produced by an LLM Judge."""
+    """Structured evaluation score and reasoning produced by an LLM Judge.
+
+    ``status`` is authoritative: only ``status == "scored"`` verdicts carry a real
+    ``score``/``passed``. ``not_run`` and ``error`` verdicts have both set to None so
+    a judge that never ran can never be rendered as a pass.
+    """
 
     model_config = ConfigDict(extra="ignore")
 
@@ -36,8 +42,15 @@ class JudgeVerdict(BaseModel):
         ]
         | str
     ) = Field(..., description="Name of the evaluated dimension")
-    score: float = Field(default=1.0, ge=0.0, le=1.0, description="Normalized score (0.0 to 1.0)")
-    passed: bool = Field(default=True, description="Whether the trajectory satisfied the metric")
+    status: ScoreStatus = Field(
+        default="scored", description="Whether this verdict is a real score, skipped, or errored"
+    )
+    score: float | None = Field(
+        default=None, ge=0.0, le=1.0, description="Normalized score (0.0 to 1.0)"
+    )
+    passed: bool | None = Field(
+        default=None, description="Whether the trajectory satisfied the metric"
+    )
     reasoning: str = Field(..., description="Detailed explanation of the judge's findings")
     flagged_steps: list[int] = Field(
         default_factory=list, description="Step numbers where violations occurred"
@@ -46,6 +59,63 @@ class JudgeVerdict(BaseModel):
         default=None, description="Optional detailed breakdown of thought vs action divergence"
     )
 
+    @model_validator(mode="after")
+    def _status_consistent(self) -> Self:
+        if self.status == "scored":
+            if self.score is None or self.passed is None:
+                raise ValueError("scored JudgeVerdict requires both score and passed")
+        elif self.score is not None or self.passed is not None:
+            raise ValueError(f"{self.status} JudgeVerdict must not carry score/passed")
+        return self
+
+    @classmethod
+    def errored(cls, metric_name: str, reason: str) -> "JudgeVerdict":
+        """Verdict for a judge that was attempted and failed. Never a pass."""
+        return cls(metric_name=metric_name, status="error", reasoning=reason)
+
+    @classmethod
+    def not_run(cls, metric_name: str, reason: str) -> "JudgeVerdict":
+        """Verdict for a judge that was intentionally skipped. Never a pass."""
+        return cls(metric_name=metric_name, status="not_run", reasoning=reason)
+
+
+class JudgeLLMOutput(BaseModel):
+    """Schema the LLM judge must fill. Every field that decides pass/fail is required."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    score: float = Field(..., ge=0.0, le=1.0)
+    passed: bool
+    reasoning: str
+    flagged_steps: list[int] = Field(default_factory=list)
+    discrepancy_details: str | None = None
+
+
+async def run_llm_judge(
+    metric_name: str,
+    messages: list[ChatMessage],
+    runner: AsyncLLMRunner,
+    model: str | None,
+) -> JudgeVerdict:
+    """Call an LLM judge and return a scored verdict, or an ``error`` verdict on failure.
+
+    There is deliberately no default pass: a judge that cannot produce a valid
+    structured answer yields ``status="error"`` with ``score``/``passed`` = None.
+    """
+    cfg = LLMConfig(model=model or runner.provider, temperature=0.0)
+    try:
+        res = await runner.generate(messages, config=cfg, response_schema=JudgeLLMOutput)
+    # Boundary: any provider/network/SDK failure is reported as an errored verdict.
+    except Exception as e:  # noqa: BLE001
+        logger.warning("%s judge failed: %s", metric_name, e)
+        return JudgeVerdict.errored(metric_name, f"Judge call failed: {type(e).__name__}: {e}")
+    if not res.parsed_json:
+        return JudgeVerdict.errored(metric_name, "Judge returned no structured output.")
+    try:
+        out = JudgeLLMOutput.model_validate(res.parsed_json)
+    except ValueError as e:
+        return JudgeVerdict.errored(metric_name, f"Judge output failed validation: {e}")
+    return JudgeVerdict(metric_name=metric_name, status="scored", **out.model_dump())
 
 def format_trajectory_for_judge(trajectory: AgentTrajectory) -> str:
     """Format step-by-step turns into clean text for judge evaluation."""
