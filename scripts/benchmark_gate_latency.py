@@ -9,9 +9,13 @@ Verifies compliance with the sub-50ms blocking latency budget.
 
 from __future__ import annotations
 
+import os
 import statistics
 import time
 from typing import Any
+
+os.environ.setdefault("OPENEVAL_AUTH_DISABLED", "1")
+os.environ.setdefault("OPENEVAL_WATCHER_USE_LLM", "0")
 
 from fastapi.testclient import TestClient
 
@@ -134,6 +138,7 @@ def main() -> None:
 
     print("[2/2] Benchmarking Policy Gateway HTTP API (/api/v1/watcher/evaluate)...")
     client = TestClient(app)
+    app.state.db_ready = True
     api_lats = benchmark_gateway_api(client, iterations=100)
     api_stats = compute_stats(api_lats)
 

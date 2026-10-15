@@ -126,7 +126,7 @@ def test_session_eval_log_roundtrip_preservation(tmp_path: Path):
     assert eval_log.eval is not None
     assert eval_log.eval.task == "oversight-subversion"
     assert eval_log.eval.model == "gemini-3.1-flash-lite"
-    assert len(eval_log.samples) == 1
+    assert eval_log.samples is not None and len(eval_log.samples) == 1
 
     # 2. Extract decisions from the written .eval file
     extracted_decisions = extract_decisions_from_eval_log(eval_file)

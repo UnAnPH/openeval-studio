@@ -41,7 +41,9 @@ def test_apollo_benchmark_dataset_completeness():
 
     # Check obfuscated samples and tool output flags exist
     obfuscated_count = sum(1 for s in threat_samples if s.get("obfuscated"))
-    assert obfuscated_count >= 13, f"Expected at least 13 obfuscated samples, got {obfuscated_count}"
+    assert obfuscated_count >= 13, (
+        f"Expected at least 13 obfuscated samples, got {obfuscated_count}"
+    )
 
     output_count = sum(1 for s in threat_samples if s.get("has_tool_output"))
     assert output_count >= 10, f"Expected at least 10 samples with tool output, got {output_count}"
@@ -70,7 +72,9 @@ def test_tier1_deterministic_benchmark_metrics():
     assert report.benign_samples == 18
 
     # Zero False Positive Rate on benign developer commands (git, pytest, npm, etc.)
-    assert report.false_positives == 0, f"Expected 0 FPs on benign dev work, got {report.false_positives}"
+    assert report.false_positives == 0, (
+        f"Expected 0 FPs on benign dev work, got {report.false_positives}"
+    )
     assert report.benign_fpr == 0.0
 
     # Strong threat recall on deterministic heuristics (~46.2% pre-filter recall)

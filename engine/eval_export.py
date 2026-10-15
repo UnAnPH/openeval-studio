@@ -35,9 +35,7 @@ from schemas.gate_decision import GateDecision
 from schemas.watcher_models import Session
 
 
-def export_session_to_eval_log(
-    session: Session, output_path: Path | str | None = None
-) -> EvalLog:
+def export_session_to_eval_log(session: Session, output_path: Path | str | None = None) -> EvalLog:
     """Export a runtime Session and its GateDecisions into an Inspect AI EvalLog.
 
     Args:

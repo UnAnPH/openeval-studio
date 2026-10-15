@@ -80,7 +80,7 @@ def _record_gateway_failure() -> int:
                 for ts in data.get("failures", [])
                 if (now - float(ts)) < FAILURE_WINDOW_SEC
             ]
-    except Exception:
+    except (OSError, ValueError):
         failures = []
 
     failures.append(now)
@@ -89,7 +89,7 @@ def _record_gateway_failure() -> int:
         tmp = CIRCUIT_STATE_FILE.with_name(f"{CIRCUIT_STATE_FILE.name}.{os.getpid()}.tmp")
         tmp.write_text(json.dumps({"failures": failures, "updated_at": now}), encoding="utf-8")
         os.replace(tmp, CIRCUIT_STATE_FILE)
-    except Exception:
+    except OSError:
         pass
     return len(failures)
 
@@ -99,7 +99,7 @@ def _reset_gateway_failures() -> None:
     try:
         if CIRCUIT_STATE_FILE.exists():
             CIRCUIT_STATE_FILE.unlink()
-    except Exception:
+    except OSError:
         pass
 
 
@@ -362,7 +362,7 @@ def _log(event: str, **fields: object) -> None:
         LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
         with LOG_PATH.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps({"ts": time.time(), "event": event, **fields}) + "\n")
-    except Exception:
+    except OSError:
         pass
 
 
@@ -450,7 +450,7 @@ def _detect_subagent_provenance(
                     "delegation_depth": info.get("depth", 1),
                     "delegated_by": info.get("delegated_by", "registry"),
                 }
-        except Exception:
+        except (OSError, ValueError):
             pass
 
     return {
@@ -495,11 +495,11 @@ def _track_delegation_tool(tool_name: str, tool_input: object, parent_conv_id: s
                 import fcntl
 
                 fcntl.flock(lf.fileno(), fcntl.LOCK_EX)
-            except Exception:
+            except OSError:
                 pass
             current_data = {}
             if SUBAGENT_REGISTRY_PATH.exists():
-                with contextlib.suppress(Exception):
+                with contextlib.suppress(OSError, ValueError):
                     current_data = json.loads(SUBAGENT_REGISTRY_PATH.read_text(encoding="utf-8"))
             subagents = current_data.get("subagents", {})
             parent_info = subagents.get(parent_conv_id, {})
@@ -520,9 +520,9 @@ def _track_delegation_tool(tool_name: str, tool_input: object, parent_conv_id: s
                 import fcntl
 
                 fcntl.flock(lf.fileno(), fcntl.LOCK_UN)
-            except Exception:
+            except OSError:
                 pass
-    except Exception:
+    except OSError:
         pass
 
 
@@ -709,7 +709,7 @@ def _report_to_watcher(
                 mode_applied=verdict.get("mode_applied"),
                 source="report_to_watcher",
             )
-    except Exception as err:
+    except (urllib.error.URLError, OSError, ValueError, TimeoutError) as err:
         _log("server_unreachable", error=str(err), source="report_to_watcher")
 
 
@@ -810,7 +810,7 @@ def _handle_shell_execution(
             verdict = json.loads(resp.read().decode("utf-8"))
         # Server query succeeded: reset circuit breaker failure records
         _reset_gateway_failures()
-    except Exception as err:
+    except (urllib.error.URLError, OSError, ValueError, TimeoutError) as err:
         if isinstance(err, urllib.error.HTTPError) and err.code == 422:
             try:
                 err_body = json.loads(err.read().decode("utf-8"))
@@ -819,13 +819,17 @@ def _handle_shell_execution(
                     for d in err_body.get("detail", [])
                     if isinstance(d, dict) and d.get("type") == "extra_forbidden" and "loc" in d
                 ]
-            except Exception:
+            except (OSError, ValueError):
                 unknown_keys = []
             keys_str = ", ".join(unknown_keys) if unknown_keys else "unknown"
-            drift_msg = f"payload schema drift: unexpected fields [{keys_str}] rejected by Watcher gate"
+            drift_msg = (
+                f"payload schema drift: unexpected fields [{keys_str}] rejected by Watcher gate"
+            )
             sys.stderr.write(f"[OPENEVAL WARNING] {drift_msg}\n")
             _log("payload_schema_drift", unknown_keys=unknown_keys, error=str(err))
-            prompt_msg = f"[OPENEVAL SCHEMA DRIFT]: {drift_msg}. Execution frozen pending operator review."
+            prompt_msg = (
+                f"[OPENEVAL SCHEMA DRIFT]: {drift_msg}. Execution frozen pending operator review."
+            )
             consent_box = _format_consent_box(
                 decision=SHELL_LOCKOUT_PERMISSION,
                 reason="[SCHEMA_DRIFT] Watcher gate payload schema drift detected.",
@@ -1045,7 +1049,7 @@ def _handle_pre_tool_use(
                 )
                 _emit("deny", msg, consent_box=consent_box, disclosure=disclosure)
                 return
-        except Exception as err:
+        except (urllib.error.URLError, OSError, ValueError, TimeoutError) as err:
             _log("server_unreachable", error=str(err), path=path)
             recent_failures = _record_gateway_failure()
             if recent_failures >= MAX_CONSECUTIVE_FAILURES:

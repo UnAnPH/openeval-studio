@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 import pytest
@@ -119,7 +119,7 @@ async def test_redis_streams_disconnection_replay_with_last_event_id() -> None:
     # 1. Establish SSE stream connection without Last-Event-ID
     response = await stream_watcher_events()
     assert response.status_code == 200
-    gen = response.body_iterator
+    gen = cast(Any, response.body_iterator)
 
     # Receive connection handshake
     handshake_chunk = await asyncio.wait_for(anext(gen), timeout=3.0)
@@ -153,7 +153,7 @@ async def test_redis_streams_disconnection_replay_with_last_event_id() -> None:
     # 5. Client reconnects sending Last-Event-ID = sid_0
     reconnect_response = await stream_watcher_events(last_event_id=sid_0)
     assert reconnect_response.status_code == 200
-    rec_gen = reconnect_response.body_iterator
+    rec_gen = cast(Any, reconnect_response.body_iterator)
 
     # Replay backlog should yield all missed events in exact order
     replayed_chunks: list[str] = []
@@ -210,7 +210,7 @@ async def test_redis_streams_reconnect_via_http_header() -> None:
     req = Request(scope)
 
     resp = await stream_watcher_events(request=req)
-    gen = resp.body_iterator
+    gen = cast(Any, resp.body_iterator)
 
     # First event received must be id2 (the missed backlog)
     chunk = await asyncio.wait_for(anext(gen), timeout=3.0)

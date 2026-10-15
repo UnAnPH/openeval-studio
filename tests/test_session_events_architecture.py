@@ -3,7 +3,7 @@
 import asyncio
 import json
 import uuid
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from sqlalchemy import text
@@ -390,7 +390,7 @@ async def test_stream_watcher_events_generator_and_tenant_isolation() -> None:
     assert response.status_code == 200
     assert response.media_type == "text/event-stream"
 
-    gen = response.body_iterator
+    gen = cast(Any, response.body_iterator)
     # 1. First event must be connected
     first_chunk = await asyncio.wait_for(anext(gen), timeout=2.0)
     assert "event: connected" in first_chunk

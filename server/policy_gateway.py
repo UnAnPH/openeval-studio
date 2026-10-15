@@ -18,7 +18,7 @@ import re
 import threading
 import time
 from collections.abc import Callable
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
 
 from schemas.watcher_models import (
     BlastRadiusTier,
@@ -42,7 +42,7 @@ class _HTTPResponseProtocol(Protocol):
     def __exit__(self, *args: object) -> object: ...
 
 
-_RequesterCallable = Callable[..., _HTTPResponseProtocol]
+_RequesterCallable = Callable[..., Any]
 
 # Host hooks fail open at 1.5s. Keep the whole LLM budget under that deadline.
 _LLM_BUDGET_SEC = 0.8
@@ -113,7 +113,7 @@ Output XML format:
 <decision_context>1-2 sentence impact summary grounded in State or Process Integrity.</decision_context>
 """
 
-OnFailureAction = Literal["fail_open", "escalate"]
+OnFailureAction = Literal["fail_open", "escalate", "fail_closed"]
 
 
 def _env_use_llm() -> bool:
@@ -391,7 +391,8 @@ def check_negative_constraint_violation(
     full_combined = f"{tool_lower} {combined_target}".strip()
 
     is_delete_tool = any(k in tool_lower for k in ("delete", "remove", "unlink", "rm")) or any(
-        re.search(rf"\b{cmd}\b", combined_target) for cmd in ("rm", "unlink", "drop", "truncate", "delete")
+        re.search(rf"\b{cmd}\b", combined_target)
+        for cmd in ("rm", "unlink", "drop", "truncate", "delete")
     )
 
     stop_words = {
@@ -682,7 +683,7 @@ class PolicyGateway:
         self.llm_timeout_sec = min(_LLM_BUDGET_SEC, max(0.05, configured))
         self.on_failure: OnFailureAction = on_failure  # type: ignore[assignment]
         fail_env = os.environ.get("OPENEVAL_WATCHER_ON_FAILURE", "").strip().lower()
-        if fail_env in ("escalate", "fail_open"):
+        if fail_env in ("escalate", "fail_open", "fail_closed"):
             self.on_failure = fail_env  # type: ignore[assignment]
         self.llm_model = os.environ.get("OPENEVAL_WATCHER_LLM_MODEL", llm_model)
         self._llm_fail_streak = 0

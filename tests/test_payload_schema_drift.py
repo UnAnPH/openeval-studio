@@ -42,8 +42,7 @@ def test_watcher_request_extra_forbid():
 
     errors = exc_info.value.errors()
     assert any(
-        e["type"] == "extra_forbidden" and "unexpected_vendor_field" in e["loc"]
-        for e in errors
+        e["type"] == "extra_forbidden" and "unexpected_vendor_field" in e["loc"] for e in errors
     ), f"Expected extra_forbidden error for unexpected_vendor_field, got {errors}"
 
 
@@ -68,22 +67,26 @@ def test_gateway_rejects_payload_schema_drift():
     )
 
 
-def test_claude_hook_fails_closed_on_schema_drift(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]):
+def test_claude_hook_fails_closed_on_schema_drift(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
     """Verify claude_code_watcher_hook emits interactive lockout on 422 schema drift."""
     import urllib.error
 
     from scripts import claude_code_watcher_hook
 
     # Mock server returning 422 with extra_forbidden
-    mock_error_body = json.dumps({
-        "detail": [
-            {
-                "type": "extra_forbidden",
-                "loc": ["body", "vendor_novel_flag"],
-                "msg": "Extra inputs are not permitted",
-            }
-        ]
-    }).encode("utf-8")
+    mock_error_body = json.dumps(
+        {
+            "detail": [
+                {
+                    "type": "extra_forbidden",
+                    "loc": ["body", "vendor_novel_flag"],
+                    "msg": "Extra inputs are not permitted",
+                }
+            ]
+        }
+    ).encode("utf-8")
 
     err_fp = io.BytesIO(mock_error_body)
     http_err = urllib.error.HTTPError(
@@ -100,11 +103,13 @@ def test_claude_hook_fails_closed_on_schema_drift(monkeypatch: pytest.MonkeyPatc
     )
 
     # Run main() with a payload
-    test_input = json.dumps({
-        "tool_name": "Bash",
-        "tool_input": {"command": "git status"},
-        "sessionId": "test-drift-session",
-    })
+    test_input = json.dumps(
+        {
+            "tool_name": "Bash",
+            "tool_input": {"command": "git status"},
+            "sessionId": "test-drift-session",
+        }
+    )
     monkeypatch.setattr("sys.stdin", io.StringIO(test_input))
 
     claude_code_watcher_hook.main()

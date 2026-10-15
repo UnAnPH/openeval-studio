@@ -292,7 +292,9 @@ def main() -> None:
             except Exception:  # noqa: BLE001  # Boundary: JSON decode failure on 422 error body
                 unknown_keys = []
             keys_str = ", ".join(unknown_keys) if unknown_keys else "unknown"
-            drift_msg = f"payload schema drift: unexpected fields [{keys_str}] rejected by Watcher gate"
+            drift_msg = (
+                f"payload schema drift: unexpected fields [{keys_str}] rejected by Watcher gate"
+            )
             sys.stderr.write(f"[OPENEVAL WARNING] {drift_msg}\n")
             _log("payload_schema_drift", unknown_keys=unknown_keys, error=str(err))
             _emit(

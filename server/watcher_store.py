@@ -549,7 +549,7 @@ class WatcherStore:
 
             payload_data = event.payload
             if hasattr(payload_data, "model_dump"):
-                payload_data = payload_data.model_dump()
+                payload_data = cast(Any, payload_data).model_dump()
             payload_json = json.dumps(_to_jsonable(payload_data))
 
             db.execute(
@@ -857,7 +857,7 @@ class WatcherStore:
         steps_list: list[Any] = list(getattr(base_session, "steps", []) or [])
 
         for erow in event_rows:
-            eid, step_idx, etype, epayload, ecreated_at = erow
+            _eid, step_idx, etype, epayload, _ecreated_at = erow
             if isinstance(epayload, str):
                 epayload = json.loads(epayload)
 

@@ -138,6 +138,7 @@ def password_recovery() -> Task:
 def apollo_monitor_benchmark() -> Task:
     """Evaluate 70-sample Apollo Threat Taxonomy Monitor Benchmark."""
     from engine.monitor_benchmark import apollo_monitor_benchmark as _task_fn
+
     return _task_fn()
 
 

@@ -18,7 +18,7 @@ import time
 from collections import defaultdict
 from collections.abc import AsyncGenerator, Generator
 from contextlib import asynccontextmanager, contextmanager
-from typing import Any
+from typing import Any, cast
 
 import redis.asyncio as aioredis
 from fastapi import Request
@@ -332,7 +332,7 @@ class EventBus:
 
         if client is not None:
             try:
-                stream_id = await client.xadd(
+                raw_sid = await client.xadd(
                     stream_key,
                     {
                         "event": event_type,
@@ -342,6 +342,7 @@ class EventBus:
                     maxlen=maxlen,
                     approximate=True,
                 )
+                stream_id = raw_sid.decode("utf-8") if isinstance(raw_sid, bytes) else str(raw_sid)
             except Exception as e:
                 logger.warning("Failed appending to Redis Stream %s: %s", stream_key, e)
 
@@ -427,23 +428,30 @@ class EventBus:
             try:
                 try:
                     # Redis 6.2+ exclusive min syntax '('
-                    raw_items = await client.xrange(
-                        stream_key, min=f"({last_event_id}", max="+", count=count
+                    raw_items = cast(
+                        Any,
+                        await client.xrange(
+                            stream_key, min=f"({last_event_id}", max="+", count=count
+                        ),
                     )
                 except Exception:
                     # Fallback if exclusive '(' syntax is not supported
-                    raw_items = await client.xrange(
-                        stream_key, min=last_event_id, max="+", count=count
+                    raw_items = cast(
+                        Any,
+                        await client.xrange(stream_key, min=last_event_id, max="+", count=count),
                     )
                     raw_items = [item for item in raw_items if item[0] != last_event_id]
 
                 results: list[tuple[str, dict[str, Any]]] = []
                 for msg_id, fields in raw_items:
+                    msg_id_str = (
+                        msg_id.decode("utf-8") if isinstance(msg_id, bytes) else str(msg_id)
+                    )
                     data_val = fields.get("data", "{}")
                     parsed_data = json.loads(data_val) if isinstance(data_val, str) else data_val
                     results.append(
                         (
-                            msg_id,
+                            msg_id_str,
                             {
                                 "event": fields.get("event", "message"),
                                 "data": parsed_data,
@@ -479,20 +487,25 @@ class EventBus:
 
         if client is not None:
             try:
-                read_res = await client.xread({stream_key: last_id}, count=count, block=block_ms)
+                read_res = cast(
+                    Any, await client.xread({stream_key: last_id}, count=count, block=block_ms)
+                )
                 if not read_res:
                     return []
 
                 results: list[tuple[str, dict[str, Any]]] = []
                 for _, entries in read_res:
                     for msg_id, fields in entries:
+                        msg_id_str = (
+                            msg_id.decode("utf-8") if isinstance(msg_id, bytes) else str(msg_id)
+                        )
                         data_val = fields.get("data", "{}")
                         parsed_data = (
                             json.loads(data_val) if isinstance(data_val, str) else data_val
                         )
                         results.append(
                             (
-                                msg_id,
+                                msg_id_str,
                                 {
                                     "event": fields.get("event", "message"),
                                     "data": parsed_data,
@@ -541,7 +554,12 @@ class EventBus:
             try:
                 latest = await client.xrevrange(stream_key, max="+", min="-", count=1)
                 if latest:
-                    return latest[0][0]
+                    raw_latest = latest[0][0]
+                    return (
+                        raw_latest.decode("utf-8")
+                        if isinstance(raw_latest, bytes)
+                        else str(raw_latest)
+                    )
                 return "0-0"
             except Exception as exc:
                 logger.debug("Error querying latest stream id on %s: %s", stream_key, exc)
@@ -614,7 +632,7 @@ class EventBus:
         """Synchronously publish an event."""
         self.xadd_sync(event_type, data, user_id=user_id)
 
-    async def create_redis_subscriber(self, user_id: int | None) -> aioredis.client.PubSub | None:
+    async def create_redis_subscriber(self, user_id: int | None) -> Any | None:
         """Subscribe to Redis channels for the tenant using pubsub."""
         client = await self.get_redis_client()
         if client is None:

@@ -368,7 +368,6 @@ def main() -> None:
     p_audit = subparsers.add_parser("audit", help="Run Oracle vs Nop integrity audit")
     p_audit.add_argument("task_dir", help="Path to task folder")
 
-
     # mcp command
     subparsers.add_parser(
         "mcp", help="Start Sandboxed Research Model Context Protocol (MCP) server"

@@ -135,6 +135,7 @@ def test_obsolete_env_var_fails_startup(monkeypatch) -> None:
 
     monkeypatch.setenv("OPENEVAL_GATE_USE_LLM", "1")
     with pytest.raises(RuntimeError, match="Obsolete environment variable OPENEVAL_GATE_USE_LLM"):
+
         async def _run() -> None:
             async with lifespan(app):
                 pass

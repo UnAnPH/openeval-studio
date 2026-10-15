@@ -1157,8 +1157,6 @@ async def ingest_watcher_session(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-
-
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 TASKS_DIR = PROJECT_ROOT / "tasks"
 
@@ -1706,7 +1704,6 @@ class GraderBacktestRequest(BaseModel):
     ensemble_models: list[str] | None = None
 
 
-
 @app.get("/api/v1/watcher/graders/definitions")
 async def list_grader_definitions() -> list[dict[str, Any]]:
     """Retrieve the 5 Canonical Graders with 15-part prompt definitions for the active user."""
@@ -1824,7 +1821,6 @@ async def get_watcher_telemetry() -> dict[str, Any]:
     telemetry_svc = TelemetryService()
     report = telemetry_svc.get_telemetry_report()
     return report.model_dump()
-
 
 
 @app.get("/api/v1/watcher/daemon")

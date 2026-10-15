@@ -235,6 +235,7 @@ def parse_eval_log_to_run_record(eval_file_path: Path) -> Session | None:
             model=clean_model,
             provider=provider,
             status=status,  # type: ignore[arg-type]
+            created_at=created_at,
             steps=steps,
             total_steps=len(steps),
             total_tokens=total_tokens,

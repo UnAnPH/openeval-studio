@@ -30,7 +30,13 @@ import logging
 from pydantic import BaseModel
 
 from engine.llm_runner import AsyncLLMRunner, ChatMessage, LLMConfig
-from engine.scorers import GraderVerdict, parse_c1_c15_output, score_to_severity
+from engine.scorers import (
+    GraderVerdict,
+    parse_c1_c15_output,
+)
+from engine.scorers import (
+    score_to_severity as score_to_severity,
+)
 
 logger = logging.getLogger("openeval.engine.graders_suite")
 

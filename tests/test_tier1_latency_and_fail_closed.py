@@ -31,10 +31,22 @@ def test_tier1_end_to_end_p95_latency_budget():
     test_cases = [
         {"agent_id": "cursor", "tool_name": "Shell", "arguments": {"command": "git status"}},
         {"agent_id": "cursor", "tool_name": "Shell", "arguments": {"command": "pytest tests/"}},
-        {"agent_id": "antigravity", "tool_name": "run_command", "arguments": {"CommandLine": "ls -la src/"}},
-        {"agent_id": "antigravity", "tool_name": "view_file", "arguments": {"AbsolutePath": "/repo/README.md"}},
+        {
+            "agent_id": "antigravity",
+            "tool_name": "run_command",
+            "arguments": {"CommandLine": "ls -la src/"},
+        },
+        {
+            "agent_id": "antigravity",
+            "tool_name": "view_file",
+            "arguments": {"AbsolutePath": "/repo/README.md"},
+        },
         {"agent_id": "claude_code", "tool_name": "Bash", "arguments": {"command": "npm test"}},
-        {"agent_id": "claude_code", "tool_name": "Edit", "arguments": {"file_path": "/repo/app.py"}},
+        {
+            "agent_id": "claude_code",
+            "tool_name": "Edit",
+            "arguments": {"file_path": "/repo/app.py"},
+        },
     ]
 
     # Warmup
@@ -95,7 +107,10 @@ def test_tier2_llm_timeout_fails_closed_to_force_ask(monkeypatch: pytest.MonkeyP
     assert rec.decision in ("block", "escalate"), (
         f"Expected fail-closed decision ('block' or 'escalate'), got {rec.decision}"
     )
-    assert "fail-closed" in (rec.explanation or "").lower() or "llm failure" in (rec.explanation or "").lower()
+    assert (
+        "fail-closed" in (rec.explanation or "").lower()
+        or "llm failure" in (rec.explanation or "").lower()
+    )
 
 
 def test_tier2_llm_timeout_maps_to_client_force_ask(monkeypatch: pytest.MonkeyPatch):
