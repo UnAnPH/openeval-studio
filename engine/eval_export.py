@@ -13,6 +13,7 @@ from inspect_ai.log import (
     EvalConfig,
     EvalDataset,
     EvalLog,
+    EvalMetric,
     EvalPlan,
     EvalResults,
     EvalSample,
@@ -126,8 +127,14 @@ def export_session_to_eval_log(
             scores_list.append(
                 EvalScore(
                     name=str(metric_name),
-                    value=float(score_val) if score_val is not None else 1.0,
-                    explanation=explanation,
+                    scorer=str(metric_name),
+                    metrics={
+                        "score": EvalMetric(
+                            name="score",
+                            value=float(score_val) if score_val is not None else 1.0,
+                        )
+                    },
+                    metadata={"explanation": explanation} if explanation else None,
                 )
             )
 
@@ -158,10 +165,7 @@ def extract_decisions_from_eval_log(eval_log: EvalLog | Path | str) -> list[Gate
     Returns:
         List of GateDecision objects identical to those produced at runtime.
     """
-    if isinstance(eval_log, (Path, str)):
-        log = read_eval_log(str(eval_log))
-    else:
-        log = eval_log
+    log = read_eval_log(str(eval_log)) if isinstance(eval_log, (Path, str)) else eval_log
 
     if not log or not log.samples:
         return []
@@ -184,10 +188,7 @@ def import_eval_log_to_session(eval_log: EvalLog | Path | str) -> Session | None
     Returns:
         Hydrated Session with intact GateDecisions.
     """
-    if isinstance(eval_log, (Path, str)):
-        log = read_eval_log(str(eval_log))
-    else:
-        log = eval_log
+    log = read_eval_log(str(eval_log)) if isinstance(eval_log, (Path, str)) else eval_log
 
     if not log or not log.samples:
         return None
@@ -215,5 +216,5 @@ def import_eval_log_to_session(eval_log: EvalLog | Path | str) -> Session | None
         total_duration_sec=meta.get("total_duration_sec", 0.0),
     )
     # Sync reviews on trajectory as well
-    session.trajectory.reviews = [d for d in decisions]
+    session.trajectory.reviews = list(decisions)
     return session

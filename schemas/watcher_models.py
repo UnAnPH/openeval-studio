@@ -563,7 +563,7 @@ if TYPE_CHECKING:
     ALL_63_COMMAND_RULES: list[CommandRule]
 
 
-def __getattr__(name: str) -> Any:
+def __getattr__(name: str) -> object:
     """Resolve DEFAULT_COMMAND_RULES / ALL_63_COMMAND_RULES from the rules engine."""
     if name in {"DEFAULT_COMMAND_RULES", "ALL_63_COMMAND_RULES"}:
         from server.command_rules import ALL_63_COMMAND_RULES

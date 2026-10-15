@@ -28,6 +28,7 @@ import os
 import re
 import sys
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -63,7 +64,7 @@ def _log(event: str, **fields: object) -> None:
         LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
         with LOG_PATH.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps({"ts": time.time(), "event": event, **fields}) + "\n")
-    except Exception:
+    except Exception:  # noqa: BLE001  # Boundary: local logging write failure must never crash hook
         pass
 
 
@@ -121,7 +122,7 @@ def _report_to_watcher(
                 source="local_blacklist_report",
                 session_id=session_id,
             )
-    except Exception as err:
+    except Exception as err:  # noqa: BLE001  # Boundary: best-effort report failure must not block execution
         _log("server_unreachable", error=str(err), source="local_blacklist_report")
 
 
@@ -192,7 +193,7 @@ def _report_tool_result(payload: dict) -> None:
         with urllib.request.urlopen(req, timeout=TIMEOUT_SEC):
             pass
         _log("posttool_result_reported", session_id=session_id)
-    except Exception as err:
+    except Exception as err:  # noqa: BLE001  # Boundary: best-effort posttool result logging
         _log("posttool_result_error", error=str(err))
 
 
@@ -279,7 +280,30 @@ def main() -> None:
         )
         with urllib.request.urlopen(req, timeout=TIMEOUT_SEC) as resp:
             verdict = json.loads(resp.read().decode("utf-8"))
-    except Exception as err:
+    except urllib.error.HTTPError as err:
+        if err.code == 422:
+            try:
+                err_body = json.loads(err.read().decode("utf-8"))
+                unknown_keys = [
+                    str(d["loc"][-1])
+                    for d in err_body.get("detail", [])
+                    if isinstance(d, dict) and d.get("type") == "extra_forbidden" and "loc" in d
+                ]
+            except Exception:  # noqa: BLE001  # Boundary: JSON decode failure on 422 error body
+                unknown_keys = []
+            keys_str = ", ".join(unknown_keys) if unknown_keys else "unknown"
+            drift_msg = f"payload schema drift: unexpected fields [{keys_str}] rejected by Watcher gate"
+            sys.stderr.write(f"[OPENEVAL WARNING] {drift_msg}\n")
+            _log("payload_schema_drift", unknown_keys=unknown_keys, error=str(err))
+            _emit(
+                LOCKOUT_PERMISSION,
+                f"[OPENEVAL SCHEMA DRIFT]: {drift_msg}. Execution frozen pending operator review.",
+            )
+            return
+        _log("server_error", error=str(err))
+        _emit("allow")
+        return
+    except Exception as err:  # noqa: BLE001  # Boundary: network transport failure during evaluate call
         _log("server_unreachable", error=str(err))
         _emit("allow")
         return

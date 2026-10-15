@@ -7,8 +7,6 @@ Verifies:
 
 from pathlib import Path
 
-import pytest
-
 from engine.eval_export import (
     export_session_to_eval_log,
     extract_decisions_from_eval_log,

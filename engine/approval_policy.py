@@ -276,10 +276,13 @@ ROUTINE_COMMAND_PREFIXES: list[str] = [
 class WatcherRequest(BaseModel):
     """Payload sent to Watcher Live REST Gateway for pre-execution safety screening."""
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid")
 
     tool_name: str = Field(
         ..., description="Target tool name (e.g. run_command, execute_bash, write_to_file)"
+    )
+    tool_input: str | None = Field(
+        default=None, description="Raw tool command or input string when arguments dict is omitted"
     )
     arguments: dict[str, Any] = Field(
         default_factory=dict, description="Tool invocation parameters"

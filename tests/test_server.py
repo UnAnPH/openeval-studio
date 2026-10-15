@@ -128,7 +128,9 @@ def test_run_with_slash_in_task_id_and_legacy_slash_lookup() -> None:
 def test_obsolete_env_var_fails_startup(monkeypatch) -> None:
     """Verify that OPENEVAL_GATE_USE_LLM causes startup to raise RuntimeError."""
     import asyncio
+
     import pytest
+
     from server.app import lifespan
 
     monkeypatch.setenv("OPENEVAL_GATE_USE_LLM", "1")

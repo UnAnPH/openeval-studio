@@ -14,7 +14,6 @@ import time
 from collections.abc import AsyncGenerator, Callable
 from pathlib import Path
 from typing import Any, Literal
-from uuid import uuid4
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Query, Request

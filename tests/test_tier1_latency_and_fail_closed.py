@@ -12,7 +12,6 @@ Verifies:
 
 from __future__ import annotations
 
-import os
 import time
 import urllib.error
 from unittest.mock import MagicMock

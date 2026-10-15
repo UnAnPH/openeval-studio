@@ -60,22 +60,17 @@ reportMissingTypeStubs = false
 reportUnusedVariable = true
 reportUnusedImport = true
 
-[tool.mypy]
-python_version = "3.12"
-strict = true
-warn_unused_configs = true
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
-check_untyped_defs = true
-
 [tool.ruff]
 line-length = 100
 target-version = "py311"
 exclude = ["tasks", "ui", ".venv"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM"]
-ignore = ["E501"]
+select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM", "BLE", "ANN401", "TRY"]
+ignore = ["E501", "TRY002", "TRY003", "TRY300", "TRY301"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["ANN401", "BLE001", "TRY"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

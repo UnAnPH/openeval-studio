@@ -171,6 +171,9 @@ async def evaluate_action_watcher_gateway(
             or ""
         )
 
+    if not cmd and req.tool_input:
+        cmd = req.tool_input
+
     if cmd:
         full_cmd = cmd
     elif req.arguments:

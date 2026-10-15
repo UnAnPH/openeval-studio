@@ -17,7 +17,8 @@ import os
 import re
 import threading
 import time
-from typing import Any, Literal
+from collections.abc import Callable
+from typing import Literal, Protocol
 
 from schemas.watcher_models import (
     BlastRadiusTier,
@@ -30,9 +31,18 @@ from schemas.watcher_models import (
     ToolThreshold,
     infer_threat_category,
 )
-from server.command_rules import ALL_63_COMMAND_RULES, CommandRulesEngine
+from server.command_rules import ALL_63_COMMAND_RULES, CommandRule, CommandRulesEngine
 
 logger = logging.getLogger("openeval.policy_gateway")
+
+
+class _HTTPResponseProtocol(Protocol):
+    def read(self) -> bytes: ...
+    def __enter__(self) -> _HTTPResponseProtocol: ...
+    def __exit__(self, *args: object) -> object: ...
+
+
+_RequesterCallable = Callable[..., _HTTPResponseProtocol]
 
 # Host hooks fail open at 1.5s. Keep the whole LLM budget under that deadline.
 _LLM_BUDGET_SEC = 0.8
@@ -149,7 +159,7 @@ def _parse_threat_category(text: str) -> ThreatCategory | None:
     return cat if cat in valid_cats else None  # type: ignore[return-value]
 
 
-def format_stripped_trajectory(trajectory: Any, max_events: int = 15) -> str:
+def format_stripped_trajectory(trajectory: object, max_events: int = 15) -> str:
     """Format session trajectory history while stripping bulky tool outputs.
 
     Trajectory Context Optimization:
@@ -466,7 +476,7 @@ def check_negative_constraint_violation(
 def generate_consent_disclosure(
     tool_name: str,
     tool_input: str,
-    rule: Any | None = None,
+    rule: CommandRule | None = None,
     score: int = 1,
     is_subagent: bool = False,
     negative_violation: str = "",
@@ -656,7 +666,7 @@ class PolicyGateway:
         llm_timeout_sec: float = _LLM_BUDGET_SEC,
         on_failure: OnFailureAction = "fail_open",
         llm_model: str = "gemini-3.1-flash-lite",
-        requester: Any | None = None,
+        requester: _RequesterCallable | None = None,
         api_key: str | None = None,
     ) -> None:
         self.command_engine = (
@@ -681,7 +691,7 @@ class PolicyGateway:
         self._llm_circuit_open = False
         self._llm_deadline: float | None = None
         self._last_threat_category: ThreatCategory | None = None
-        self._requester = requester
+        self._requester: _RequesterCallable | None = requester
         self._api_key = api_key
 
     @classmethod
@@ -1121,8 +1131,8 @@ class PolicyGateway:
             m = re.search(r"\b([1-9]|10)\b", text or "")
             if m:
                 self._last_threat_category = _parse_threat_category(text or "")
-                return int(m.group(1)), (text or "LLM grade")[:500]
-        except Exception as err:
+        # Boundary: LLM network/provider failure or JSON decode error
+        except Exception as err:  # noqa: BLE001
             self._llm_fail_streak += 1
             if self._llm_fail_streak >= 3:
                 self._llm_circuit_open = True

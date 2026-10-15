@@ -43,6 +43,7 @@ import os
 import re
 import sys
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any
@@ -810,6 +811,29 @@ def _handle_shell_execution(
         # Server query succeeded: reset circuit breaker failure records
         _reset_gateway_failures()
     except Exception as err:
+        if isinstance(err, urllib.error.HTTPError) and err.code == 422:
+            try:
+                err_body = json.loads(err.read().decode("utf-8"))
+                unknown_keys = [
+                    str(d["loc"][-1])
+                    for d in err_body.get("detail", [])
+                    if isinstance(d, dict) and d.get("type") == "extra_forbidden" and "loc" in d
+                ]
+            except Exception:
+                unknown_keys = []
+            keys_str = ", ".join(unknown_keys) if unknown_keys else "unknown"
+            drift_msg = f"payload schema drift: unexpected fields [{keys_str}] rejected by Watcher gate"
+            sys.stderr.write(f"[OPENEVAL WARNING] {drift_msg}\n")
+            _log("payload_schema_drift", unknown_keys=unknown_keys, error=str(err))
+            prompt_msg = f"[OPENEVAL SCHEMA DRIFT]: {drift_msg}. Execution frozen pending operator review."
+            consent_box = _format_consent_box(
+                decision=SHELL_LOCKOUT_PERMISSION,
+                reason="[SCHEMA_DRIFT] Watcher gate payload schema drift detected.",
+                tool_name="Shell",
+                cmd=cmd,
+            )
+            _emit(SHELL_LOCKOUT_PERMISSION, prompt_msg, consent_box=consent_box)
+            return
         _log("server_unreachable", error=str(err), cmd=cmd[:120])
         recent_failures = _record_gateway_failure()
         if recent_failures >= MAX_CONSECUTIVE_FAILURES:
@@ -826,8 +850,6 @@ def _handle_shell_execution(
             )
             _emit(SHELL_LOCKOUT_PERMISSION, prompt_msg, consent_box=consent_box)
             return
-
-        # Fail-open only after local checks passed and within failure budget
         _emit("allow", "Watcher gate: gateway timeout/unreachable (transient fail-open)")
         return
 
