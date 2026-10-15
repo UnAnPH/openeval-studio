@@ -63,46 +63,43 @@ def benchmark_local_regex(iterations: int = 500) -> list[float]:
     return latencies_ms
 
 
-def benchmark_gateway_api(client: TestClient, iterations: int = 150) -> list[float]:
+def benchmark_gateway_api(client: TestClient, iterations: int = 50) -> list[float]:
     """Measure FastAPI Policy Gateway HTTP evaluation latency."""
-    test_payloads = [
+    base_payloads = [
         {
             "agent_id": "cursor",
             "tool_name": "Shell",
             "arguments": {"command": "git push --force origin main"},
-            "session_id": "bench-sess-1",
         },
         {
             "agent_id": "cursor",
             "tool_name": "Shell",
             "arguments": {"command": "git status"},
-            "session_id": "bench-sess-1",
         },
         {
             "agent_id": "antigravity",
             "tool_name": "run_command",
             "arguments": {"CommandLine": "ls -la"},
-            "session_id": "bench-sess-2",
         },
         {
             "agent_id": "antigravity",
             "tool_name": "run_command",
-            "arguments": {"CommandLine": "rm -rf /"},
-            "session_id": "bench-sess-2",
+            "arguments": {"CommandLine": "chmod 777 build.sh"},
         },
     ]
 
     latencies_ms: list[float] = []
 
     # Warmup
-    for p in test_payloads:
-        client.post("/api/v1/watcher/evaluate", json=p)
+    for idx, p in enumerate(base_payloads):
+        client.post("/api/v1/watcher/evaluate", json={**p, "session_id": f"warmup-sess-{idx}"})
 
     # Measurement
-    for _ in range(iterations):
-        for p in test_payloads:
+    for it in range(iterations):
+        for idx, p in enumerate(base_payloads):
+            sess_id = f"bench-sess-{it}-{idx}"
             t0 = time.perf_counter()
-            resp = client.post("/api/v1/watcher/evaluate", json=p)
+            resp = client.post("/api/v1/watcher/evaluate", json={**p, "session_id": sess_id})
             t1 = time.perf_counter()
             assert resp.status_code == 200
             latencies_ms.append((t1 - t0) * 1000.0)

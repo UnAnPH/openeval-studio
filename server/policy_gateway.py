@@ -1139,8 +1139,8 @@ class PolicyGateway:
         return None
 
     def _failure_score(self, heuristic: tuple[int, str]) -> tuple[int, str]:
-        if self.on_failure == "escalate":
-            return max(heuristic[0], 6), f"LLM failure → escalate: {heuristic[1]}"
+        if self.on_failure in ("escalate", "fail_closed"):
+            return max(heuristic[0], 6), f"LLM failure/timeout → fail-closed (ask): {heuristic[1]}"
         return heuristic
 
     def _fast_triage(
