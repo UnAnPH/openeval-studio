@@ -391,7 +391,7 @@ def check_negative_constraint_violation(
     full_combined = f"{tool_lower} {combined_target}".strip()
 
     is_delete_tool = any(k in tool_lower for k in ("delete", "remove", "unlink", "rm")) or any(
-        re.search(rf"\b{cmd}\b", input_lower) for cmd in ("rm", "unlink", "drop", "truncate")
+        re.search(rf"\b{cmd}\b", combined_target) for cmd in ("rm", "unlink", "drop", "truncate", "delete")
     )
 
     stop_words = {
