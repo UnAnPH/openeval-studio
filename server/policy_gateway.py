@@ -451,10 +451,7 @@ def check_negative_constraint_violation(
                     if not any(stem in combined_target or stem in full_combined for stem in stems):
                         all_found = False
                         break
-                if is_delete_prohibition:
-                    matched = all_found and is_delete_tool
-                else:
-                    matched = all_found
+                matched = (all_found and is_delete_tool) if is_delete_prohibition else all_found
             elif core_targets:
                 # Only generic targets exist (e.g. 'delete files')
                 if is_delete_prohibition:
