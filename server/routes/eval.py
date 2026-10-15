@@ -29,9 +29,10 @@ from engine.verifier import VerifierRunner
 from sandbox.docker_runner import DockerSandbox, create_sandbox_for_task
 from schemas.models import get_default_model, get_model_spec
 from schemas.task_spec import TaskMetadata, TaskSpec, load_task_spec
+from schemas.watcher_models import Session
 from server.db import current_user_slug
 from server.inspect_loader import list_inspect_run_records
-from server.store import RunRecord, global_run_store
+from server.store import global_run_store
 
 router = APIRouter()
 logger = logging.getLogger("openeval.server.eval")
@@ -878,15 +879,15 @@ async def launch_inspect_eval(req: LaunchEvalRequest) -> dict[str, str]:
     }
 
 
-@router.post("/api/eval/runs", response_model=RunRecord)
-async def record_eval_run(run: RunRecord) -> RunRecord:
+@router.post("/api/eval/runs", response_model=Session)
+async def record_eval_run(run: Session) -> Session:
     """Persist an evaluation run directly to the unified store."""
     global_run_store.save_run(run)
     return run
 
 
-@router.get("/api/eval/runs", response_model=list[RunRecord])
-async def list_runs() -> list[RunRecord]:
+@router.get("/api/eval/runs", response_model=list[Session])
+async def list_runs() -> list[Session]:
     """Retrieve all historical evaluation runs from both local store and Inspect logs."""
     studio_runs = global_run_store.list_runs()
     # Fixture-backed demo surface already has exported runs; skip host Inspect log parsing
@@ -894,7 +895,7 @@ async def list_runs() -> list[RunRecord]:
     inspect_runs = [] if current_user_slug.get() == "demo" else list_inspect_run_records(LOGS_DIR)
 
     seen_ids = set()
-    combined: list[RunRecord] = []
+    combined: list[Session] = []
 
     for r in studio_runs:
         if r.run_id not in seen_ids and not global_run_store.is_deleted(r.run_id):
@@ -925,7 +926,7 @@ async def clear_all_runs_endpoint() -> dict[str, str]:
 run_audit_revisions: dict[str, Any] = {}
 
 
-def _resolve_run_record(run_id: str) -> RunRecord:
+def _resolve_run_record(run_id: str) -> Session:
     if global_run_store.is_deleted(run_id):
         raise HTTPException(status_code=404, detail=f"Run '{run_id}' has been deleted")
 
@@ -1018,8 +1019,8 @@ async def revise_safety_audit_report(run_id: str, req: ReviseReportRequest) -> d
     return SafetyAuditReportGenerator.generate_report(record, rev)
 
 
-@router.get("/api/eval/runs/{run_id:path}", response_model=RunRecord)
-async def get_run_details(run_id: str) -> RunRecord:
+@router.get("/api/eval/runs/{run_id:path}", response_model=Session)
+async def get_run_details(run_id: str) -> Session:
     """Retrieve details and complete step trajectory for a specific run."""
     return _resolve_run_record(run_id)
 

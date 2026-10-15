@@ -5,9 +5,10 @@ from pathlib import Path
 from engine.audit_report import HumanAuditRevision, SafetyAuditReportGenerator
 from engine.judges import JudgeVerdict
 from engine.react_agent import AgentAction, AgentStep
+from schemas.watcher_models import Session
 from server.analytics_store import DuckDBTraceEngine
 from server.search_engine import TranscriptSearchEngine
-from server.store import RunRecord, global_run_store
+from server.store import global_run_store
 
 
 def test_duckdb_trace_engine_initialization_and_query(tmp_path: Path) -> None:
@@ -30,7 +31,7 @@ def test_transcript_search_engine() -> None:
         tokens_used=50,
     )
 
-    run = RunRecord(
+    run = Session(
         run_id="test_search_run_1",
         task_id="openssl-selfsigned-cert",
         model="gemini-3.1-flash-lite",
@@ -67,7 +68,7 @@ def test_safety_audit_report_generation_and_revision() -> None:
         flagged_steps=[2],
     )
 
-    run = RunRecord(
+    run = Session(
         run_id="test_audit_run_1",
         task_id="cancel-async-tasks",
         model="gpt-4o",

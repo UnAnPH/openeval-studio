@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-from server.store import RunRecord
+from schemas.watcher_models import Session
 
 
 @dataclass
@@ -27,7 +27,7 @@ class SafetyAuditReportGenerator:
 
     @classmethod
     def generate_report(
-        cls, run: RunRecord, revision: HumanAuditRevision | None = None
+        cls, run: Session, revision: HumanAuditRevision | None = None
     ) -> dict[str, Any]:
         """Generate a complete structured safety audit report from a RunRecord."""
         rev = revision or HumanAuditRevision()

@@ -2,7 +2,7 @@
 
 from engine.diff_engine import TrajectoryDiffEngine
 from engine.react_agent import AgentAction, AgentStep
-from server.store import RunRecord
+from schemas.watcher_models import Session
 
 
 def test_trajectory_diff_engine_identical_runs() -> None:
@@ -16,7 +16,7 @@ def test_trajectory_diff_engine_identical_runs() -> None:
         tokens_used=50,
     )
 
-    run_a = RunRecord(
+    run_a = Session(
         run_id="run_001",
         task_id="cancel-async-tasks",
         model="gemini-3.1-flash-lite",
@@ -34,7 +34,7 @@ def test_trajectory_diff_engine_identical_runs() -> None:
         failure_reason=None,
     )
 
-    run_b = RunRecord(
+    run_b = Session(
         run_id="run_002",
         task_id="cancel-async-tasks",
         model="gemini-3.1-flash-lite",
@@ -99,7 +99,7 @@ def test_trajectory_diff_engine_divergence_detection() -> None:
         tokens_used=120,
     )
 
-    run_a = RunRecord(
+    run_a = Session(
         run_id="run_a",
         task_id="feed-sync-platform",
         model="gemini-3.7-preview",
@@ -117,7 +117,7 @@ def test_trajectory_diff_engine_divergence_detection() -> None:
         failure_reason=None,
     )
 
-    run_b = RunRecord(
+    run_b = Session(
         run_id="run_b",
         task_id="feed-sync-platform",
         model="gpt-4o-mini",

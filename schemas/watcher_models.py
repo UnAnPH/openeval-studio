@@ -228,6 +228,14 @@ class ReviewRecord(BaseModel):
         description="Structured informed consent disclosure for intercepted actions",
     )
 
+    @property
+    def decision_id(self) -> str:
+        """Alias for id."""
+        return self.id
+
+
+GateDecision = ReviewRecord
+
 
 class Trajectory(BaseModel):
     """Full ordered chronological sequence of events for an agent session."""
@@ -261,6 +269,9 @@ class Session(BaseModel):
 
     # Trajectory & History
     trajectory: Trajectory = Field(default_factory=Trajectory)
+    decisions: list[GateDecision] = Field(
+        default_factory=list, description="Chronological list of GateDecisions for this session"
+    )
     steps: list[Any] = Field(default_factory=list)
     total_steps: int = Field(default=0)
 
@@ -624,7 +635,6 @@ DEFAULT_TOOL_THRESHOLDS: list[ToolThreshold] = [
 ]
 
 # Backward Compatibility Shims
-RunRecord = Session
 AgentTrajectory = Trajectory
 
 

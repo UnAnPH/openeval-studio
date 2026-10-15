@@ -13,12 +13,12 @@ from inspect_ai.log import read_eval_log
 from engine.judges import JudgeVerdict
 from engine.react_agent import AgentAction, AgentStep
 from schemas.models import get_model_spec
-from server.store import RunRecord
+from schemas.watcher_models import Session
 
 logger = logging.getLogger("openeval.server.inspect_loader")
 
 
-def parse_eval_log_to_run_record(eval_file_path: Path) -> RunRecord | None:
+def parse_eval_log_to_run_record(eval_file_path: Path) -> Session | None:
     """Parse a single .eval file into a full OpenEval RunRecord."""
     try:
         log = read_eval_log(str(eval_file_path))
@@ -228,13 +228,13 @@ def parse_eval_log_to_run_record(eval_file_path: Path) -> RunRecord | None:
 
         run_id = f"inspect_{eval_file_path.stem[-8:]}"
 
-        return RunRecord(
+        return Session(
+            session_id=run_id,
             run_id=run_id,
             task_id=task_id,
             model=clean_model,
             provider=provider,
             status=status,  # type: ignore[arg-type]
-            created_at=created_at,
             steps=steps,
             total_steps=len(steps),
             total_tokens=total_tokens,
@@ -252,8 +252,8 @@ def parse_eval_log_to_run_record(eval_file_path: Path) -> RunRecord | None:
         return None
 
 
-def list_inspect_run_records(logs_dir: Path) -> list[RunRecord]:
-    """Scan logs_dir for all .eval archives and return parsed RunRecords."""
+def list_inspect_run_records(logs_dir: Path) -> list[Session]:
+    """Scan logs_dir for all .eval archives and return parsed Sessions."""
     if not logs_dir.exists():
         return []
 
@@ -263,7 +263,7 @@ def list_inspect_run_records(logs_dir: Path) -> list[RunRecord]:
         reverse=True,
     )
 
-    records: list[RunRecord] = []
+    records: list[Session] = []
     for f in eval_files:
         rec = parse_eval_log_to_run_record(f)
         if rec:

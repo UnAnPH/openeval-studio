@@ -16,8 +16,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from engine.react_agent import AgentStep
 from schemas.scoring import ScoreStatus
+from schemas.watcher_models import Session
 from server.inspect_loader import parse_eval_log_to_run_record
-from server.store import RunRecord, global_run_store
+from server.store import global_run_store
 
 logger = logging.getLogger("openeval.engine.diff")
 
@@ -169,7 +170,7 @@ class TrajectoryDiffEngine:
         return difflib.SequenceMatcher(None, text_a, text_b).ratio()
 
     @classmethod
-    def compare_runs(cls, run_a: RunRecord, run_b: RunRecord) -> TrajectoryDiffSummary:
+    def compare_runs(cls, run_a: Session, run_b: Session) -> TrajectoryDiffSummary:
         """Perform full turn-by-turn alignment and metric diff between Run A and Run B."""
         steps_a = [
             s if isinstance(s, AgentStep) else AgentStep.model_validate(s)
@@ -327,8 +328,8 @@ class TrajectoryDiffEngine:
     @classmethod
     async def semantic_compare_runs(
         cls,
-        run_a: RunRecord,
-        run_b: RunRecord,
+        run_a: Session,
+        run_b: Session,
         runner: Any | None = None,
         model: str | None = None,
     ) -> SemanticComparisonVerdict:

@@ -12,8 +12,6 @@ from uuid import uuid4
 from schemas.watcher_models import Session
 from server.watcher_store import WatcherStore, get_watcher_store
 
-RunRecord = Session
-
 
 class RunStore:
     """Delegating store that bridges legacy RunStore calls into WatcherStore."""

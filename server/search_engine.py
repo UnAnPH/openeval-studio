@@ -8,8 +8,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from schemas.watcher_models import Session
 from server.inspect_loader import list_inspect_run_records
-from server.store import RunRecord, global_run_store
+from server.store import global_run_store
 
 
 @dataclass
@@ -59,7 +60,7 @@ class TranscriptSearchEngine:
         inspect_runs = list_inspect_run_records(logs_dir)
 
         seen_ids = set()
-        all_runs: list[RunRecord] = []
+        all_runs: list[Session] = []
         for r in runs_in_memory:
             if r.run_id not in seen_ids:
                 seen_ids.add(r.run_id)
