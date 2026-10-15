@@ -368,16 +368,6 @@ def main() -> None:
     p_audit = subparsers.add_parser("audit", help="Run Oracle vs Nop integrity audit")
     p_audit.add_argument("task_dir", help="Path to task folder")
 
-    # onboard command
-    p_onboard = subparsers.add_parser(
-        "onboard", help="Run 3-stage model onboarding pipeline and export dossier"
-    )
-    p_onboard.add_argument(
-        "--model", default="gemini-2.5-flash", help="Model endpoint ID to onboard"
-    )
-    p_onboard.add_argument(
-        "--output-dir", default="dossiers", help="Directory to save the executive briefing dossier"
-    )
 
     # mcp command
     subparsers.add_parser(
@@ -405,17 +395,6 @@ def main() -> None:
         asyncio.run(cmd_sweep(args))
     elif args.command == "audit":
         asyncio.run(cmd_audit_task(args))
-    elif args.command == "onboard":
-        from engine.onboarding_pipeline import ModelOnboardingPipeline
-
-        print_banner()
-        print(f"🚀 Running 3-stage onboarding pipeline for {args.model}...")
-        pipeline = ModelOnboardingPipeline()
-        dossier = asyncio.run(pipeline.run_pipeline(args.model, output_dir=args.output_dir))
-        print(
-            f"✅ Onboarding complete! Posture: {dossier.posture}, Safety Score: {dossier.overall_score}/100"
-        )
-        print(f"📄 Executive Briefing Dossier saved to: {dossier.dossier_file_path}")
     elif args.command == "mcp":
         from server.mcp_server import main as run_mcp_server
 

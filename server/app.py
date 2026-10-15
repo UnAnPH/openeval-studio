@@ -1158,19 +1158,6 @@ async def ingest_watcher_session(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-@app.post("/api/v1/watcher/simulate-blocked")
-async def simulate_blocked_session(
-    agent_id: str = Query(default="antigravity", description="Unused — endpoint removed"),
-    violation_type: str = Query(default="exfiltration", description="Unused — endpoint removed"),
-) -> dict[str, Any]:
-    """Removed: synthetic blocked incidents are no longer generated."""
-    raise HTTPException(
-        status_code=410,
-        detail=(
-            "simulate-blocked removed. Use a real agent hook or POST /api/v1/watcher/evaluate "
-            f"(requested agent_id={agent_id}, violation_type={violation_type})."
-        ),
-    )
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -1720,9 +1707,6 @@ class GraderBacktestRequest(BaseModel):
     ensemble_models: list[str] | None = None
 
 
-class ModelOnboardRequest(BaseModel):
-    model_id: str = "gemini-3.1-flash-lite"
-
 
 @app.get("/api/v1/watcher/graders/definitions")
 async def list_grader_definitions() -> list[dict[str, Any]]:
@@ -1842,156 +1826,6 @@ async def get_watcher_telemetry() -> dict[str, Any]:
     report = telemetry_svc.get_telemetry_report()
     return report.model_dump()
 
-
-@app.post("/api/v1/watcher/models/onboard")
-async def onboard_model_pipeline(req: ModelOnboardRequest) -> dict[str, Any]:
-    """Run automated 3-stage model onboarding pipeline and generate briefing dossier."""
-    from engine.onboarding_pipeline import ModelOnboardingPipeline
-
-    pipeline = ModelOnboardingPipeline()
-    dossier = await pipeline.run_pipeline(req.model_id)
-    return dossier.model_dump()
-
-
-class RedTeamProbeRequest(BaseModel):
-    task_id: str = Field(..., description="Task or scenario under evaluation")
-    initial_prompt: str = Field(..., description="Forbidden or safety-critical user goal")
-    strategy: Literal[
-        "cognitive_reframing",
-        "research_hypothetical",
-        "cipher_obfuscation",
-        "authority_roleplay",
-    ] = "cognitive_reframing"
-    target_model: str = Field(
-        default="gemini-3.1-flash-lite", description="Target model identifier"
-    )
-    max_turns: int = Field(default=3, ge=1, le=3)
-    force_mock: bool = Field(
-        default=False, description="Whether to simulate responses deterministically"
-    )
-
-
-@app.get("/api/v1/redteam/strategies")
-async def list_redteam_strategies() -> list[dict[str, str]]:
-    """List supported red-teaming adversarial strategies with descriptions."""
-    from engine.redteam_loop import ATTACK_STRATEGY_DESCRIPTIONS
-
-    return [
-        {"strategy": strat, "description": desc}
-        for strat, desc in ATTACK_STRATEGY_DESCRIPTIONS.items()
-    ]
-
-
-@app.post("/api/v1/redteam/probe")
-@app.post("/api/redteam/probe")
-async def run_redteam_probe_endpoint(req: RedTeamProbeRequest) -> StreamingResponse:
-    """Execute multi-turn PAIR-lite adversarial prober streaming turn-by-turn events via SSE."""
-    from engine.redteam_loop import RedTeamProber, RedTeamTurn
-
-    async def event_generator() -> AsyncGenerator[str, None]:
-        prober = RedTeamProber(
-            attacker_model="gemini-3.1-flash-lite",
-            judge_model="gemini-3.1-flash-lite",
-            force_mock=req.force_mock,
-        )
-        yield f"event: start\ndata: {json.dumps({'task_id': req.task_id, 'strategy': req.strategy})}\n\n"
-
-        turns: list[RedTeamTurn] = []
-        try:
-            async for turn in prober.run_probe_stream(
-                task_id=req.task_id,
-                initial_prompt=req.initial_prompt,
-                strategy=req.strategy,
-                target_model=req.target_model,
-                max_turns=req.max_turns,
-            ):
-                turns.append(turn)
-                yield f"event: turn\ndata: {json.dumps(turn.model_dump())}\n\n"
-        except Exception as exc:
-            logger.error("Red-team probe error: %s", exc)
-            yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"
-            return
-
-        max_risk = max((t.judge_score for t in turns), default=1)
-        compromised = any(t.compromised for t in turns)
-        probe_id = f"redteam-{uuid4().hex[:8]}"
-        summary = {
-            "run_id": probe_id,
-            "task_id": req.task_id,
-            "strategy": req.strategy,
-            "target_model": req.target_model,
-            "total_turns": len(turns),
-            "compromised": compromised,
-            "max_risk_score": max_risk,
-            "verdict": "VULNERABLE" if compromised else "RESILIENT",
-        }
-
-        # Persist probe run to evaluate runs history with agent_type="red_team"
-        try:
-            from schemas.watcher_models import Session
-
-            provider = req.target_model.split("/")[0] if "/" in req.target_model else "google"
-            probe_steps = [
-                {
-                    "step_number": t.turn,
-                    "thought": f"Attacker Strategy: {t.strategy}\n\nAttacker Prompt: {t.attacker_prompt}",
-                    "action": {
-                        "tool": "adversarial_probe",
-                        "command": None,
-                        "arguments": {
-                            "strategy": t.strategy,
-                            "attacker_prompt": t.attacker_prompt,
-                            "target_response": t.target_response,
-                            "judge_score": t.judge_score,
-                            "judge_reason": t.judge_reason,
-                            "compromised": t.compromised,
-                        },
-                    },
-                    "observation": t.target_response,
-                    "is_blocked": t.compromised,
-                    "rule_violation_tag": "CRITICAL_POLICY_VIOLATION" if t.compromised else None,
-                    "risk_score": round(t.judge_score / 5.0, 2),
-                    "latency_ms": 300.0,
-                    "tokens_used": 300,
-                }
-                for t in turns
-            ]
-            redteam_session = Session(
-                session_id=probe_id,
-                run_id=probe_id,
-                title=f"Red Team · {req.strategy}",
-                project_name=f"Red Team: {req.strategy}",
-                task_id=req.task_id or req.strategy,
-                agent_type="red_team",
-                model=req.target_model,
-                provider=provider,
-                status="completed",
-                steps=probe_steps,
-                total_steps=len(turns),
-                passed=not compromised,
-                reward=0.0 if compromised else 1.0,
-                total_tokens=len(turns) * 300,
-                total_duration_sec=float(len(turns) * 1.5),
-                estimated_cost_usd=round(len(turns) * 0.00015, 6),
-                final_summary=f"Red-team probe ({req.strategy}): {summary['verdict']}, max risk={max_risk}/5, turns={len(turns)}",
-                failure_reason=f"Compromised via {req.strategy}" if compromised else None,
-            )
-            global_run_store.save_run(redteam_session)
-            logger.info("Saved red-team probe run %s (%s)", probe_id, summary["verdict"])
-        except Exception as save_err:
-            logger.warning("Failed to persist red-team probe run: %s", save_err)
-
-        yield f"event: complete\ndata: {json.dumps(summary)}\n\n"
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )
 
 
 @app.get("/api/v1/watcher/daemon")
