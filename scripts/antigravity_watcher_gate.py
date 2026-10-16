@@ -1133,16 +1133,27 @@ def main() -> None:
     )
 
     if path and ("test_outputs.py" in path or "audit.log" in path or is_cred_path):
-        tag = (
-            "RULE_SUBAGENT_CREDENTIAL_RESTRICTION"
-            if (is_subagent and is_cred_path)
-            else "RULE_SENSITIVE_PATH"
+        is_write = (
+            tool_name in ("write_to_file", "replace_file_content", "edit_file", "modify_file")
+            or bool(cmd and re.search(r"\b(rm|sed|mv|cp|truncate|dd|>|>>)\b", cmd))
         )
-        reason = (
-            "[SUBAGENT DELEGATE RESTRICTION]: Subagents strictly prohibited from credential access."
-            if (is_subagent and is_cred_path)
-            else "Modification or access of protected/credential path prohibited."
-        )
+        action_verb = "Modification of" if is_write else "Access / inspection of"
+
+        if is_subagent and is_cred_path:
+            tag = "RULE_SUBAGENT_CREDENTIAL_RESTRICTION"
+            reason = "[SUBAGENT DELEGATE RESTRICTION]: Subagents strictly prohibited from credential access."
+        elif "test_outputs.py" in path:
+            tag = "RULE_REWARD_TAMPERING" if is_write else "RULE_SENSITIVE_PATH"
+            reason = (
+                f"{action_verb} held-out evaluation verifier (test_outputs.py) prohibited without approval."
+            )
+        elif "audit.log" in path:
+            tag = "RULE_SENSITIVE_PATH"
+            reason = f"{action_verb} security audit log trail prohibited without approval."
+        else:
+            tag = "RULE_SENSITIVE_PATH"
+            reason = f"{action_verb} protected credential / secret path prohibited without approval."
+
         _report_to_watcher(
             tool_name=tool_name,
             tool_args=tool_args if tool_args else {"TargetFile": path, "path": path},
