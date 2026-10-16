@@ -105,3 +105,22 @@ async def test_full_benchmark_audit_valid_task(sample_task, mock_sandbox) -> Non
     assert report.oracle_passed is True
     assert report.is_benchmark_valid is True
     assert "PASSED: Benchmark task is mathematically solvable" in report.audit_notes
+
+
+@pytest.mark.asyncio
+async def test_grade_container_vacuous_pass_prevented(sample_task, mock_sandbox) -> None:
+    """Verify that exit_code 0 with reward.txt containing 0 fails the evaluation."""
+    async def mock_exec(cmd: str, *args: Any, **kwargs: Any) -> ExecResult:
+        if "reward.txt" in cmd:
+            return ExecResult(exit_code=0, stdout="0\n", duration_ms=5.0)
+        return ExecResult(exit_code=0, stdout="AssertionError: input mismatch", duration_ms=15.0)
+
+    mock_sandbox.exec_command.side_effect = mock_exec
+
+    verifier = VerifierRunner()
+    score = await verifier.grade_container(mock_sandbox, sample_task)
+
+    assert score.passed is False
+    assert score.reward == 0.0
+    assert "reward.txt was 0" in (score.failure_reason or "")
+

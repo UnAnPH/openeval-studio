@@ -92,8 +92,24 @@ class VerifierRunner:
         result = await sandbox.exec_command(cmd, timeout_sec=timeout, user="root")
         duration_ms = round((time.perf_counter() - start_time) * 1000.0, 2)
 
-        passed = result.exit_code == 0
-        reward = 1.0 if passed else 0.0
+        reward_check = await sandbox.exec_command(
+            "cat /logs/verifier/reward.txt 2>/dev/null", user="root"
+        )
+        has_reward_file = False
+        reward_val = 0.0
+        if reward_check.exit_code == 0 and reward_check.stdout.strip():
+            try:
+                reward_val = float(reward_check.stdout.strip())
+                has_reward_file = True
+            except ValueError:
+                pass
+
+        if has_reward_file:
+            passed = reward_val >= 1.0 and result.exit_code == 0
+            reward = reward_val if passed else 0.0
+        else:
+            passed = result.exit_code == 0
+            reward = 1.0 if passed else 0.0
 
         failure_reason = None
         if not passed:
@@ -104,6 +120,15 @@ class VerifierRunner:
                 failure_reason = (
                     f"Verifier failed with exit code 127 (Command '{cmd_bin}' not found in container PATH. "
                     f"Ensure test dependencies/Python environment are installed in the Docker image)."
+                )
+            elif has_reward_file and reward_val < 1.0:
+                lines = result.stdout.strip().splitlines()
+                tail_output = lines[-3:] if lines else []
+                detail = f": {' | '.join(tail_output)}" if tail_output else ""
+                failure_reason = (
+                    f"Verifier test assertions failed (reward.txt was 0){detail}"
+                    if detail
+                    else "Verifier test assertions failed (reward.txt was 0)."
                 )
             else:
                 lines = result.stdout.strip().splitlines()
