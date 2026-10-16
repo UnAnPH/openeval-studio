@@ -17,9 +17,81 @@ import {
   Shield,
   X,
 } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { RunRecord, TaskDetail, TaskSummary } from '../types';
+
+interface BenchmarkDescriptionProps {
+  description?: string | null;
+  className?: string;
+}
+
+export const BenchmarkDescription: React.FC<BenchmarkDescriptionProps> = ({
+  description,
+  className = 'mt-1.5',
+}) => {
+  const [isExpanded, setIsExpanded] = useState<boolean>(false);
+  const [isOverflowing, setIsOverflowing] = useState<boolean>(false);
+  const textRef = useRef<HTMLParagraphElement>(null);
+
+  useEffect(() => {
+    setIsExpanded(false);
+  }, [description]);
+
+  useLayoutEffect(() => {
+    const el = textRef.current;
+    if (!el) return;
+
+    const checkOverflow = () => {
+      if (!isExpanded) {
+        setIsOverflowing(el.scrollHeight > el.clientHeight + 1);
+      }
+    };
+
+    checkOverflow();
+
+    window.addEventListener('resize', checkOverflow);
+
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(() => {
+        checkOverflow();
+      });
+      observer.observe(el);
+    }
+
+    return () => {
+      window.removeEventListener('resize', checkOverflow);
+      observer?.disconnect();
+    };
+  }, [description, isExpanded]);
+
+  const toggleExpand = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsExpanded((prev) => !prev);
+  };
+
+  return (
+    <div className={className}>
+      <p
+        ref={textRef}
+        className={`text-xs text-text-secondary leading-relaxed ${isExpanded ? '' : 'line-clamp-3'}`}
+      >
+        {description || 'No description available for this benchmark.'}
+      </p>
+      {isOverflowing && (
+        <button
+          type="button"
+          onClick={toggleExpand}
+          className="text-[11px] font-semibold text-brand-purple hover:text-purple-900 mt-1 flex items-center gap-0.5 cursor-pointer"
+        >
+          <span>{isExpanded ? 'Collapse' : 'Read more'}</span>
+          <Icon icon={isExpanded ? ChevronUp : ChevronDown} className="text-[10px]" />
+        </button>
+      )}
+    </div>
+  );
+};
 
 interface BenchmarksListProps {
   tasks: TaskSummary[];
@@ -39,7 +111,6 @@ export const BenchmarksList: React.FC<BenchmarksListProps> = ({
   const [searchText, setSearchText] = useState<string>('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [difficultyFilter, setDifficultyFilter] = useState<string>('all');
-  const [expandedDescriptions, setExpandedDescriptions] = useState<Record<string, boolean>>({});
 
   // Benchmark detail modal state
   const [inspectTaskId, setInspectTaskId] = useState<string | null>(null);
@@ -49,14 +120,6 @@ export const BenchmarksList: React.FC<BenchmarksListProps> = ({
   const [activeTab, setActiveTab] = useState<'instructions' | 'toml' | 'dockerfile' | 'seeds' | 'verifier'>('instructions');
   const [selectedSeedPath, setSelectedSeedPath] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
-
-  const toggleExpandDescription = (taskId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setExpandedDescriptions((prev) => ({
-      ...prev,
-      [taskId]: !prev[taskId],
-    }));
-  };
 
   const handleCopyText = (key: string, text: string) => {
     navigator.clipboard.writeText(text);
@@ -243,7 +306,6 @@ export const BenchmarksList: React.FC<BenchmarksListProps> = ({
           const passedCount = taskRuns.filter((r) => r.passed === true).length;
           const passRate = taskRuns.length > 0 ? Math.round((passedCount / taskRuns.length) * 100) : null;
           const latestRun = taskRuns.length > 0 ? taskRuns[0] : null;
-          const isExpanded = !!expandedDescriptions[task.task_id];
 
           return (
             <div
@@ -294,21 +356,7 @@ export const BenchmarksList: React.FC<BenchmarksListProps> = ({
                     <Icon icon={ExternalLink} className="text-xs text-text-muted opacity-0 group-hover:opacity-100 transition-opacity ml-1.5" />
                   </h3>
 
-                  <div className="mt-1.5">
-                    <p className={`text-xs text-text-secondary leading-relaxed ${isExpanded ? '' : 'line-clamp-3'}`}>
-                      {task.instruction_preview || 'No description available for this benchmark.'}
-                    </p>
-                    {task.instruction_preview && task.instruction_preview.length > 100 && (
-                      <button
-                        type="button"
-                        onClick={(e) => toggleExpandDescription(task.task_id, e)}
-                        className="text-[11px] font-semibold text-brand-purple hover:text-purple-900 mt-1 flex items-center gap-0.5 cursor-pointer"
-                      >
-                        <span>{isExpanded ? 'Collapse' : 'Read more'}</span>
-                        <Icon icon={isExpanded ? ChevronUp : ChevronDown} className="text-[10px]" />
-                      </button>
-                    )}
-                  </div>
+                  <BenchmarkDescription description={task.instruction_preview} />
                 </div>
 
                 {/* Quotas & Tags */}
