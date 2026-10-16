@@ -165,6 +165,7 @@ class _AuthMiddleware(BaseHTTPMiddleware):
             or path.startswith("/docs")
             or path.startswith("/redoc")
             or path == "/openapi.json"
+            or (method in ("GET", "HEAD") and (path.startswith("/api/tasks") or path == "/api/models"))
         ):
             return await call_next(request)
 
@@ -289,6 +290,33 @@ class TaskSummary(BaseModel):
     max_steps: int = 100
     memory_mb: int = 2048
     instruction_preview: str = ""
+
+
+class TaskFilePreview(BaseModel):
+    """File path and preview content for benchmark environments/seed files."""
+
+    path: str
+    content: str
+    size_bytes: int
+
+
+class TaskDetail(BaseModel):
+    """Detailed benchmark specification including full prompt, Dockerfile, task.toml, and seeds."""
+
+    task_id: str
+    category: str | None = None
+    difficulty: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    timeout_sec: float = 600.0
+    max_steps: int = 100
+    memory_mb: int = 2048
+    cpus: int = 2
+    allow_internet: bool = False
+    instruction_text: str
+    task_toml: str | None = None
+    dockerfile: str | None = None
+    verifier_code: str | None = None
+    seed_files: list[TaskFilePreview] = Field(default_factory=list)
 
 
 def open_db_session() -> Any:
@@ -1374,6 +1402,91 @@ async def list_tasks() -> list[TaskSummary]:
             summaries.append(item)
 
     return summaries
+
+
+@app.get("/api/tasks/{task_id:path}", response_model=TaskDetail)
+async def get_task_detail(task_id: str) -> TaskDetail:
+    """Retrieve full task specifications, instruction.md, Dockerfile, task.toml, and seed files."""
+    candidates = [
+        TASKS_DIR / task_id,
+        TASKS_DIR / task_id.replace("/", "--"),
+        TASKS_DIR / task_id.replace("--", "/"),
+    ]
+
+    target_dir: Path | None = None
+    for cand in candidates:
+        if cand.is_dir() and (cand / "task.toml").exists():
+            target_dir = cand
+            break
+
+    if target_dir:
+        try:
+            spec = load_task_spec(target_dir)
+            task_toml_text = (target_dir / "task.toml").read_text(encoding="utf-8") if (target_dir / "task.toml").exists() else None
+            dockerfile_text = spec.dockerfile_path.read_text(encoding="utf-8") if spec.dockerfile_path.exists() else None
+            verifier_text = spec.test_outputs_path.read_text(encoding="utf-8") if spec.test_outputs_path.exists() else None
+
+            # Gather seed files in environment/
+            env_dir = target_dir / "environment"
+            seed_files: list[TaskFilePreview] = []
+            if env_dir.is_dir():
+                for p in sorted(env_dir.rglob("*")):
+                    if p.is_file() and p.name != "Dockerfile":
+                        try:
+                            # Skip binary or very large files (>100KB)
+                            content = p.read_text(encoding="utf-8", errors="replace")[:20000]
+                            rel_path = str(p.relative_to(env_dir))
+                            seed_files.append(
+                                TaskFilePreview(
+                                    path=rel_path,
+                                    content=content,
+                                    size_bytes=p.stat().st_size,
+                                )
+                            )
+                        except Exception:
+                            continue
+
+            return TaskDetail(
+                task_id=spec.task_id,
+                category=spec.metadata.category,
+                difficulty=spec.metadata.difficulty,
+                tags=spec.metadata.tags,
+                timeout_sec=spec.agent.timeout_sec,
+                max_steps=spec.agent.max_steps,
+                memory_mb=spec.environment.memory_mb,
+                cpus=spec.environment.cpus,
+                allow_internet=spec.environment.allow_internet,
+                instruction_text=spec.instruction_text,
+                task_toml=task_toml_text,
+                dockerfile=dockerfile_text,
+                verifier_code=verifier_text,
+                seed_files=seed_files,
+            )
+        except Exception as e:
+            logger.warning("Failed loading task spec for %s: %s", task_id, e)
+            raise HTTPException(status_code=500, detail=f"Failed loading task {task_id}: {e}") from e
+
+    # Fallback to INSPECT_EVALS_CATALOG
+    for item in INSPECT_EVALS_CATALOG:
+        if item.task_id == task_id or item.task_id == task_id.replace("--", "/"):
+            return TaskDetail(
+                task_id=item.task_id,
+                category=item.category,
+                difficulty=item.difficulty,
+                tags=item.tags,
+                timeout_sec=item.timeout_sec,
+                max_steps=item.max_steps,
+                memory_mb=item.memory_mb,
+                cpus=2,
+                allow_internet=False,
+                instruction_text=item.instruction_preview or f"Inspect Evals benchmark suite: {item.task_id}",
+                task_toml=f'[task]\nid = "{item.task_id}"\ncategory = "{item.category}"\n\n[environment]\nmemory_mb = {item.memory_mb}\nallow_internet = false',
+                dockerfile="FROM python:3.11-slim\nWORKDIR /workspace\n# Hermetic Inspect AI Evaluation Sandbox\nRUN pip install inspect-ai pytest",
+                verifier_code=f"# Native Inspect AI benchmark solver for {item.task_id}\nfrom inspect_ai import eval, task\n\n# Verified via Inspect AI automated rubric",
+                seed_files=[],
+            )
+
+    raise HTTPException(status_code=404, detail=f"Task '{task_id}' not found.")
 
 
 # ============================================================================

@@ -23,6 +23,29 @@ export interface TaskSummary {
   instruction_preview: string;
 }
 
+export interface TaskFilePreview {
+  path: string;
+  content: string;
+  size_bytes: number;
+}
+
+export interface TaskDetail {
+  task_id: string;
+  category?: string | null;
+  difficulty?: string | null;
+  tags: string[];
+  timeout_sec?: number | null;
+  max_steps?: number | null;
+  memory_mb?: number | null;
+  cpus?: number | null;
+  allow_internet?: boolean;
+  instruction_text: string;
+  task_toml?: string | null;
+  dockerfile?: string | null;
+  verifier_code?: string | null;
+  seed_files: TaskFilePreview[];
+}
+
 export interface AgentAction {
   thought: string;
   tool: 'execute_bash' | 'view_file' | 'write_file' | 'finish' | string;

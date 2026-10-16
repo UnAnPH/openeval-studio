@@ -91,7 +91,7 @@ def test_load_bundled_feed_sync_task() -> None:
 
     spec = load_task_spec(bundled_task)
     assert spec.task_id == "feed-sync-platform"
-    assert spec.metadata.category == "software_engineering"
+    assert spec.metadata.category == "Software Engineering"
     assert spec.environment.cpus == 2
     assert spec.environment.memory_mb == 4096
 

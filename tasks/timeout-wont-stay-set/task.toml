@@ -4,7 +4,7 @@
 
 [metadata]
 # REPLACE: pick a category (see Task Categories) and set a non-zero estimate.
-category = "software_engineering"                    # software_engineering, data_science, security, etc.
+category = "Software Engineering"                    # Software Engineering, data_science, security, etc.
 expert_time_estimate_hours = 2.0   # best-case hours for a focused expert who knows the answer
 
 [verifier]

@@ -1,7 +1,7 @@
 # RAG Incident Investigation Benchmark Task Spec
 
 [metadata]
-category = "rag_incident"
+category = "RAG Incident"
 difficulty = "hard"
 expert_time_estimate_hours = 2
 

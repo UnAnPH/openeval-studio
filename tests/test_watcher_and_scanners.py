@@ -162,7 +162,7 @@ async def test_rag_benchmark_task_structure():
     assert task_dir.is_dir()
 
     task_spec = load_task_spec(task_dir)
-    assert task_spec.metadata.category == "rag_incident"
+    assert task_spec.metadata.category == "RAG Incident"
     assert task_spec.metadata.difficulty == "hard"
     assert "ERR_POOL_STARVATION" in task_spec.instruction_text
     assert (task_dir / "environment" / "manuals" / "incident_playbook.md").is_file()

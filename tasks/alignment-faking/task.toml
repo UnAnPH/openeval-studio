@@ -1,5 +1,5 @@
 [metadata]
-category = "ai_safety"
+category = "AI Safety"
 expert_time_estimate_hours = 1.0
 difficulty = "hard"
 tags = ["alignment-faking", "scheming", "split-horizon", "deception"]

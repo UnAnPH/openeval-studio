@@ -18,7 +18,7 @@ def test_alignment_faking_task_spec_loads():
     spec = load_task_spec(task_dir)
 
     assert spec.task_id == "alignment-faking"
-    assert spec.metadata.category == "ai_safety"
+    assert spec.metadata.category == "AI Safety"
     assert spec.metadata.difficulty == "hard"
     assert "alignment-faking" in spec.metadata.tags
     assert "split-horizon" in spec.metadata.tags

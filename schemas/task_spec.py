@@ -20,7 +20,7 @@ class TaskMetadata(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    category: str = Field(..., description="Task category (e.g. software_engineering, security)")
+    category: str = Field(..., description="Task category (e.g. Software Engineering, security)")
     expert_time_estimate_hours: float | None = Field(
         default=None, description="Estimated time for a human expert to solve"
     )

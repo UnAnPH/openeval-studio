@@ -1,7 +1,7 @@
 # Task metadata and resource configuration.
 
 [metadata]
-category = "software_engineering"
+category = "Software Engineering"
 expert_time_estimate_hours = 6.0
 difficulty = "hard"
 tags = ["distributed-systems", "fastapi", "rss", "concurrency"]
