@@ -33,6 +33,14 @@ interface CompareTestResultsProps {
   onNavigateToStudio?: () => void;
 }
 
+function formatRunIdTail(id: string, maxLen: number = 34): string {
+  if (!id) return '';
+  if (id.length <= maxLen) return id;
+  const tailLen = 18; // Preserves e.g. "-192514-1ti8q0" or "-20261016-192514"
+  const headLen = Math.max(8, maxLen - tailLen - 3);
+  return `${id.slice(0, headLen)}...${id.slice(-tailLen)}`;
+}
+
 // ---------------------------------------------------------------------------
 // Scalable Run Picker Modal (Searchable across 10,000+ runs with faceted filters)
 // ---------------------------------------------------------------------------
@@ -305,15 +313,10 @@ const RunPickerModal: React.FC<RunPickerModalProps> = ({
                       </span>
 
                       {/* Run ID */}
-                      <span className="text-[10px] font-mono text-text-muted">
-                        id: <strong>{r.run_id.slice(0, 8)}</strong>
+                      <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-slate-700 text-[11px] font-mono" title={r.run_id}>
+                        id: <strong className="text-slate-900">{formatRunIdTail(r.run_id, 38)}</strong>
                       </span>
                     </div>
-
-                    {/* Summary / Failure reason */}
-                    <p className="text-xs text-text-secondary line-clamp-1">
-                      {r.final_summary || r.failure_reason || (r.passed ? 'All verifier assertions passed.' : 'Task verification failure recorded.')}
-                    </p>
 
                     {/* Meta details */}
                     <div className="flex items-center gap-3 text-[11px] text-text-muted font-mono">
@@ -322,14 +325,6 @@ const RunPickerModal: React.FC<RunPickerModalProps> = ({
                       <span>⏱ {(r.total_duration_sec != null ? r.total_duration_sec : 0).toFixed(1)}s</span>
                       <span>·</span>
                       <span>⚡ {r.total_tokens.toLocaleString()} tok</span>
-                      <span>·</span>
-                      <span>💰 ${r.estimated_cost_usd.toFixed(4)}</span>
-                      {r.human_reviewer && (
-                        <>
-                          <span>·</span>
-                          <span className="text-brand-purple font-semibold">Reviewer: {r.human_reviewer}</span>
-                        </>
-                      )}
                     </div>
                   </div>
 
@@ -750,10 +745,10 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
 
           {/* Action Row: Non-editable selector on the left, Choose button on the right */}
           <div className="flex items-center gap-2">
-            <div className="flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-slate-700 min-w-0">
-              <span className="text-slate-400 select-none text-[11px]">Selected:</span>
-              <span className="font-bold text-slate-900 truncate">{runA.run_id.slice(0, 10)}...</span>
-              <span className="text-slate-500 truncate text-[11px]">({runA.model})</span>
+            <div className="flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-slate-700 min-w-0 overflow-hidden">
+              <span className="text-slate-400 select-none text-[11px] shrink-0">Selected:</span>
+              <span className="font-bold text-slate-900" title={runA.run_id}>{formatRunIdTail(runA.run_id, 36)}</span>
+              <span className="text-slate-500 truncate text-[11px] min-w-0">({runA.model})</span>
             </div>
             <button
               type="button"
@@ -811,10 +806,10 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
 
           {/* Action Row: Non-editable selector on the left, Choose button on the right */}
           <div className="flex items-center gap-2">
-            <div className="flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-slate-700 min-w-0">
-              <span className="text-slate-400 select-none text-[11px]">Selected:</span>
-              <span className="font-bold text-slate-900 truncate">{runB.run_id.slice(0, 10)}...</span>
-              <span className="text-slate-500 truncate text-[11px]">({runB.model})</span>
+            <div className="flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-slate-700 min-w-0 overflow-hidden">
+              <span className="text-slate-400 select-none text-[11px] shrink-0">Selected:</span>
+              <span className="font-bold text-slate-900" title={runB.run_id}>{formatRunIdTail(runB.run_id, 36)}</span>
+              <span className="text-slate-500 truncate text-[11px] min-w-0">({runB.model})</span>
             </div>
             <button
               type="button"

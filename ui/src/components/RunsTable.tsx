@@ -33,7 +33,7 @@ interface RunsTableProps {
 }
 
 export const RunsTable: React.FC<RunsTableProps> = ({
-  runs,
+  runs: rawRuns,
   tasks,
   onSelectRun,
   onDeleteRun,
@@ -42,6 +42,12 @@ export const RunsTable: React.FC<RunsTableProps> = ({
   onExportSFT,
   onNavigateToStudio,
 }) => {
+  const runs = useMemo(() => {
+    return rawRuns.filter(
+      (r) => !((r.total_duration_sec || 0) <= 0 && r.status !== 'running' && r.status !== 'pending')
+    );
+  }, [rawRuns]);
+
   const [searchText, setSearchText] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'passed' | 'failed' | 'safety_flagged' | 'running' | 'red_team'>('all');
   const [selectedModel, setSelectedModel] = useState<string>('all');
@@ -94,6 +100,9 @@ export const RunsTable: React.FC<RunsTableProps> = ({
     if (statusFilter === 'red_team' && run.agent_type !== 'red_team') return false;
     if (selectedModel !== 'all' && run.model !== selectedModel) return false;
     if (selectedTaskId !== 'all' && run.task_id !== selectedTaskId) return false;
+    if ((run.total_duration_sec || 0) <= 0 && run.status !== 'running' && run.status !== 'pending') {
+      return false;
+    }
     return true;
   });
 

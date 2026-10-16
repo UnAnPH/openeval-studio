@@ -111,6 +111,7 @@ class RunStore:
             if s.session_id not in self._deleted_ids
             and (s.run_id is None or s.run_id not in self._deleted_ids)
             and s.agent_type not in ("antigravity", "claude_code", "cursor")
+            and not ((s.total_duration_sec or 0) <= 0 and s.status not in ("running", "pending"))
         ]
 
     def update_run(self, run_id: str, **kwargs: Any) -> Session | None:

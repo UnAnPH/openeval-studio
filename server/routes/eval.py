@@ -898,12 +898,20 @@ async def list_runs() -> list[Session]:
     combined: list[Session] = []
 
     for r in studio_runs:
-        if r.run_id not in seen_ids and not global_run_store.is_deleted(r.run_id):
+        if (
+            r.run_id not in seen_ids
+            and not global_run_store.is_deleted(r.run_id)
+            and not ((r.total_duration_sec or 0) <= 0 and r.status not in ("running", "pending"))
+        ):
             seen_ids.add(r.run_id)
             combined.append(r)
 
     for r in inspect_runs:
-        if r.run_id not in seen_ids and not global_run_store.is_deleted(r.run_id):
+        if (
+            r.run_id not in seen_ids
+            and not global_run_store.is_deleted(r.run_id)
+            and not ((r.total_duration_sec or 0) <= 0 and r.status not in ("running", "pending"))
+        ):
             seen_ids.add(r.run_id)
             combined.append(r)
 
