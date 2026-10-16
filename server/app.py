@@ -216,16 +216,45 @@ class _AuthMiddleware(BaseHTTPMiddleware):
         # Demo surface read requests strictly view the demo user's rows,
         # Demo surface read requests and ephemeral evaluation launches execute under demo user context
         if is_demo_surface:
-            is_eval_action = (
-                path in ("/api/eval/run", "/api/eval/launch")
+            is_permitted_demo_action = (
+                method in ("GET", "HEAD", "OPTIONS")
+                or path in (
+                    "/api/eval/run",
+                    "/api/eval/launch",
+                    "/api/eval/runs",
+                    "/api/eval/runs/clear",
+                    "/api/eval/stop_all",
+                    "/api/eval/search",
+                    "/api/v1/watcher/graders/audit-session",
+                    "/api/v1/watcher/graders/backtest",
+                    "/api/v1/watcher/reviews/resolve-all",
+                    "/api/v1/watcher/gate/resolve",
+                    "/api/v1/watcher/policy/reset",
+                    "/api/v1/watcher/policy/rule",
+                    "/api/v1/watcher/policy/threshold",
+                    "/api/v1/watcher/policy/thresholds",
+                    "/api/v1/watcher/config",
+                    "/api/v1/watcher/sessions/clear",
+                    "/api/v1/search/fragments",
+                )
+                or path.startswith("/api/v1/watcher/graders/definitions/")
+                or path.startswith("/api/eval/compare/")
+                or path.startswith("/api/v1/search/")
                 or (
                     path.startswith("/api/eval/runs/")
-                    and (path.endswith("/stop") or path.endswith("/delete") or method == "DELETE")
+                    and (
+                        path.endswith("/stop")
+                        or path.endswith("/delete")
+                        or path.endswith("/report/revise")
+                        or method == "DELETE"
+                    )
                 )
-                or (path == "/api/eval/runs" and method == "DELETE")
-                or path in ("/api/eval/runs/clear",)
+                or (
+                    path.startswith("/api/v1/watcher/sessions/")
+                    and (path.endswith("/resolve") or method == "DELETE")
+                )
             )
-            if method in ("GET", "HEAD", "OPTIONS") or is_eval_action:
+            if is_permitted_demo_action:
                 demo_uid = _USER_ID_CACHE.get("demo")
                 if demo_uid is None:
                     with SessionLocal() as db:
@@ -1971,6 +2000,19 @@ async def audit_session_with_grader(req: GraderAuditSessionRequest) -> dict[str,
             lines.append(f"[TOOL CALL]: {tc.tool_name} with input: {tc.raw_input or tc.arguments}")
         for tr in traj.tool_results:
             lines.append(f"[TOOL RESULT]: {tr.tool_name} -> {tr.stdout[:200]}")
+    if not lines and hasattr(session, "steps") and session.steps:
+        for step in session.steps:
+            thought = step.get("thought") or (step.get("action", {}) or {}).get("thought")
+            if thought:
+                lines.append(f"[THOUGHT]: {thought[:300]}")
+            action = step.get("action", {}) or {}
+            tool = action.get("tool") or action.get("tool_name")
+            cmd = action.get("command") or action.get("arguments") or action.get("content")
+            if tool:
+                lines.append(f"[TOOL CALL]: {tool} with input: {cmd}")
+            obs = step.get("observation")
+            if obs:
+                lines.append(f"[TOOL RESULT]: {obs[:200]}")
     trajectory_text = (
         "\n".join(lines) if lines else f"Session {session.session_id} in {session.working_dir}"
     )

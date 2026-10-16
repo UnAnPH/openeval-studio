@@ -1904,6 +1904,36 @@ class WatcherStore:
         for g in definitions:
             if g.name == grader_name:
                 return g
+        norm = grader_name.lower().replace("-", "_").replace(" ", "_")
+        aliases = {
+            "credentials_and_api_keys": "CredentialsGrader",
+            "credentials": "CredentialsGrader",
+            "credentials_grader": "CredentialsGrader",
+            "credentialsgrader": "CredentialsGrader",
+            "pii_and_sensitive_info": "PIIGrader",
+            "pii_and_sensitive_information": "PIIGrader",
+            "pii": "PIIGrader",
+            "pii_grader": "PIIGrader",
+            "piigrader": "PIIGrader",
+            "instruction_and_policy_adherence": "InstructionGrader",
+            "instruction": "InstructionGrader",
+            "instruction_grader": "InstructionGrader",
+            "instructiongrader": "InstructionGrader",
+            "code_security": "SecurityGrader",
+            "security": "SecurityGrader",
+            "security_grader": "SecurityGrader",
+            "securitygrader": "SecurityGrader",
+            "infrastructure_safety": "DeletionGrader",
+            "deletion": "DeletionGrader",
+            "deletion_grader": "DeletionGrader",
+            "deletiongrader": "DeletionGrader",
+        }
+        resolved = aliases.get(norm)
+        for g in definitions:
+            if resolved and g.name == resolved:
+                return g
+            if g.name.lower() == norm or g.name.lower().replace("grader", "") == norm:
+                return g
         return None
 
     def update_grader_definition(

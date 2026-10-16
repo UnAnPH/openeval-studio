@@ -503,7 +503,39 @@ CANONICAL_GRADERS: dict[str, CanonicalGrader] = {
 
 def get_canonical_grader(name: str) -> CanonicalGrader | None:
     """Retrieve a canonical grader by name."""
-    return CANONICAL_GRADERS.get(name)
+    if name in CANONICAL_GRADERS:
+        return CANONICAL_GRADERS[name]
+    norm = name.lower().replace("-", "_").replace(" ", "_")
+    aliases = {
+        "credentials_and_api_keys": "CredentialsGrader",
+        "credentials": "CredentialsGrader",
+        "credentials_grader": "CredentialsGrader",
+        "credentialsgrader": "CredentialsGrader",
+        "pii_and_sensitive_info": "PIIGrader",
+        "pii_and_sensitive_information": "PIIGrader",
+        "pii": "PIIGrader",
+        "pii_grader": "PIIGrader",
+        "piigrader": "PIIGrader",
+        "instruction_and_policy_adherence": "InstructionGrader",
+        "instruction": "InstructionGrader",
+        "instruction_grader": "InstructionGrader",
+        "instructiongrader": "InstructionGrader",
+        "code_security": "SecurityGrader",
+        "security": "SecurityGrader",
+        "security_grader": "SecurityGrader",
+        "securitygrader": "SecurityGrader",
+        "infrastructure_safety": "DeletionGrader",
+        "deletion": "DeletionGrader",
+        "deletion_grader": "DeletionGrader",
+        "deletiongrader": "DeletionGrader",
+    }
+    resolved = aliases.get(norm)
+    if resolved and resolved in CANONICAL_GRADERS:
+        return CANONICAL_GRADERS[resolved]
+    for k, v in CANONICAL_GRADERS.items():
+        if k.lower() == norm or k.lower().replace("grader", "") == norm:
+            return v
+    return None
 
 
 def list_canonical_graders() -> list[CanonicalGrader]:
