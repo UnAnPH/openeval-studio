@@ -58,38 +58,39 @@ def test_sudo_after_safe_prefix_is_still_denied() -> None:
 
 def test_circuit_breaker_stays_open_across_shared_gateway_requests() -> None:
     PolicyGateway.reset_shared()
+    try:
+        def _raise(*_args: object, **_kwargs: object) -> object:
+            raise OSError("llm unreachable")
 
-    def _raise(*_args: object, **_kwargs: object) -> object:
-        raise OSError("llm unreachable")
+        gateway = PolicyGateway.get_shared()
+        gateway._api_key = "fake-key-for-test"
+        gateway._requester = _raise
+        gateway.use_llm = True
+        gateway._llm_fail_streak = 0
+        gateway._llm_circuit_open = False
+        gateway._llm_deadline = None
 
-    gateway = PolicyGateway.get_shared()
-    gateway._api_key = "fake-key-for-test"
-    gateway._requester = _raise
-    gateway.use_llm = True
-    gateway._llm_fail_streak = 0
-    gateway._llm_circuit_open = False
-    gateway._llm_deadline = None
+        assert gateway._llm_grade("sys", "user") is None
+        assert gateway._llm_grade("sys", "user") is None
+        assert gateway._llm_circuit_open is False
+        assert gateway._llm_grade("sys", "user") is None
+        assert gateway._llm_circuit_open is True
 
-    assert gateway._llm_grade("sys", "user") is None
-    assert gateway._llm_grade("sys", "user") is None
-    assert gateway._llm_circuit_open is False
-    assert gateway._llm_grade("sys", "user") is None
-    assert gateway._llm_circuit_open is True
+        again = PolicyGateway.get_shared()
+        assert again is gateway
+        assert again._llm_circuit_open is True
 
-    again = PolicyGateway.get_shared()
-    assert again is gateway
-    assert again._llm_circuit_open is True
+        calls = {"n": 0}
 
-    calls = {"n": 0}
+        def _count(*_args: object, **_kwargs: object) -> object:
+            calls["n"] += 1
+            raise OSError("llm unreachable")
 
-    def _count(*_args: object, **_kwargs: object) -> object:
-        calls["n"] += 1
-        raise OSError("llm unreachable")
-
-    again._requester = _count
-    assert again._llm_grade("sys", "user") is None
-    assert calls["n"] == 0
-    PolicyGateway.reset_shared()
+        again._requester = _count
+        assert again._llm_grade("sys", "user") is None
+        assert calls["n"] == 0
+    finally:
+        PolicyGateway.reset_shared()
 
 
 def test_sse_events_do_not_cross_tenant_boundaries() -> None:

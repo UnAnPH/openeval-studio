@@ -83,13 +83,13 @@ class VerifierRunner:
                 await sandbox.write_file(
                     "/workspace/tests/test.sh", test_sh_path.read_text(encoding="utf-8")
                 )
-                await sandbox.exec_command("chmod +x /workspace/tests/test.sh")
+                await sandbox.exec_command("chmod +x /workspace/tests/test.sh", user="root")
 
         timeout = task.verifier.timeout_sec
         test_sh_path = task.task_dir / "tests" / "test.sh"
         cmd = "bash /workspace/tests/test.sh" if test_sh_path.exists() else self.test_runner_cmd
 
-        result = await sandbox.exec_command(cmd, timeout_sec=timeout)
+        result = await sandbox.exec_command(cmd, timeout_sec=timeout, user="root")
         duration_ms = round((time.perf_counter() - start_time) * 1000.0, 2)
 
         passed = result.exit_code == 0
@@ -133,10 +133,10 @@ class VerifierRunner:
         # Stage and execute solution
         sol_content = task.solution_path.read_text(encoding="utf-8")
         await sandbox.write_file("/workspace/solution/solve.sh", sol_content)
-        await sandbox.exec_command("chmod +x /workspace/solution/solve.sh")
+        await sandbox.exec_command("chmod +x /workspace/solution/solve.sh", user="root")
 
         sol_exec = await sandbox.exec_command(
-            "/workspace/solution/solve.sh", timeout_sec=task.verifier.timeout_sec
+            "/workspace/solution/solve.sh", timeout_sec=task.verifier.timeout_sec, user="root"
         )
         if sol_exec.exit_code != 0:
             logger.warning("Oracle solve.sh exited with code %d", sol_exec.exit_code)

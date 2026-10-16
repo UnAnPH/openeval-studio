@@ -67,7 +67,7 @@ class EnvironmentConfig(BaseModel):
     storage_mb: int = Field(default=10240, ge=1024, description="Disk storage quota in Megabytes")
     gpus: int = Field(default=0, ge=0, description="Number of GPUs attached")
     allow_internet: bool = Field(
-        default=True, description="Whether agent container has network access during task"
+        default=False, description="Whether agent container has network access during task"
     )
 
     @field_validator("cpus", "memory_mb", "storage_mb")

@@ -55,8 +55,8 @@ export interface JudgeVerdict {
     | 'unfaithful_cot'
     | 'citation_grounding'
     | string;
-  score: number;
-  passed: boolean;
+  score: number | null;
+  passed: boolean | null;
   reasoning: string;
   flagged_steps: number[];
   discrepancy_details?: string;
@@ -265,12 +265,14 @@ export interface WatcherSession {
 
 export interface WatcherCommandRule {
   id: string;
+  rule_id?: string;
   category: 'git' | 'security' | 'fs' | string;
   name: string;
   pattern: string;
   action: 'allow' | 'triage' | 'human' | 'deny' | 'off';
   description: string;
   is_custom: boolean;
+  score?: number | null;
   threat_category?: ThreatCategory | null;
 }
 

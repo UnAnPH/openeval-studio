@@ -361,6 +361,10 @@ class WatcherVerdict(BaseModel):
         default=None,
         description="Structured informed consent disclosure for intercepted actions",
     )
+    request_id: str | None = Field(
+        default=None,
+        description="End-to-end request tracing correlation ID",
+    )
 
 
 class WatcherEngine:

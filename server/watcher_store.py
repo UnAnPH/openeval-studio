@@ -13,7 +13,7 @@ import logging
 import os
 import threading
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal, cast
 from uuid import uuid4
@@ -22,6 +22,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session as DbSession
 
 from engine.approval_policy import WatcherConfig
+from engine.redaction import redact_payload, redact_text
 from schemas.watcher_models import (
     DEFAULT_COMMAND_RULES,
     DEFAULT_TOOL_THRESHOLDS,
@@ -39,6 +40,7 @@ from schemas.watcher_models import (
     Trajectory,
 )
 from server.db import SessionLocal, current_user_id, current_user_slug, get_current_user_id
+from server.request_context import request_id_ctx
 
 logger = logging.getLogger("openeval.server.watcher_store")
 
@@ -94,6 +96,7 @@ class CompatDBConn:
 
         with SessionLocal() as db:
             result = db.execute(text(sql), p_dict)
+            db.commit()
             try:
                 rows = result.fetchall()
             except Exception:
@@ -105,7 +108,7 @@ class WatcherStore:
     """PostgreSQL 16 multi-tenant store for sessions, trajectories, and reviews."""
 
     def __init__(self, storage_dir: Path | None = None, db_path: str | None = None) -> None:
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._subscribers: dict[str, list[asyncio.Queue[dict[str, Any]]]] = {}
         self.storage_dir = storage_dir or Path(os.getenv("WATCHER_STORAGE_DIR", ".runs/watcher"))
         self.storage_dir.mkdir(parents=True, exist_ok=True)
@@ -206,6 +209,7 @@ class WatcherStore:
         agent_type: str = "antigravity",
         title: str | None = None,
         working_dir: str | None = None,
+        db: DbSession | None = None,
     ) -> Session:
         """Create a working live-gate session if missing; return existing otherwise."""
         existing = self.get_session(session_id)
@@ -232,19 +236,19 @@ class WatcherStore:
             current_activity="awaiting tool call",
             trajectory=Trajectory(session_id=session_id),
         )
-        return self.create_session(session)
+        return self.create_session(session, db=db)
 
-    def _write_session_to_db(self, session: Session) -> None:
+    def _write_session_to_db(self, session: Session, db: DbSession | None = None) -> None:
         """Write session and trajectory reviews to PostgreSQL and disk cache."""
         with self._lock:
             self._cache_session(session)
 
-        payload = session.model_dump()
+        payload = redact_payload(session.model_dump())
         payload_json = json.dumps(_to_jsonable(payload))
 
-        with SessionLocal() as db:
-            user_id = get_current_user_id(db)
-            db.execute(
+        def _execute_write(active_db: DbSession) -> None:
+            user_id = get_current_user_id(active_db)
+            active_db.execute(
                 text(
                     """
                     INSERT INTO sessions (
@@ -285,10 +289,10 @@ class WatcherStore:
                     "model": session.model or "",
                     "provider": session.provider or "",
                     "status": session.status,
-                    "title": session.title or "",
+                    "title": redact_text(session.title or ""),
                     "working_dir": session.working_dir or "",
-                    "current_activity": session.current_activity or "",
-                    "failure_reason": session.failure_reason or "",
+                    "current_activity": redact_text(session.current_activity or ""),
+                    "failure_reason": redact_text(session.failure_reason or ""),
                     "passed": session.passed,
                     "reward": session.reward,
                     "total_tokens": session.total_tokens,
@@ -301,22 +305,24 @@ class WatcherStore:
             # Insert any reviews present in trajectory
             for rev in session.trajectory.reviews:
                 rule_name = str(rev.rule_name or getattr(rev, "threat_category", "") or "")
-                db.execute(
+                req_id = getattr(rev, "request_id", None)
+                active_db.execute(
                     text(
                         """
                         INSERT INTO reviews (
                             id, user_id, session_id, tool_name, tool_input,
                             decision, score, stage, rule_name, explanation,
-                            diff, latency_ms, created_at
+                            diff, latency_ms, request_id, created_at
                         ) VALUES (
                             :id, :user_id, :session_id, :tool_name, :tool_input,
                             :decision, :score, :stage, :rule_name, :explanation,
-                            :diff, :latency_ms, NOW()
+                            :diff, :latency_ms, :request_id, NOW()
                         )
                         ON CONFLICT (id) DO UPDATE SET
                             decision = EXCLUDED.decision,
                             score = EXCLUDED.score,
-                            explanation = EXCLUDED.explanation;
+                            explanation = EXCLUDED.explanation,
+                            request_id = COALESCE(EXCLUDED.request_id, reviews.request_id);
                         """
                     ),
                     {
@@ -324,35 +330,44 @@ class WatcherStore:
                         "user_id": user_id,
                         "session_id": session.session_id,
                         "tool_name": rev.tool_name,
-                        "tool_input": rev.tool_input or "",
+                        "tool_input": redact_text(rev.tool_input or ""),
                         "decision": rev.decision,
                         "score": rev.score,
                         "stage": rev.stage,
                         "rule_name": rule_name,
-                        "explanation": rev.explanation or "",
-                        "diff": rev.diff or "",
+                        "explanation": redact_text(rev.explanation or ""),
+                        "diff": redact_text(rev.diff or ""),
                         "latency_ms": rev.latency_ms,
+                        "request_id": req_id,
                     },
                 )
 
-            db.commit()
+        if db is not None:
+            _execute_write(db)
+        else:
+            with SessionLocal() as active_db:
+                _execute_write(active_db)
+                active_db.commit()
 
         # Update disk JSON cache for file-based tools / inspection
         try:
             target = self.storage_dir / f"{session.session_id}.json"
-            target.write_text(session.model_dump_json(indent=2), encoding="utf-8")
+            tmp_target = self.storage_dir / f"{session.session_id}.tmp"
+            tmp_target.write_text(session.model_dump_json(indent=2), encoding="utf-8")
+            os.replace(tmp_target, target)
         except Exception as e:
             logger.warning("Failed to write session file %s: %s", session.session_id, e)
 
-    def create_session(self, session: Session) -> Session:
+    def create_session(self, session: Session, db: DbSession | None = None) -> Session:
         """Register a new session in PostgreSQL for the active user."""
-        self._write_session_to_db(session)
+        self._write_session_to_db(session, db=db)
         self.broadcast_sync(session.session_id, "session_created", session.model_dump())
         return session
 
     def record_session(self, session: Session) -> Session:
         """Register or update a session in PostgreSQL for the active user."""
-        self._write_session_to_db(session)
+        with self._lock:
+            self._write_session_to_db(session)
         return session
 
     def get_session(self, session_id: str) -> Session | None:
@@ -469,12 +484,17 @@ class WatcherStore:
         if current_user_slug.get() != "demo":
             with SessionLocal() as db:
                 user_id = get_current_user_id(db)
+                db.execute(text("DELETE FROM session_events WHERE user_id = :uid"), {"uid": user_id})
                 db.execute(text("DELETE FROM sessions WHERE user_id = :uid"), {"uid": user_id})
                 db.commit()
         with self._lock:
             for key, session in list(self._sessions.items()):
                 if not self._cache_visible(key, session):
                     continue
+                target = self.storage_dir / f"{session.session_id}.json"
+                if target.exists():
+                    with contextlib.suppress(Exception):
+                        target.unlink()
                 self._sessions.pop(key, None)
                 self._trajectories.pop(key, None)
                 self._reviews.pop(key, None)
@@ -485,11 +505,20 @@ class WatcherStore:
         with self._lock:
             mem_deleted = self._drop_cached_session(session_id)
 
+        target = self.storage_dir / f"{session_id}.json"
+        if target.exists():
+            with contextlib.suppress(Exception):
+                target.unlink()
+
         if current_user_slug.get() == "demo":
             return mem_deleted
 
         with SessionLocal() as db:
             user_id = get_current_user_id(db)
+            db.execute(
+                text("DELETE FROM session_events WHERE session_id = :id AND user_id = :uid"),
+                {"id": session_id, "uid": user_id},
+            )
             res = db.execute(
                 text("DELETE FROM sessions WHERE id = :id AND user_id = :uid"),
                 {"id": session_id, "uid": user_id},
@@ -506,6 +535,73 @@ class WatcherStore:
             if len(msgs) < min_messages and self.delete_session(s.session_id):
                 purged.append(s.session_id)
         return purged
+
+    def prune_expired_sessions(self, retention_days: int = 30) -> int:
+        """Prune sessions older than retention_days along with their events and disk files."""
+        cutoff = datetime.now(UTC) - timedelta(days=retention_days)
+        pruned_count = 0
+        session_ids_to_prune: list[str] = []
+
+        try:
+            with SessionLocal() as db:
+                user_id = get_current_user_id(db)
+                rows = db.execute(
+                    text(
+                        "SELECT id FROM sessions WHERE user_id = :uid AND updated_at < :cutoff"
+                    ),
+                    {"uid": user_id, "cutoff": cutoff},
+                ).fetchall()
+                session_ids_to_prune = [str(r[0]) for r in rows]
+
+                if session_ids_to_prune:
+                    db.execute(
+                        text("DELETE FROM session_events WHERE user_id = :uid AND session_id = ANY(:ids)"),
+                        {"uid": user_id, "ids": session_ids_to_prune},
+                    )
+                    db.execute(
+                        text("DELETE FROM reviews WHERE user_id = :uid AND session_id = ANY(:ids)"),
+                        {"uid": user_id, "ids": session_ids_to_prune},
+                    )
+                    res = db.execute(
+                        text("DELETE FROM sessions WHERE user_id = :uid AND id = ANY(:ids)"),
+                        {"uid": user_id, "ids": session_ids_to_prune},
+                    )
+                    db.commit()
+                    pruned_count = int(getattr(res, "rowcount", 0))
+        except Exception as e:
+            logger.debug("DB session pruning error: %s", e)
+
+        with self._lock:
+            for _key, session in list(self._sessions.items()):
+                created_str = getattr(session, "created_at", None) or getattr(session, "updated_at", None)
+                if created_str:
+                    try:
+                        created_dt = datetime.fromisoformat(str(created_str).replace("Z", "+00:00"))
+                        if created_dt < cutoff:
+                            session_ids_to_prune.append(session.session_id)
+                    except Exception:
+                        pass
+
+        for sid in set(session_ids_to_prune):
+            self._drop_cached_session(sid)
+            target = self.storage_dir / f"{sid}.json"
+            if target.exists():
+                with contextlib.suppress(Exception):
+                    target.unlink()
+
+        # Clean up any orphaned session json files older than retention cutoff
+        if self.storage_dir.exists():
+            for f in self.storage_dir.glob("*.json"):
+                if f.name in ("user_policies.json", "user_configs.json", "user_graders.json"):
+                    continue
+                try:
+                    if f.stat().st_mtime < cutoff.timestamp():
+                        f.unlink(missing_ok=True)
+                        session_ids_to_prune.append(f.stem)
+                except Exception:
+                    pass
+
+        return max(pruned_count, len(set(session_ids_to_prune)))
 
     # -------------------------------------------------------------------------
     # Reviews, Decisions & Append-Only Event Log
@@ -537,12 +633,12 @@ class WatcherStore:
             self._step_indices[key] = next_idx
         return next_idx
 
-    def append_event(self, event: SessionEventRecord) -> None:
+    def append_event(self, event: SessionEventRecord, db: DbSession | None = None) -> None:
         """Insert an immutable event row into session_events for the active tenant."""
-        with SessionLocal() as db:
+        def _execute_append(active_db: DbSession) -> None:
             user_id = current_user_id.get()
             if user_id is None:
-                user_id = get_current_user_id(db)
+                user_id = get_current_user_id(active_db)
 
             # Strictly enforce tenant isolation: event.user_id must match active tenant
             event.user_id = user_id
@@ -550,9 +646,10 @@ class WatcherStore:
             payload_data = event.payload
             if hasattr(payload_data, "model_dump"):
                 payload_data = cast(Any, payload_data).model_dump()
+            payload_data = redact_payload(payload_data) if isinstance(payload_data, dict) else payload_data
             payload_json = json.dumps(_to_jsonable(payload_data))
 
-            db.execute(
+            active_db.execute(
                 text(
                     """
                     INSERT INTO session_events (
@@ -572,7 +669,13 @@ class WatcherStore:
                     "payload": payload_json,
                 },
             )
-            db.commit()
+
+        if db is not None:
+            _execute_append(db)
+        else:
+            with SessionLocal() as active_db:
+                _execute_append(active_db)
+                active_db.commit()
 
         key = self.memory_key(event.session_id)
         with self._lock:
@@ -612,9 +715,15 @@ class WatcherStore:
     ) -> ReviewRecord:
         from server.event_bus import get_event_bus
 
+        redacted_review_dump = redact_payload(review.model_dump())
+        tool_input_redacted = redact_text(review.tool_input or "")
+        explanation_redacted = redact_text(review.explanation or "")
+        diff_redacted = redact_text(review.diff or "")
+        rule_name = str(review.rule_name or getattr(review, "threat_category", "") or "")
+        req_id = getattr(review, "request_id", None)
+
         with SessionLocal() as db:
             uid = user_id if user_id is not None else get_current_user_id(db)
-            rule_name = str(review.rule_name or getattr(review, "threat_category", "") or "")
 
             # 1. Insert or update the normalized reviews relational row within the transaction
             db.execute(
@@ -623,16 +732,17 @@ class WatcherStore:
                     INSERT INTO reviews (
                         id, user_id, session_id, tool_name, tool_input,
                         decision, score, stage, rule_name, explanation,
-                        diff, latency_ms, created_at
+                        diff, latency_ms, request_id, created_at
                     ) VALUES (
                         :id, :user_id, :session_id, :tool_name, :tool_input,
                         :decision, :score, :stage, :rule_name, :explanation,
-                        :diff, :latency_ms, NOW()
+                        :diff, :latency_ms, :request_id, NOW()
                     )
                     ON CONFLICT (id) DO UPDATE SET
                         decision = EXCLUDED.decision,
                         score = EXCLUDED.score,
-                        explanation = EXCLUDED.explanation
+                        explanation = EXCLUDED.explanation,
+                        request_id = COALESCE(EXCLUDED.request_id, reviews.request_id)
                     WHERE reviews.user_id = EXCLUDED.user_id;
                     """
                 ),
@@ -641,19 +751,20 @@ class WatcherStore:
                     "user_id": uid,
                     "session_id": review.session_id,
                     "tool_name": review.tool_name,
-                    "tool_input": review.tool_input or "",
+                    "tool_input": tool_input_redacted,
                     "decision": review.decision,
                     "score": review.score,
                     "stage": review.stage,
                     "rule_name": rule_name,
-                    "explanation": review.explanation or "",
-                    "diff": review.diff or "",
+                    "explanation": explanation_redacted,
+                    "diff": diff_redacted,
                     "latency_ms": review.latency_ms,
+                    "request_id": req_id,
                 },
             )
 
             # 2. Atomic PostgreSQL JSONB update on sessions.payload
-            new_review_json = json.dumps(_to_jsonable([review.model_dump()]))
+            new_review_json = json.dumps(_to_jsonable([redacted_review_dump]))
             res = db.execute(
                 text(
                     """
@@ -678,7 +789,7 @@ class WatcherStore:
                 },
             )
             if getattr(res, "rowcount", 0) == 0:
-                self.ensure_live_session(review.session_id)
+                self.ensure_live_session(review.session_id, db=db)
                 db.execute(
                     text(
                         """
@@ -702,9 +813,22 @@ class WatcherStore:
                         "session_id": review.session_id,
                     },
                 )
+
+            # 3. Write immutable event to session_events in the same transaction
+            step_idx = self._get_next_step_index(review.session_id, db=db)
+            event = SessionEventRecord(
+                id=str(uuid4()),
+                user_id=uid,
+                session_id=review.session_id,
+                step_index=step_idx,
+                event_type="review_decision",
+                payload=redacted_review_dump,
+            )
+            self.append_event(event, db=db)
+
             db.commit()
 
-        # 3. Update in-memory session cache directly
+        # 4. Update in-memory session cache directly
         with self._lock:
             key = self.memory_key(review.session_id)
             cached = self._sessions.get(key)
@@ -713,22 +837,9 @@ class WatcherStore:
             if key in self._reviews and not any(r.id == review.id for r in self._reviews[key]):
                 self._reviews[key].append(review)
 
-        # 4. Write immutable event to session_events
-        step_idx = self._get_next_step_index(review.session_id)
-        event = SessionEventRecord(
-            id=str(uuid4()),
-            user_id=uid,
-            session_id=review.session_id,
-            step_index=step_idx,
-            event_type="review_decision",
-            payload=review.model_dump(),
-        )
-        self.append_event(event)
-
         # 5. Broadcast to local sync subscribers and Redis Streams
-        review_dump = review.model_dump()
-        self.broadcast_sync(review.session_id, "review_decision", review_dump)
-        get_event_bus().xadd_sync("review_decision", review_dump, user_id=uid)
+        self.broadcast_sync(review.session_id, "review_decision", redacted_review_dump)
+        get_event_bus().xadd_sync("review_decision", redacted_review_dump, user_id=uid)
 
         # 6. Trigger materialization: synchronously if terminal, asynchronously with debounce otherwise
         terminal_statuses = {"completed", "failed", "aborted", "lockout", "error", "cancelled"}
@@ -1032,7 +1143,9 @@ class WatcherStore:
         # Update disk JSON cache
         with contextlib.suppress(Exception):
             target = self.storage_dir / f"{base_session.session_id}.json"
-            target.write_text(base_session.model_dump_json(indent=2), encoding="utf-8")
+            tmp_target = self.storage_dir / f"{base_session.session_id}.tmp"
+            tmp_target.write_text(base_session.model_dump_json(indent=2), encoding="utf-8")
+            os.replace(tmp_target, target)
 
         with self._lock:
             self._cache_session(base_session)
@@ -1048,6 +1161,7 @@ class WatcherStore:
             self._dirty_sessions.add(key)
 
         user_id = current_user_id.get()
+        req_id = request_id_ctx.get()
 
         try:
             loop = asyncio.get_running_loop()
@@ -1061,11 +1175,11 @@ class WatcherStore:
         if existing_task and not existing_task.done():
             existing_task.cancel()
 
-        task = loop.create_task(self._debounced_materialize(session_id, user_id, delay))
+        task = loop.create_task(self._debounced_materialize(session_id, user_id, delay, req_id))
         self._debounce_tasks[key] = task
 
     async def _debounced_materialize(
-        self, session_id: str, user_id: int | None, delay: float
+        self, session_id: str, user_id: int | None, delay: float, request_id: str | None = None
     ) -> None:
         try:
             await asyncio.sleep(delay)
@@ -1073,6 +1187,8 @@ class WatcherStore:
             def _worker() -> None:
                 if user_id is not None:
                     current_user_id.set(user_id)
+                if request_id is not None:
+                    request_id_ctx.set(request_id)
                 self.materialize_session(session_id)
 
             await asyncio.to_thread(_worker)
@@ -1239,22 +1355,23 @@ class WatcherStore:
         if not session:
             return
 
+        redacted_event_dump = redact_payload(event.model_dump())
         kind = "message"
         if isinstance(event, Message):
             kind = "message"
             session.trajectory.messages.append(event)
-            self.broadcast_sync(session_id, "message", event.model_dump())
+            self.broadcast_sync(session_id, "message", redacted_event_dump)
         elif isinstance(event, ToolCall):
             kind = "tool_call"
             session.trajectory.tool_calls.append(event)
             session.current_activity = f"Call {event.tool_name}"
-            self.broadcast_sync(session_id, "tool_call", event.model_dump())
+            self.broadcast_sync(session_id, "tool_call", redacted_event_dump)
         elif isinstance(event, ToolResult):
             kind = "tool_result"
             session.trajectory.tool_results.append(event)
-            self.broadcast_sync(session_id, "tool_result", event.model_dump())
+            self.broadcast_sync(session_id, "tool_result", redacted_event_dump)
 
-        # Save to trajectory_events table for backward compatibility
+        # Single DB session for trajectory_events and session_events
         with SessionLocal() as db:
             user_id = get_current_user_id(db)
             db.execute(
@@ -1268,25 +1385,23 @@ class WatcherStore:
                     "user_id": user_id,
                     "session_id": session_id,
                     "kind": kind,
-                    "payload": json.dumps(_to_jsonable(event.model_dump())),
+                    "payload": json.dumps(_to_jsonable(redacted_event_dump)),
                 },
             )
+            step_idx = self._get_next_step_index(session_id, db=db)
+            sevent = SessionEventRecord(
+                id=str(uuid4()),
+                user_id=user_id,
+                session_id=session_id,
+                step_index=step_idx,
+                event_type=kind,
+                payload=redacted_event_dump,
+            )
+            self.append_event(sevent, db=db)
             db.commit()
 
-        # Append immutable event to session_events
-        step_idx = self._get_next_step_index(session_id)
-        sevent = SessionEventRecord(
-            id=str(uuid4()),
-            user_id=user_id,
-            session_id=session_id,
-            step_index=step_idx,
-            event_type=kind,
-            payload=event.model_dump(),
-        )
-        self.append_event(sevent)
-
         # Publish to Redis Pub/Sub bus
-        get_event_bus().publish_sync(kind, event.model_dump(), user_id=user_id)
+        get_event_bus().publish_sync(kind, redacted_event_dump, user_id=user_id)
 
         # Schedule debounced materialization (replaces immediate full sessions.payload rewrite)
         self.schedule_materialize(session_id)
@@ -1609,16 +1724,22 @@ class WatcherStore:
         """Persist user policies, configs, and custom grader prompts to disk."""
         try:
             pol_path = self.storage_dir / "user_policies.json"
+            pol_tmp = self.storage_dir / "user_policies.tmp"
             pol_data = {str(uid): p.model_dump() for uid, p in self._user_policies.items()}
-            pol_path.write_text(json.dumps(pol_data, indent=2), encoding="utf-8")
+            pol_tmp.write_text(json.dumps(pol_data, indent=2), encoding="utf-8")
+            os.replace(pol_tmp, pol_path)
 
             cfg_path = self.storage_dir / "user_configs.json"
+            cfg_tmp = self.storage_dir / "user_configs.tmp"
             cfg_data = {str(uid): c.model_dump() for uid, c in self._user_configs.items()}
-            cfg_path.write_text(json.dumps(cfg_data, indent=2), encoding="utf-8")
+            cfg_tmp.write_text(json.dumps(cfg_data, indent=2), encoding="utf-8")
+            os.replace(cfg_tmp, cfg_path)
 
             graders_path = self.storage_dir / "user_graders.json"
+            graders_tmp = self.storage_dir / "user_graders.tmp"
             graders_data = {str(uid): g for uid, g in self._user_graders.items()}
-            graders_path.write_text(json.dumps(graders_data, indent=2), encoding="utf-8")
+            graders_tmp.write_text(json.dumps(graders_data, indent=2), encoding="utf-8")
+            os.replace(graders_tmp, graders_path)
         except Exception as e:
             logger.warning("Failed to persist user settings to disk: %s", e)
 
@@ -1840,7 +1961,8 @@ class WatcherStore:
         """Safely push event to all active async SSE subscribers."""
         import contextlib
 
-        payload = {"event": event_type, "data": data, "timestamp": time.time()}
+        redacted_data = redact_payload(data) if isinstance(data, dict) else data
+        payload = {"event": event_type, "data": redacted_data, "timestamp": time.time()}
         subs = self._subscribers.get(session_id, [])
         for q in list(subs):
             with contextlib.suppress(Exception):

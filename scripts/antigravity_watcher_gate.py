@@ -15,18 +15,74 @@ import contextlib
 import json
 import os
 import re
+import signal
 import sys
 import time
 import urllib.request
+import uuid
 from pathlib import Path
 from typing import Any
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+try:
+    from engine.redaction import redact_payload, redact_text
+except ImportError:
+    def redact_text(text: str) -> str:
+        if not text:
+            return text
+        t = re.sub(r"\bsk-ant-[a-zA-Z0-9_-]{20,}\b", "[REDACTED:ANTHROPIC_API_KEY]", text)
+        t = re.sub(r"\b(?:sk-proj-[a-zA-Z0-9_-]{20,}|sk-[a-zA-Z0-9]{20,})\b", "[REDACTED:OPENAI_API_KEY]", t)
+        t = re.sub(r"\b(?:ghp|gho|ghu|ghs|ghr)_[a-zA-Z0-9]{36}\b", "[REDACTED:GITHUB_TOKEN]", t)
+        t = re.sub(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b", "[REDACTED:AWS_ACCESS_KEY]", t)
+        return t
+
+    def redact_payload(obj: Any) -> Any:
+        if isinstance(obj, str):
+            return redact_text(obj)
+        if isinstance(obj, dict):
+            return {k: redact_payload(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [redact_payload(v) for v in obj]
+        if isinstance(obj, tuple):
+            return tuple(redact_payload(v) for v in obj)
+        return obj
+
+
+def _safe_int(val: Any, default: int = 0) -> int:
+    try:
+        if val is None:
+            return default
+        return int(val)
+    except (ValueError, TypeError):
+        return default
+
+
+def _safe_float(val: Any, default: float = 0.0) -> float:
+    try:
+        if val is None:
+            return default
+        return float(val)
+    except (ValueError, TypeError):
+        return default
+
+
+MAX_STDIN_BYTES = 2 * 1024 * 1024  # 2 MiB cap
+MAX_LOG_BYTES = 10 * 1024 * 1024  # 10 MiB cap
+REQUEST_ID = uuid.uuid4().hex[:16]
 
 WATCHER_URL = os.environ.get(
     "OPENEVAL_WATCHER_URL", "http://127.0.0.1:8000/api/v1/watcher/evaluate"
 )
 OPENEVAL_API_KEY = os.environ.get("OPENEVAL_API_KEY", "").strip()
-TIMEOUT_SEC = float(os.environ.get("OPENEVAL_WATCHER_TIMEOUT", "1.5"))
+TIMEOUT_SEC = _safe_float(os.environ.get("OPENEVAL_WATCHER_TIMEOUT"), 1.5)
 LOCKOUT_DECISION = os.environ.get("OPENEVAL_LOCKOUT_DECISION", "force_ask")
+FAIL_MODE = os.environ.get(
+    "OPENEVAL_GATE_FAIL_MODE",
+    os.environ.get("OPENEVAL_FAIL_MODE", os.environ.get("OPENEVAL_ON_FAILURE", "open")),
+).strip().lower()
 
 # Stateful Circuit Breaker Configuration
 CIRCUIT_STATE_FILE = Path(
@@ -35,47 +91,80 @@ CIRCUIT_STATE_FILE = Path(
         str(Path.home() / ".openeval" / "circuit_breaker.json"),
     )
 )
-MAX_CONSECUTIVE_FAILURES = int(os.environ.get("OPENEVAL_MAX_GATEWAY_FAILURES", "3"))
-FAILURE_WINDOW_SEC = float(os.environ.get("OPENEVAL_FAILURE_WINDOW_SEC", "60.0"))
+MAX_CONSECUTIVE_FAILURES = _safe_int(os.environ.get("OPENEVAL_MAX_GATEWAY_FAILURES"), 3)
+FAILURE_WINDOW_SEC = _safe_float(os.environ.get("OPENEVAL_FAILURE_WINDOW_SEC"), 60.0)
 
 
 def _record_gateway_failure() -> int:
     """Record a gateway failure timestamp and return active failures within the sliding window."""
     now = time.time()
     failures: list[float] = []
-    try:
-        if CIRCUIT_STATE_FILE.exists():
-            data = json.loads(CIRCUIT_STATE_FILE.read_text(encoding="utf-8"))
-            failures = [
-                float(ts)
-                for ts in data.get("failures", [])
-                if (now - float(ts)) < FAILURE_WINDOW_SEC
-            ]
-    except Exception:
-        failures = []
-
-    failures.append(now)
+    lock_file = CIRCUIT_STATE_FILE.with_suffix(".lock")
     try:
         CIRCUIT_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        tmp = CIRCUIT_STATE_FILE.with_name(f"{CIRCUIT_STATE_FILE.name}.{os.getpid()}.tmp")
-        tmp.write_text(json.dumps({"failures": failures, "updated_at": now}), encoding="utf-8")
-        os.replace(tmp, CIRCUIT_STATE_FILE)
+        with open(lock_file, "w", encoding="utf-8") as lf:
+            try:
+                import fcntl
+                fcntl.flock(lf.fileno(), fcntl.LOCK_EX)
+            except Exception:
+                pass
+            try:
+                if CIRCUIT_STATE_FILE.exists():
+                    data = json.loads(CIRCUIT_STATE_FILE.read_text(encoding="utf-8"))
+                    failures = [
+                        _safe_float(ts)
+                        for ts in data.get("failures", [])
+                        if (now - _safe_float(ts)) < FAILURE_WINDOW_SEC
+                    ]
+            except Exception:
+                failures = []
+
+            failures.append(now)
+            try:
+                tmp = CIRCUIT_STATE_FILE.with_name(f"{CIRCUIT_STATE_FILE.name}.{os.getpid()}.tmp")
+                tmp.write_text(json.dumps({"failures": failures, "updated_at": now}), encoding="utf-8")
+                os.replace(tmp, CIRCUIT_STATE_FILE)
+            except Exception:
+                pass
+            try:
+                import fcntl
+                fcntl.flock(lf.fileno(), fcntl.LOCK_UN)
+            except Exception:
+                pass
     except Exception:
-        pass
+        failures.append(now)
     return len(failures)
 
 
 def _reset_gateway_failures() -> None:
     """Reset circuit breaker failure records upon a successful server evaluation."""
+    lock_file = CIRCUIT_STATE_FILE.with_suffix(".lock")
     try:
-        if CIRCUIT_STATE_FILE.exists():
-            CIRCUIT_STATE_FILE.unlink()
+        if CIRCUIT_STATE_FILE.exists() or lock_file.exists():
+            CIRCUIT_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            with open(lock_file, "w", encoding="utf-8") as lf:
+                try:
+                    import fcntl
+                    fcntl.flock(lf.fileno(), fcntl.LOCK_EX)
+                except Exception:
+                    pass
+                if CIRCUIT_STATE_FILE.exists():
+                    with contextlib.suppress(OSError):
+                        CIRCUIT_STATE_FILE.unlink()
+                try:
+                    import fcntl
+                    fcntl.flock(lf.fileno(), fcntl.LOCK_UN)
+                except Exception:
+                    pass
     except Exception:
         pass
 
 
-def _get_headers() -> dict[str, str]:
-    headers = {"Content-Type": "application/json"}
+def _get_headers(req_id: str | None = None) -> dict[str, str]:
+    headers = {
+        "Content-Type": "application/json",
+        "X-Request-ID": req_id or REQUEST_ID,
+    }
     if OPENEVAL_API_KEY:
         headers["X-OpenEval-Key"] = OPENEVAL_API_KEY
         headers["Authorization"] = f"Bearer {OPENEVAL_API_KEY}"
@@ -88,6 +177,18 @@ LOG_PATH = Path(
         str(Path.home() / ".openeval" / "watcher-gate.log"),
     )
 )
+
+
+def _rotate_log_file_if_needed(log_path: Path) -> None:
+    try:
+        if log_path.exists() and log_path.stat().st_size >= MAX_LOG_BYTES:
+            rotated = log_path.with_name(f"{log_path.name}.1")
+            if rotated.exists():
+                with contextlib.suppress(OSError):
+                    rotated.unlink()
+            os.replace(log_path, rotated)
+    except Exception:
+        pass
 
 # Instant offline deny patterns (subset of Watcher command rules + high-severity)
 LOCAL_BLACKLIST: list[tuple[str, str, str]] = [
@@ -182,8 +283,10 @@ LOCAL_BLACKLIST: list[tuple[str, str, str]] = [
 
 def _log(event: str, **fields: object) -> None:
     try:
+        _rotate_log_file_if_needed(LOG_PATH)
         LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        row = {"ts": time.time(), "event": event, **fields}
+        redacted = {k: redact_payload(v) for k, v in fields.items()}
+        row = {"ts": time.time(), "request_id": REQUEST_ID, "event": event, **redacted}
         with LOG_PATH.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(row, ensure_ascii=False) + "\n")
     except Exception:
@@ -507,7 +610,28 @@ def _detect_subagent_provenance(
     # Signal 3: Registry lookup by conversation_id
     if conversation_id and SUBAGENT_REGISTRY_PATH.exists():
         try:
-            data = json.loads(SUBAGENT_REGISTRY_PATH.read_text(encoding="utf-8"))
+            lock_file = SUBAGENT_REGISTRY_PATH.with_suffix(".lock")
+            data = {}
+            if lock_file.exists() or SUBAGENT_REGISTRY_PATH.exists():
+                try:
+                    with open(lock_file, "a+", encoding="utf-8") as lf:
+                        try:
+                            import fcntl
+
+                            fcntl.flock(lf.fileno(), fcntl.LOCK_SH)
+                        except Exception:
+                            pass
+                        if SUBAGENT_REGISTRY_PATH.exists():
+                            data = json.loads(SUBAGENT_REGISTRY_PATH.read_text(encoding="utf-8"))
+                        try:
+                            import fcntl
+
+                            fcntl.flock(lf.fileno(), fcntl.LOCK_UN)
+                        except Exception:
+                            pass
+                except Exception:
+                    if SUBAGENT_REGISTRY_PATH.exists():
+                        data = json.loads(SUBAGENT_REGISTRY_PATH.read_text(encoding="utf-8"))
             registered = data.get("subagents", {})
             if conversation_id in registered:
                 info = registered[conversation_id]
@@ -568,14 +692,22 @@ def _track_delegation_tool(tool_name: str, tool_args: dict, parent_conv_id: str)
             if SUBAGENT_REGISTRY_PATH.exists():
                 with contextlib.suppress(Exception):
                     current_data = json.loads(SUBAGENT_REGISTRY_PATH.read_text(encoding="utf-8"))
+            now = time.time()
             subagents = current_data.get("subagents", {})
+            # Prune stale entries (> 24h) in subagent_registry.json
+            subagents = {
+                sid: sdata
+                for sid, sdata in subagents.items()
+                if isinstance(sdata, dict)
+                and (now - _safe_float(sdata.get("registered_at"), 0.0)) < 86400.0
+            }
             parent_info = subagents.get(parent_conv_id, {})
-            parent_depth = int(parent_info.get("depth", 0)) if parent_info else 0
+            parent_depth = _safe_int(parent_info.get("depth", 0)) if parent_info else 0
             subagents[target_str] = {
                 "parent": parent_conv_id,
                 "depth": parent_depth + 1,
                 "delegated_by": tool_name,
-                "registered_at": time.time(),
+                "registered_at": now,
             }
             current_data["subagents"] = subagents
             tmp = SUBAGENT_REGISTRY_PATH.with_name(
@@ -602,7 +734,11 @@ def _format_consent_box(
     path: str = "",
 ) -> str:
     """Format structured visual informed consent box matching Apollo specification."""
+    cmd = redact_text(cmd)
+    path = redact_text(path)
+    reason = redact_text(reason)
     if disclosure and isinstance(disclosure, dict):
+        disclosure = redact_payload(disclosure)
         targets = disclosure.get("target_resources") or (
             [path or cmd or tool_name] if (path or cmd or tool_name) else []
         )
@@ -682,20 +818,25 @@ def _emit(
     elif decision == "force_ask":
         out["terminal_reason"] = "lockout"
 
-    if consent_box:
-        # Print directly to stderr for prominent terminal display
-        sys.stderr.write(f"\n{consent_box}\n\n")
-        sys.stderr.flush()
-        out["reason"] = (
-            f"{reason}\n\n{consent_box}" if reason and reason not in consent_box else consent_box
-        )
-    elif reason:
-        out["reason"] = reason
+    try:
+        if consent_box:
+            # Redact secrets before writing to stderr
+            redacted_box = redact_text(consent_box)
+            sys.stderr.write(f"\n{redacted_box}\n\n")
+            sys.stderr.flush()
+            out["reason"] = (
+                f"{reason}\n\n{redacted_box}" if reason and reason not in redacted_box else redacted_box
+            )
+        elif reason:
+            out["reason"] = redact_text(reason)
 
-    if disclosure:
-        out["consent_disclosure"] = disclosure
+        if disclosure:
+            out["consent_disclosure"] = redact_payload(disclosure)
 
-    print(json.dumps(out, ensure_ascii=False))
+        print(json.dumps(out, ensure_ascii=False))
+        sys.stdout.flush()
+    except BrokenPipeError:
+        pass
     _log("emit", decision=decision, reason=reason[:240], conversation_id=conversation_id[:64])
 
 
@@ -882,16 +1023,33 @@ def _report_tool_result_to_watcher(
 
 
 def main() -> None:
-    raw = sys.stdin.read()
+    try:
+        raw = sys.stdin.read(MAX_STDIN_BYTES + 1)
+    except Exception as err:
+        _log("stdin_read_error", error=str(err))
+        raw = ""
+
     if not raw.strip():
-        _emit("allow")
+        if FAIL_MODE in ("closed", "fail-closed", "fail_closed", "deny"):
+            _emit("deny", "Empty stdin payload in fail-closed mode")
+        else:
+            _emit("allow", "Empty stdin payload (fail-open)")
+        return
+
+    if len(raw) > MAX_STDIN_BYTES:
+        _log("stdin_payload_too_large", size=len(raw), max_bytes=MAX_STDIN_BYTES)
+        _emit(LOCKOUT_DECISION, "Payload exceeds maximum allowed size (2 MiB)")
         return
 
     try:
         payload = json.loads(raw)
     except json.JSONDecodeError as err:
         _log("stdin_json_error", error=str(err))
-        _emit("allow", "Watcher gate: invalid stdin JSON (fail-open)")
+        _emit(LOCKOUT_DECISION, "Invalid stdin JSON")
+        return
+
+    if not isinstance(payload, dict):
+        _emit(LOCKOUT_DECISION, "Invalid stdin payload: expected JSON object")
         return
 
     conversation_id = str(payload.get("conversationId") or payload.get("conversation_id") or "")
@@ -1178,5 +1336,32 @@ def main() -> None:
     _emit("allow")
 
 
+def _setup_signal_handlers() -> None:
+    def _sig_handler(signum: int, frame: Any) -> None:
+        sys.exit(128 + signum)
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        with contextlib.suppress(ValueError, AttributeError):
+            signal.signal(sig, _sig_handler)
+
+
 if __name__ == "__main__":
-    main()
+    _setup_signal_handlers()
+    try:
+        main()
+    except BrokenPipeError:
+        try:
+            devnull = os.open(os.devnull, os.O_WRONLY)
+            os.dup2(devnull, sys.stdout.fileno())
+            os.dup2(devnull, sys.stderr.fileno())
+        except Exception:
+            pass
+        sys.exit(0)
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except Exception as exc:
+        _log("unhandled_exception", error=str(exc))
+        if FAIL_MODE in ("closed", "fail-closed", "fail_closed", "deny"):
+            _emit("deny", f"Unhandled error in gate: {exc}")
+        else:
+            _emit("allow", f"Unhandled error in gate (fail-open): {exc}")

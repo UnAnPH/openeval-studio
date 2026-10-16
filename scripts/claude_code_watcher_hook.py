@@ -23,26 +23,98 @@ Stdout uses modern hookSpecificOutput.permissionDecision (allow|deny|ask).
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
+import signal
 import sys
 import time
 import urllib.error
 import urllib.request
+import uuid
 from pathlib import Path
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+try:
+    from engine.redaction import redact_payload, redact_text
+except ImportError:
+    def redact_text(text: str) -> str:
+        if not text:
+            return text
+        t = re.sub(r"\bsk-ant-[a-zA-Z0-9_-]{20,}\b", "[REDACTED:ANTHROPIC_API_KEY]", text)
+        t = re.sub(r"\b(?:sk-proj-[a-zA-Z0-9_-]{20,}|sk-[a-zA-Z0-9]{20,})\b", "[REDACTED:OPENAI_API_KEY]", t)
+        t = re.sub(r"\b(?:ghp|gho|ghu|ghs|ghr)_[a-zA-Z0-9]{36}\b", "[REDACTED:GITHUB_TOKEN]", t)
+        t = re.sub(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b", "[REDACTED:AWS_ACCESS_KEY]", t)
+        return t
+
+    def redact_payload(obj: object) -> object:
+        if isinstance(obj, str):
+            return redact_text(obj)
+        if isinstance(obj, dict):
+            return {k: redact_payload(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [redact_payload(v) for v in obj]
+        if isinstance(obj, tuple):
+            return tuple(redact_payload(v) for v in obj)
+        return obj
+
+
+def _safe_int(val: object, default: int = 0) -> int:
+    try:
+        if val is None:
+            return default
+        return int(val)  # type: ignore[arg-type]
+    except (ValueError, TypeError):
+        return default
+
+
+def _safe_float(val: object, default: float = 0.0) -> float:
+    try:
+        if val is None:
+            return default
+        return float(val)  # type: ignore[arg-type]
+    except (ValueError, TypeError):
+        return default
+
+
+MAX_STDIN_BYTES = 2 * 1024 * 1024  # 2 MiB cap
+MAX_LOG_BYTES = 10 * 1024 * 1024  # 10 MiB cap
+REQUEST_ID = uuid.uuid4().hex[:16]
 
 WATCHER_URL = os.environ.get(
     "OPENEVAL_WATCHER_URL", "http://127.0.0.1:8000/api/v1/watcher/evaluate"
 )
 OPENEVAL_API_KEY = os.environ.get("OPENEVAL_API_KEY", "").strip()
-TIMEOUT_SEC = float(os.environ.get("OPENEVAL_WATCHER_TIMEOUT", "1.5"))
+TIMEOUT_SEC = _safe_float(os.environ.get("OPENEVAL_WATCHER_TIMEOUT"), 1.5)
 LOCKOUT_PERMISSION = os.environ.get("OPENEVAL_LOCKOUT_PERMISSION", "ask")
+FAIL_MODE = os.environ.get(
+    "OPENEVAL_GATE_FAIL_MODE",
+    os.environ.get("OPENEVAL_FAIL_MODE", os.environ.get("OPENEVAL_ON_FAILURE", "open")),
+).strip().lower()
 LOG_PATH = Path.home() / ".openeval" / "claude-watcher-gate.log"
 
 
-def _get_headers() -> dict[str, str]:
-    headers = {"Content-Type": "application/json"}
+def _rotate_log_file_if_needed(log_path: Path) -> None:
+    try:
+        if log_path.exists() and log_path.stat().st_size >= MAX_LOG_BYTES:
+            rotated = log_path.with_name(f"{log_path.name}.1")
+            if rotated.exists():
+                with contextlib.suppress(OSError):
+                    rotated.unlink()
+            os.replace(log_path, rotated)
+    except Exception:  # noqa: BLE001  # Boundary: log rotation failure must not crash hook
+        pass
+
+
+def _get_headers(req_id: str | None = None) -> dict[str, str]:
+    headers = {
+        "Content-Type": "application/json",
+        "X-Request-ID": req_id or REQUEST_ID,
+    }
     if OPENEVAL_API_KEY:
         headers["X-OpenEval-Key"] = OPENEVAL_API_KEY
         headers["Authorization"] = f"Bearer {OPENEVAL_API_KEY}"
@@ -61,24 +133,32 @@ LOCAL_BLACKLIST = [
 
 def _log(event: str, **fields: object) -> None:
     try:
+        _rotate_log_file_if_needed(LOG_PATH)
         LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        redacted = {k: redact_payload(v) for k, v in fields.items()}
+        row = {"ts": time.time(), "request_id": REQUEST_ID, "event": event, **redacted}
         with LOG_PATH.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps({"ts": time.time(), "event": event, **fields}) + "\n")
+            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
     except Exception:  # noqa: BLE001  # Boundary: local logging write failure must never crash hook
         pass
 
 
 def _emit(permission: str, reason: str = "") -> None:
     # Modern Claude Code PreToolUse schema
+    redacted_reason = redact_text(reason)
     out = {
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
             "permissionDecision": permission,
-            "permissionDecisionReason": reason,
+            "permissionDecisionReason": redacted_reason,
         }
     }
-    print(json.dumps(out, ensure_ascii=False))
-    _log("emit", permission=permission, reason=reason[:240])
+    try:
+        print(json.dumps(out, ensure_ascii=False))
+        sys.stdout.flush()
+    except BrokenPipeError:
+        pass
+    _log("emit", permission=permission, reason=redacted_reason[:240])
 
 
 def _claude_session_id(raw: str) -> str | None:
@@ -198,14 +278,33 @@ def _report_tool_result(payload: dict) -> None:
 
 
 def main() -> None:
-    raw = sys.stdin.read()
+    try:
+        raw = sys.stdin.read(MAX_STDIN_BYTES + 1)
+    except Exception as err:  # noqa: BLE001  # Boundary: stdin read error handling
+        _log("stdin_read_error", error=str(err))
+        raw = ""
+
     if not raw.strip():
-        _emit("allow")
+        if FAIL_MODE in ("closed", "fail-closed", "fail_closed", "deny"):
+            _emit("deny", "Empty stdin payload in fail-closed mode")
+        else:
+            _emit("allow")
         return
+
+    if len(raw) > MAX_STDIN_BYTES:
+        _log("stdin_payload_too_large", size=len(raw), max_bytes=MAX_STDIN_BYTES)
+        _emit(LOCKOUT_PERMISSION, "Payload exceeds maximum allowed size (2 MiB)")
+        return
+
     try:
         payload = json.loads(raw)
-    except json.JSONDecodeError:
-        _emit("allow", "invalid stdin JSON")
+    except json.JSONDecodeError as err:
+        _log("stdin_json_error", error=str(err))
+        _emit(LOCKOUT_PERMISSION, "Invalid stdin JSON")
+        return
+
+    if not isinstance(payload, dict):
+        _emit(LOCKOUT_PERMISSION, "Invalid stdin payload: expected JSON object")
         return
 
     hook_name = str(
@@ -334,5 +433,32 @@ def main() -> None:
     _emit("allow")
 
 
+def _setup_signal_handlers() -> None:
+    def _sig_handler(signum: int, frame: object) -> None:
+        sys.exit(128 + signum)
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        with contextlib.suppress(ValueError, AttributeError):
+            signal.signal(sig, _sig_handler)
+
+
 if __name__ == "__main__":
-    main()
+    _setup_signal_handlers()
+    try:
+        main()
+    except BrokenPipeError:
+        try:
+            devnull = os.open(os.devnull, os.O_WRONLY)
+            os.dup2(devnull, sys.stdout.fileno())
+            os.dup2(devnull, sys.stderr.fileno())
+        except Exception:  # noqa: BLE001  # Boundary: devnull redirection on broken pipe
+            pass
+        sys.exit(0)
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except Exception as exc:  # noqa: BLE001  # Boundary: top-level safety gate error handler
+        _log("unhandled_exception", error=str(exc))
+        if FAIL_MODE in ("closed", "fail-closed", "fail_closed", "deny"):
+            _emit("deny", f"Unhandled error in gate: {exc}")
+        else:
+            _emit("allow", f"Unhandled error in gate (fail-open): {exc}")

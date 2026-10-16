@@ -13,13 +13,14 @@ import re
 import time
 from collections.abc import AsyncGenerator, Callable
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import text
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
@@ -32,7 +33,7 @@ from engine.scanners import FindingRecord, RecommendedAction, SchemingScanners
 from engine.watcher_sdk import WatcherClient
 from schemas.models import ModelSpec, get_available_models
 from schemas.task_spec import load_task_spec
-from schemas.watcher_models import ReviewRecord, Session
+from schemas.watcher_models import ReviewDecision, ReviewRecord, ReviewStage, Session
 from server.auth import (
     SESSION_COOKIE_NAME,
     resolve_api_key_user,
@@ -42,6 +43,7 @@ from server.auth import (
     router as auth_router,
 )
 from server.db import (
+    _USER_ID_CACHE,
     SessionLocal,
     current_user_id,
     current_user_slug,
@@ -223,8 +225,10 @@ class _AuthMiddleware(BaseHTTPMiddleware):
                 or path in ("/api/eval/runs/clear",)
             )
             if method in ("GET", "HEAD", "OPTIONS") or is_eval_action:
-                with SessionLocal() as db:
-                    demo_uid = get_user_id_by_slug(db, "demo")
+                demo_uid = _USER_ID_CACHE.get("demo")
+                if demo_uid is None:
+                    with SessionLocal() as db:
+                        demo_uid = get_user_id_by_slug(db, "demo")
                 current_user_slug.set("demo")
                 current_user_id.set(demo_uid)
                 return await call_next(request)
@@ -246,12 +250,13 @@ class _AuthMiddleware(BaseHTTPMiddleware):
         # 3. OPENEVAL_AUTH_DISABLED=1 stays the test-only owner fallback
         auth_disabled = os.getenv("OPENEVAL_AUTH_DISABLED", "0").lower() in ("1", "true", "yes")
         if auth_disabled:
-            owner_uid = None
-            try:
-                with SessionLocal() as db:
-                    owner_uid = get_user_id_by_slug(db, "owner")
-            except Exception:
-                owner_uid = 1
+            owner_uid = _USER_ID_CACHE.get("owner")
+            if owner_uid is None:
+                try:
+                    with SessionLocal() as db:
+                        owner_uid = get_user_id_by_slug(db, "owner")
+                except Exception:
+                    owner_uid = 1
             current_user_slug.set("owner")
             current_user_id.set(owner_uid)
             return await call_next(request)
@@ -523,11 +528,67 @@ def _verdicts_from_store_reviews(limit: int = 40) -> list[dict[str, Any]]:
     """Map recent block/deny/escalate/resolved reviews into WatcherVerdict-shaped dicts for Live Stream."""
     store = get_watcher_store()
     rows: list[tuple[str, Any]] = []
-    for session in store.list_sessions(limit=200):
-        for rev in store.get_session_decisions(session.session_id):
-            if not _is_interception_candidate(rev):
-                continue
-            rows.append((rev.timestamp or "", (session, rev)))
+
+    used_db = False
+    try:
+        with SessionLocal() as db:
+            uid = get_current_user_id(db)
+            db_rows = db.execute(
+                text(
+                    """
+                    SELECT r.id, r.session_id, r.tool_name, r.tool_input, r.decision,
+                           r.score, r.stage, r.rule_name, r.explanation, r.diff,
+                           r.latency_ms, r.created_at, s.payload
+                    FROM reviews r
+                    LEFT JOIN sessions s ON r.user_id = s.user_id AND r.session_id = s.id
+                    WHERE r.user_id = :uid
+                    ORDER BY r.created_at DESC
+                    LIMIT :lim
+                    """
+                ),
+                {"uid": uid, "lim": limit * 4},
+            ).fetchall()
+
+            for r in db_rows:
+                rev = ReviewRecord(
+                    id=str(r[0]),
+                    session_id=str(r[1]),
+                    tool_name=str(r[2]),
+                    tool_input=str(r[3] or ""),
+                    decision=cast(ReviewDecision, str(r[4])),
+                    score=int(r[5] or 1),
+                    stage=cast(ReviewStage, str(r[6] or "rule")),
+                    rule_name=str(r[7] or "") if r[7] else None,
+                    explanation=str(r[8] or ""),
+                    diff=str(r[9] or "") if r[9] else None,
+                    latency_ms=float(r[10] or 0.0),
+                    timestamp=str(r[11] or ""),
+                )
+                if not _is_interception_candidate(rev):
+                    continue
+
+                session = None
+                raw_payload = r[12]
+                if raw_payload:
+                    try:
+                        pdata = json.loads(raw_payload) if isinstance(raw_payload, str) else raw_payload
+                        session = Session.model_validate(pdata)
+                    except Exception:
+                        session = None
+                if session is None:
+                    session = store.get_session(str(r[1]))
+                rows.append((rev.timestamp or "", (session, rev)))
+            used_db = True
+    except Exception:
+        used_db = False
+
+    if not used_db:
+        for session in store.list_sessions(limit=200):
+            for rev in store.get_session_decisions(session.session_id):
+                if not _is_interception_candidate(rev):
+                    continue
+                rows.append((rev.timestamp or "", (session, rev)))
+
     rows.sort(key=lambda x: x[0], reverse=True)
 
     out: list[dict[str, Any]] = []
@@ -550,36 +611,44 @@ def _verdicts_from_store_reviews(limit: int = 40) -> list[dict[str, Any]]:
         tc = None
         tr = None
         matching_idx = -1
-        for i, r in enumerate(session.trajectory.reviews):
-            if r.id == rev.id:
-                matching_idx = i
-                break
+        if session and session.trajectory and session.trajectory.reviews:
+            for i, r in enumerate(session.trajectory.reviews):
+                if r.id == rev.id:
+                    matching_idx = i
+                    if human_ov is None and getattr(r, "human_override", None):
+                        rov = getattr(r, "human_override", None)
+                        if rov in ("allow", "deny"):
+                            human_ov = rov
+                            if human_ov == "allow":
+                                mapped = "allow"
+                                is_safe = True
+                    break
 
-        if matching_idx != -1:
-            if matching_idx < len(session.trajectory.tool_calls):
-                tc = session.trajectory.tool_calls[matching_idx]
-            if matching_idx < len(session.trajectory.tool_results):
-                tr = session.trajectory.tool_results[matching_idx]
+            if matching_idx != -1:
+                if matching_idx < len(session.trajectory.tool_calls):
+                    tc = session.trajectory.tool_calls[matching_idx]
+                if matching_idx < len(session.trajectory.tool_results):
+                    tr = session.trajectory.tool_results[matching_idx]
 
-        if not tc:
-            for i, candidate_tc in enumerate(session.trajectory.tool_calls):
-                if candidate_tc.tool_name == rev.tool_name:
-                    candidate_cmd = str(
-                        (
-                            candidate_tc.arguments.get("CommandLine")
-                            if isinstance(candidate_tc.arguments, dict)
-                            else None
+            if not tc:
+                for i, candidate_tc in enumerate(session.trajectory.tool_calls):
+                    if candidate_tc.tool_name == rev.tool_name:
+                        candidate_cmd = str(
+                            (
+                                candidate_tc.arguments.get("CommandLine")
+                                if isinstance(candidate_tc.arguments, dict)
+                                else None
+                            )
+                            or candidate_tc.raw_input
+                            or ""
                         )
-                        or candidate_tc.raw_input
-                        or ""
-                    )
-                    if (rev.tool_input and rev.tool_input in candidate_cmd) or (
-                        candidate_cmd and candidate_cmd in (rev.tool_input or "")
-                    ):
-                        tc = candidate_tc
-                        if i < len(session.trajectory.tool_results):
-                            tr = session.trajectory.tool_results[i]
-                        break
+                        if (rev.tool_input and rev.tool_input in candidate_cmd) or (
+                            candidate_cmd and candidate_cmd in (rev.tool_input or "")
+                        ):
+                            tc = candidate_tc
+                            if i < len(session.trajectory.tool_results):
+                                tr = session.trajectory.tool_results[i]
+                            break
 
         full_cmd_str = str(
             (tc.arguments.get("CommandLine") if tc and isinstance(tc.arguments, dict) else None)
@@ -616,7 +685,7 @@ def _verdicts_from_store_reviews(limit: int = 40) -> list[dict[str, Any]]:
                 decision=mapped,  # type: ignore[arg-type]
                 stage=(
                     "stage_2_deterministic"
-                    if rev.stage == "rule"
+                    if rev.stage in ("rule", "threshold")
                     else "stage_3_triage"
                     if rev.stage == "triage"
                     else "stage_4_deep_review"
@@ -629,14 +698,15 @@ def _verdicts_from_store_reviews(limit: int = 40) -> list[dict[str, Any]]:
                 shadow_decision=None,
                 is_safe=is_safe,
                 action_preview=f"{rev.tool_name}: {preview_input}",
-                agent_id=str(session.agent_type or "unknown"),
-                timestamp=rev.timestamp or session.updated_at,
+                agent_id=str(session.agent_type if session else "unknown"),
+                timestamp=rev.timestamp or (session.updated_at if session else ""),
                 review_id=rev.id,
-                session_id=session.session_id,
+                session_id=session.session_id if session else rev.session_id,
                 human_override=human_ov,
                 resolution_status=res_status,
                 full_command=full_cmd_str or f"{rev.tool_name}: {rev.tool_input}",
                 tool_result=tool_result_str,
+                request_id=getattr(rev, "request_id", None),
             ).model_dump()
         )
     return out
@@ -1336,7 +1406,7 @@ class ResolveSessionDecisionResponse(BaseModel):
 async def get_analyzer_summary() -> dict[str, Any]:
     """Retrieve organization-wide risk analytics, threat distributions, and latency metrics from DuckDB."""
     store = get_watcher_store()
-    return store.get_analyzer_summary()
+    return await asyncio.to_thread(store.get_analyzer_summary)
 
 
 @app.get("/api/v1/watcher/sessions", response_model=list[Session])

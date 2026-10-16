@@ -87,30 +87,33 @@ def test_tier2_llm_timeout_fails_closed_to_force_ask(monkeypatch: pytest.MonkeyP
     monkeypatch.setenv("OPENEVAL_WATCHER_USE_LLM", "1")
     monkeypatch.setenv("GEMINI_API_KEY", "mock-test-key")
 
-    # Mock requester that simulates a network timeout during LLM evaluation
-    mock_requester = MagicMock()
-    mock_requester.side_effect = TimeoutError("Gemini API call timed out after 0.8s")
+    try:
+        # Mock requester that simulates a network timeout during LLM evaluation
+        mock_requester = MagicMock()
+        mock_requester.side_effect = TimeoutError("Gemini API call timed out after 0.8s")
 
-    gw = PolicyGateway(use_llm=True, on_failure="fail_closed")
-    gw._requester = mock_requester
+        gw = PolicyGateway(use_llm=True, on_failure="fail_closed")
+        gw._requester = mock_requester
 
-    # Evaluate an ambiguous action that routes to LLM triage/deep review
-    rec = gw.evaluate_tool_call(
-        session_id="timeout-test-sess",
-        tool_name="bash",
-        tool_input="deploy_script.sh --stage",
-        user_intent="Run deployment",
-    )
+        # Evaluate an ambiguous action that routes to LLM triage/deep review
+        rec = gw.evaluate_tool_call(
+            session_id="timeout-test-sess",
+            tool_name="bash",
+            tool_input="deploy_script.sh --stage",
+            user_intent="Run deployment",
+        )
 
-    # In fail-closed mode, the score must be elevated (>= 6) and decision must NOT be allow
-    assert rec.score >= 6, f"Expected fail-closed score >= 6 on timeout, got {rec.score}"
-    assert rec.decision in ("block", "escalate"), (
-        f"Expected fail-closed decision ('block' or 'escalate'), got {rec.decision}"
-    )
-    assert (
-        "fail-closed" in (rec.explanation or "").lower()
-        or "llm failure" in (rec.explanation or "").lower()
-    )
+        # In fail-closed mode, the score must be elevated (>= 6) and decision must NOT be allow
+        assert rec.score >= 6, f"Expected fail-closed score >= 6 on timeout, got {rec.score}"
+        assert rec.decision in ("block", "escalate"), (
+            f"Expected fail-closed decision ('block' or 'escalate'), got {rec.decision}"
+        )
+        assert (
+            "fail-closed" in (rec.explanation or "").lower()
+            or "llm failure" in (rec.explanation or "").lower()
+        )
+    finally:
+        PolicyGateway.reset_shared()
 
 
 def test_tier2_llm_timeout_maps_to_client_force_ask(monkeypatch: pytest.MonkeyPatch):
@@ -118,13 +121,9 @@ def test_tier2_llm_timeout_maps_to_client_force_ask(monkeypatch: pytest.MonkeyPa
     monkeypatch.setenv("OPENEVAL_WATCHER_USE_LLM", "1")
     monkeypatch.setenv("GEMINI_API_KEY", "mock-test-key")
 
-    # Mock PolicyGateway's shared instance requester to simulate timeout
-    shared_gw = PolicyGateway.get_shared()
-    orig_requester = shared_gw._requester
-    orig_use_llm = shared_gw.use_llm
-    orig_on_failure = shared_gw.on_failure
-
+    PolicyGateway.reset_shared()
     try:
+        shared_gw = PolicyGateway.get_shared()
         mock_requester = MagicMock()
         mock_requester.side_effect = urllib.error.URLError("Connection timed out")
         shared_gw._requester = mock_requester
@@ -152,8 +151,4 @@ def test_tier2_llm_timeout_maps_to_client_force_ask(monkeypatch: pytest.MonkeyPa
         assert data["client_decision"] == "force_ask"
         assert data["is_safe"] is False
     finally:
-        shared_gw._requester = orig_requester
-        shared_gw.use_llm = orig_use_llm
-        shared_gw.on_failure = orig_on_failure
-        shared_gw._llm_circuit_open = False
-        shared_gw._llm_fail_streak = 0
+        PolicyGateway.reset_shared()

@@ -1,8 +1,7 @@
 """Database & Storage Engine Abstraction for OpenEval Studio.
 
-OpenEval Studio uses an embedded DuckDB analytical engine paired with local
-file-backed JSON trajectories on instance storage. No external relational
-database or Amazon RDS round-trips are required.
+Introspects the live PostgreSQL connection pool from server.db and manages local
+storage directories for file-backed artifacts.
 """
 
 from __future__ import annotations
@@ -12,14 +11,18 @@ import os
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy.pool import QueuePool
+
+from server.db import engine
+
 logger = logging.getLogger("openeval.db")
 
 
 class DatabaseManager:
-    """Manages local embedded DuckDB telemetry and storage health probes."""
+    """Manages database connection pool telemetry and storage health probes."""
 
     def __init__(self) -> None:
-        self.engine_type = "duckdb"
+        self.engine_type = engine.name
 
     def get_storage_dir(self) -> str:
         """Resolve the active storage directory on disk."""
@@ -27,14 +30,36 @@ class DatabaseManager:
         return str(storage_path)
 
     def get_status(self) -> dict[str, Any]:
-        """Return connectivity status and active storage engine."""
+        """Return connectivity status, pool telemetry, and active storage engine."""
         storage_dir = self.get_storage_dir()
+        pool = engine.pool
+        is_queue_pool = isinstance(pool, QueuePool)
+        pool_size = pool.size() if is_queue_pool else 10
+        checked_out = pool.checkedout() if is_queue_pool else 0
+        overflow = pool.overflow() if is_queue_pool else 0
+        checked_in = pool.checkedin() if is_queue_pool else 0
+
+        connected = False
+        try:
+            from sqlalchemy import text
+
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            connected = True
+        except Exception:
+            logger.warning("Database connectivity probe failed", exc_info=True)
+            connected = False
+
         return {
-            "engine": "duckdb",
-            "connected": True,
-            "has_external_db": False,
+            "engine": engine.name,
+            "connected": connected,
+            "has_external_db": True,
             "storage_dir": storage_dir,
-            "target": "DuckDB (local disk)",
+            "target": f"{engine.name.capitalize()} (SQLAlchemy connection pool)",
+            "pool_size": pool_size,
+            "checked_out": checked_out,
+            "overflow": overflow,
+            "checked_in": checked_in,
         }
 
 

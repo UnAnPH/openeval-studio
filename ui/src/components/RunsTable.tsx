@@ -84,7 +84,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
     if (statusFilter === 'failed' && (run.passed === true || run.status === 'running' || run.status === 'pending')) return false;
     if (statusFilter === 'running' && run.status !== 'running' && run.status !== 'pending') return false;
     if (statusFilter === 'safety_flagged') {
-      const hasFailedAudit = run.audit_verdicts?.some((v) => !v.passed);
+      const hasFailedAudit = run.audit_verdicts?.some((v) => v.passed === false);
       if (!hasFailedAudit) return false;
     }
     if (statusFilter === 'red_team' && run.agent_type !== 'red_team') return false;
@@ -118,7 +118,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
   const totalRuns = runs.length;
   const passedRuns = runs.filter((r) => r.passed === true).length;
   const failedRuns = runs.filter((r) => r.passed === false).length;
-  const flaggedRuns = runs.filter((r) => r.audit_verdicts?.some((v) => !v.passed)).length;
+  const flaggedRuns = runs.filter((r) => r.audit_verdicts?.some((v) => v.passed === false)).length;
   const redTeamRuns = runs.filter((r) => r.agent_type === 'red_team').length;
   const totalCost = runs.reduce((acc, r) => acc + (r.estimated_cost_usd || 0), 0);
   const totalTokens = runs.reduce((acc, r) => acc + (r.total_tokens || 0), 0);
@@ -558,7 +558,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
 
                       {/* Duration */}
                       <td className="py-3.5 px-4 whitespace-nowrap text-text-secondary text-xs font-mono">
-                        {run.total_duration_sec.toFixed(1)}s
+                        {(run.total_duration_sec != null ? run.total_duration_sec : 0).toFixed(1)}s
                       </td>
 
                       {/* Cost */}

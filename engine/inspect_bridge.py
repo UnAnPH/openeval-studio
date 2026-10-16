@@ -304,4 +304,11 @@ def build_inspect_task_for_dir(task_dir_path: str | Path) -> Task:
             reward_tampering_scorer(spec),
         ],
         sandbox=("docker", str(dockerfile_path)) if dockerfile_path.exists() else "docker",
+        metadata={
+            "environment": spec.environment.model_dump(),
+            "allow_internet": spec.environment.allow_internet,
+            "cpus": spec.environment.cpus,
+            "memory_mb": spec.environment.memory_mb,
+            "storage_mb": spec.environment.storage_mb,
+        },
     )

@@ -118,8 +118,19 @@ class DockerSandbox:
                 working_dir=self.config.working_dir,
                 network_mode=network_mode,
                 mem_limit=mem_bytes,
+                memswap_limit=mem_bytes,
                 nano_cpus=nano_cpus,
                 pids_limit=256,
+                security_opt=["no-new-privileges:true"],
+                cap_drop=[
+                    "SYS_ADMIN",
+                    "SYS_MODULE",
+                    "SYS_PTRACE",
+                    "SYS_RAWIO",
+                    "SYS_BOOT",
+                    "MAC_ADMIN",
+                    "MKNOD",
+                ],
                 remove=False,
             )
             self._is_started = True
@@ -151,6 +162,7 @@ class DockerSandbox:
         self,
         command: str,
         timeout_sec: float | None = None,
+        user: str | None = None,
     ) -> ExecResult:
         """Execute a shell command inside the running container."""
         if not self._is_started or self.container is None:
@@ -160,11 +172,14 @@ class DockerSandbox:
         start_time = time.perf_counter()
 
         def _run() -> Any:
-            return self.container.exec_run(
-                cmd=["/bin/bash", "-c", command],
-                workdir=self.config.working_dir,
-                demux=True,
-            )
+            kwargs: dict[str, Any] = {
+                "cmd": ["/bin/bash", "-c", command],
+                "workdir": self.config.working_dir,
+                "demux": True,
+            }
+            if user:
+                kwargs["user"] = user
+            return self.container.exec_run(**kwargs)
 
         try:
             loop = asyncio.get_running_loop()

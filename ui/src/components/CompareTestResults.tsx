@@ -319,7 +319,7 @@ const RunPickerModal: React.FC<RunPickerModalProps> = ({
                     <div className="flex items-center gap-3 text-[11px] text-text-muted font-mono">
                       <span>🕒 {dateStr}</span>
                       <span>·</span>
-                      <span>⏱ {r.total_duration_sec.toFixed(1)}s</span>
+                      <span>⏱ {(r.total_duration_sec != null ? r.total_duration_sec : 0).toFixed(1)}s</span>
                       <span>·</span>
                       <span>⚡ {r.total_tokens.toLocaleString()} tok</span>
                       <span>·</span>
@@ -477,7 +477,7 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
   }
 
   // 1. Dynamic Metric Differentials
-  const durationDelta = runA.total_duration_sec - runB.total_duration_sec;
+  const durationDelta = (runA.total_duration_sec || 0) - (runB.total_duration_sec || 0);
   const tokenDelta = runA.total_tokens - runB.total_tokens;
   const costDelta = runA.estimated_cost_usd - runB.estimated_cost_usd;
   const rewardDelta = (runA.reward ?? 0) - (runB.reward ?? 0);
@@ -506,9 +506,9 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
       if (!stepA || !stepB) {
         divergenceTurn = turn;
       } else if (
-        stepA.action.tool !== stepB.action.tool ||
-        stepA.action.command !== stepB.action.command ||
-        stepA.action.path !== stepB.action.path
+        stepA.action?.tool !== stepB.action?.tool ||
+        stepA.action?.command !== stepB.action?.command ||
+        stepA.action?.path !== stepB.action?.path
       ) {
         divergenceTurn = turn;
       }
@@ -735,7 +735,7 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
             <div className="grid grid-cols-3 gap-2 text-[11px] font-mono text-text-muted pt-1">
               <div>
                 <span className="block text-[9px] uppercase text-text-muted">Duration</span>
-                <strong className="text-text-primary">{runA.total_duration_sec.toFixed(1)}s</strong>
+                <strong className="text-text-primary">{(runA.total_duration_sec != null ? runA.total_duration_sec : 0).toFixed(1)}s</strong>
               </div>
               <div>
                 <span className="block text-[9px] uppercase text-text-muted">Tokens</span>
@@ -796,7 +796,7 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
             <div className="grid grid-cols-3 gap-2 text-[11px] font-mono text-text-muted pt-1">
               <div>
                 <span className="block text-[9px] uppercase text-text-muted">Duration</span>
-                <strong className="text-text-primary">{runB.total_duration_sec.toFixed(1)}s</strong>
+                <strong className="text-text-primary">{(runB.total_duration_sec != null ? runB.total_duration_sec : 0).toFixed(1)}s</strong>
               </div>
               <div>
                 <span className="block text-[9px] uppercase text-text-muted">Tokens</span>
@@ -846,7 +846,7 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
             {durationDelta <= 0 ? `${durationDelta.toFixed(1)}s (Faster)` : `+${durationDelta.toFixed(1)}s (Slower)`}
           </div>
           <div className="text-[10px] font-mono text-text-secondary">
-            {runA.total_duration_sec.toFixed(1)}s vs {runB.total_duration_sec.toFixed(1)}s
+            {(runA.total_duration_sec != null ? runA.total_duration_sec : 0).toFixed(1)}s vs {(runB.total_duration_sec != null ? runB.total_duration_sec : 0).toFixed(1)}s
           </div>
         </div>
 
@@ -923,6 +923,8 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
                     semanticVerdict.nature_of_divergence === 'identical_strategy' ||
                     semanticVerdict.nature_of_divergence === 'cosmetic_variation'
                       ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                      : semanticVerdict.nature_of_divergence === 'opposite_strategies'
+                      ? 'bg-rose-100 text-rose-900 border border-rose-300'
                       : 'bg-amber-100 text-amber-900 border border-amber-300'
                   }`}
                 >
@@ -930,6 +932,8 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
                     ? '🟢 Identical Strategy'
                     : semanticVerdict.nature_of_divergence === 'cosmetic_variation'
                     ? '🟢 Cosmetic Variation (Functionally Equivalent)'
+                    : semanticVerdict.nature_of_divergence === 'opposite_strategies'
+                    ? '🔴 Opposite Strategies (Direct Conflict)'
                     : '🟠 Substantive Strategic Divergence'}
                 </span>
 

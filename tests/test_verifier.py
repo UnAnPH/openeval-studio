@@ -1,6 +1,7 @@
 """Unit tests for Verifier & Grading Harness."""
 
 from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -83,7 +84,7 @@ async def test_full_benchmark_audit_valid_task(sample_task, mock_sandbox) -> Non
     """Verify that a valid task (Nop fails, Oracle passes) produces a valid audit report."""
     call_count = 0
 
-    async def mock_exec(cmd: str, timeout_sec: float | None = None) -> ExecResult:
+    async def mock_exec(cmd: str, *args: Any, **kwargs: Any) -> ExecResult:
         nonlocal call_count
         call_count += 1
         # Nop test run -> fail

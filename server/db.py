@@ -60,20 +60,21 @@ def get_user_id_by_slug(db: Session, slug: str) -> int:
         _USER_ID_CACHE[slug] = uid
         return uid
 
-    # Upsert user if missing
-    res = db.execute(
-        text(
-            "INSERT INTO users (slug) VALUES (:slug) "
-            "ON CONFLICT (slug) DO UPDATE SET slug = EXCLUDED.slug "
-            "RETURNING id"
-        ),
-        {"slug": slug},
-    )
-    db.commit()
-    inserted = res.fetchone()
-    uid = int(inserted[0]) if inserted else 1
-    _USER_ID_CACHE[slug] = uid
-    return uid
+    # Upsert user if missing in an isolated short-lived session so caller's db session isn't committed
+    with SessionLocal() as create_db:
+        res = create_db.execute(
+            text(
+                "INSERT INTO users (slug) VALUES (:slug) "
+                "ON CONFLICT (slug) DO UPDATE SET slug = EXCLUDED.slug "
+                "RETURNING id"
+            ),
+            {"slug": slug},
+        )
+        create_db.commit()
+        inserted = res.fetchone()
+        uid = int(inserted[0]) if inserted else 1
+        _USER_ID_CACHE[slug] = uid
+        return uid
 
 
 def get_current_user_id(db: Session | None = None) -> int:
@@ -83,6 +84,11 @@ def get_current_user_id(db: Session | None = None) -> int:
         return uid
 
     slug = current_user_slug.get() or "owner"
+    if slug in _USER_ID_CACHE:
+        cached_uid = _USER_ID_CACHE[slug]
+        current_user_id.set(cached_uid)
+        return cached_uid
+
     if db is not None:
         resolved = get_user_id_by_slug(db, slug)
         current_user_id.set(resolved)

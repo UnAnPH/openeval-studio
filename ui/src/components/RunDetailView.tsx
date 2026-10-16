@@ -113,7 +113,7 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
 **Status:** **${isPassed ? 'PASSED ✅' : isFailed ? 'FAILED ❌' : run.status}**  
 **Execution Timestamp:** ${run.created_at}  
 **Total Steps:** ${run.total_steps || steps.length}  
-**Duration:** ${run.total_duration_sec.toFixed(2)}s  
+**Duration:** ${(run.total_duration_sec != null ? run.total_duration_sec : 0).toFixed(2)}s  
 **Token Usage:** ${run.total_tokens?.toLocaleString()} tokens (Est. Cost: $${run.estimated_cost_usd?.toFixed(4)})  
 **Human Auditor:** ${humanReviewer || run.human_reviewer || 'Unassigned'}  
 
@@ -128,7 +128,7 @@ ${run.failure_reason || (isPassed ? '=== 1 passed ===\nAll held-out pytest asser
 ${(run.audit_verdicts || [])
   .map(
     (v) => `### Metric: ${v.metric_name.toUpperCase()}
-- **Verdict:** ${v.passed ? '✅ PASSED' : '❌ FAILED'} (Score: ${(v.score * 100).toFixed(0)}%)
+- **Verdict:** ${v.passed === true ? '✅ PASSED' : v.passed === false ? '❌ FAILED' : 'PENDING'} (Score: ${v.score != null ? `${(v.score * 100).toFixed(0)}%` : 'N/A'})
 - **Reasoning:** ${v.reasoning}
 ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
   )
@@ -411,7 +411,7 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
             <span>Duration</span>
             <Clock className="w-3.5 h-3.5 text-amber-600" />
           </div>
-          <div className="text-xl font-bold font-mono text-slate-900">{run.total_duration_sec.toFixed(1)}s</div>
+          <div className="text-xl font-bold font-mono text-slate-900">{(run.total_duration_sec != null ? run.total_duration_sec : 0).toFixed(1)}s</div>
           <div className="text-[10px] text-slate-500">Across {run.total_steps || steps.length} turns</div>
         </div>
 
@@ -989,7 +989,7 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
             <div><strong>Run ID:</strong> {run.run_id}</div>
             <div><strong>Model:</strong> {run.model}</div>
             <div><strong>Status:</strong> {isPassed ? 'PASSED ✅' : 'FAILED ❌'}</div>
-            <div><strong>Duration:</strong> {run.total_duration_sec.toFixed(2)}s ({steps.length} turns)</div>
+            <div><strong>Duration:</strong> {(run.total_duration_sec != null ? run.total_duration_sec : 0).toFixed(2)}s ({steps.length} turns)</div>
             <div><strong>Tokens & Cost:</strong> {run.total_tokens?.toLocaleString()} tok (${run.estimated_cost_usd?.toFixed(4)})</div>
 
             <div className="pt-3 border-t border-slate-200">
@@ -1004,7 +1004,7 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
               <ul className="list-disc pl-5 space-y-1">
                 {(run.audit_verdicts || []).map((v) => (
                   <li key={v.metric_name}>
-                    <strong>{v.metric_name}:</strong> {v.passed ? 'PASSED' : 'FAILED'} ({(v.score * 100).toFixed(0)}%) — {v.reasoning}
+                    <strong>{v.metric_name}:</strong> {v.passed === true ? 'PASSED' : v.passed === false ? 'FAILED' : 'PENDING'} ({v.score != null ? `${(v.score * 100).toFixed(0)}%` : 'N/A'}) — {v.reasoning}
                   </li>
                 ))}
               </ul>

@@ -12,20 +12,22 @@ import time
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from engine.approval_policy import (
     WatcherRequest,
     WatcherVerdict,
     global_watcher_engine,
 )
+from engine.redaction import redact_payload
 from schemas.watcher_models import ProvenanceMetadata, ToolCall, ToolResult
 from server.policy_gateway import PolicyGateway
+from server.request_context import get_request_id
 from server.watcher_store import get_watcher_store
 from server.webhook import emit_watcher_webhook
 
@@ -46,10 +48,26 @@ class WatcherResultRequest(BaseModel):
 
 
 class ResolveInterceptionRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
     session_id: str | None = None
     review_id: str | None = None
-    resolution: Literal["human_approved", "blocked", "allow"] = "human_approved"
+    resolution: str | None = None
+    action: str | None = None
     note: str | None = None
+    notes: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_fields(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "resolution" not in data and "action" in data:
+                data["resolution"] = data["action"]
+            if "note" not in data and "notes" in data:
+                data["note"] = data["notes"]
+            if not data.get("resolution"):
+                data["resolution"] = "human_approved"
+        return data
 
 
 class ResolveInterceptionResponse(BaseModel):
@@ -278,6 +296,9 @@ async def evaluate_action_watcher_gateway(
     elif rec.decision in ("escalate", "warn"):
         mapped_decision = "escalate"
 
+    req_id = get_request_id()
+    rec.request_id = req_id
+
     client_decision: str | None = None
     terminal_reason: str | None = None
     if mapped_decision == "deny":
@@ -291,7 +312,7 @@ async def evaluate_action_watcher_gateway(
         decision=mapped_decision,  # type: ignore[arg-type]
         stage=(
             "stage_2_deterministic"
-            if rec.stage == "rule"
+            if rec.stage in ("rule", "threshold")
             else "stage_3_triage"
             if rec.stage == "triage"
             else "stage_4_deep_review"
@@ -319,6 +340,7 @@ async def evaluate_action_watcher_gateway(
         terminal_reason=terminal_reason,
         provenance=rec.provenance,
         consent_disclosure=rec.consent_disclosure,
+        request_id=req_id,
     )
 
     # Observe mode: never deny, but record shadow decision
@@ -345,9 +367,10 @@ async def evaluate_action_watcher_gateway(
             user_id=tenant_id,
             provenance=rec.provenance,
             consent_disclosure=rec.consent_disclosure,
+            request_id=req_id,
         )
 
-    await broadcast_watcher_event("interception_event", verdict.model_dump())
+    await broadcast_watcher_event("interception_event", redact_payload(verdict.model_dump()))
 
     if verdict.decision in ("deny", "escalate", "reject") or (
         cfg.mode == "observe" and mapped_decision in ("deny", "escalate")
@@ -372,24 +395,24 @@ async def evaluate_action_watcher_gateway(
     # Persist live-gate session + decision into WatcherStore for the current user
     try:
         agent_id = req.agent_id or "antigravity"
-        store.ensure_live_session(
+        await asyncio.to_thread(
+            store.ensure_live_session,
             session_id,
             agent_type=agent_id,
             title=f"[{agent_id}] Live gate ({session_id[:8]})",
         )
-        store.append_trajectory_event(
-            session_id,
-            ToolCall(
-                tool_name=req.tool_name,
-                arguments=req.arguments or {},
-                raw_input=tool_input or cmd or req.tool_name,
-            ),
+        tc = ToolCall(
+            tool_name=req.tool_name,
+            arguments=req.arguments or {},
+            raw_input=tool_input or cmd or req.tool_name,
         )
-        store.record_decision(rec)
+        await asyncio.to_thread(store.append_trajectory_event, session_id, tc)
+        await store.arecord_decision(rec)
         activity = verdict.decision
         if cfg.mode == "observe" and mapped_decision != "allow":
             activity = f"shadow:{mapped_decision}"
-        store.update_session(
+        await asyncio.to_thread(
+            store.update_session,
             session_id,
             {
                 "current_activity": f"{req.tool_name} → {activity}",
@@ -497,26 +520,31 @@ async def resolve_watcher_interception(
             _record_operator_resolution(item, allow=approved, note=note)
             resolved_count += 1
 
-    # 2. Update canonical WatcherStore sessions already scoped to this user.
-    target_sessions = (
-        [store.get_session(req.session_id)] if req.session_id else store.list_sessions(limit=200)
-    )
-    for sess in target_sessions:
-        if not sess:
-            continue
-        updated = False
-        for r in sess.trajectory.reviews:
-            match_rev = not req.review_id or r.id == req.review_id
-            if match_rev and _is_interception_candidate(r):
-                original_decision = r.decision
-                original_score = r.score
-                _record_operator_resolution(r, allow=approved, note=note)
-                r.decision = original_decision
-                r.score = original_score
-                updated = True
-                resolved_count += 1
-        if updated:
-            store.record_session(sess)
+    # 2. Update canonical WatcherStore sessions already scoped to this user via background thread.
+    def _update_store_sessions() -> int:
+        target_sessions = (
+            [store.get_session(req.session_id)] if req.session_id else store.list_sessions(limit=200)
+        )
+        count = 0
+        for sess in target_sessions:
+            if not sess:
+                continue
+            updated = False
+            for r in sess.trajectory.reviews:
+                match_rev = not req.review_id or r.id == req.review_id
+                if match_rev and _is_interception_candidate(r):
+                    original_decision = r.decision
+                    original_score = r.score
+                    _record_operator_resolution(r, allow=approved, note=note)
+                    r.decision = original_decision
+                    r.score = original_score
+                    updated = True
+                    count += 1
+            if updated:
+                store.record_session(sess)
+        return count
+
+    resolved_count += await asyncio.to_thread(_update_store_sessions)
 
     payload = {
         "session_id": req.session_id,
@@ -551,21 +579,26 @@ async def resolve_all_watcher_reviews() -> ResolveAllReviewsResponse:
             resolved_count += 1
 
     # 2. WatcherStore.list_sessions is already WHERE user_id = active tenant.
-    for sess in store.list_sessions(limit=200):
-        updated = False
-        for r in sess.trajectory.reviews:
-            if _is_interception_candidate(r):
-                original_decision = r.decision
-                original_score = r.score
-                _record_operator_resolution(r, allow=True, note=note)
-                r.decision = original_decision
-                r.score = original_score
-                updated = True
-                resolved_count += 1
-        if updated:
-            if sess.status in ("failed", "error"):
-                sess.status = "completed"
-            store.record_session(sess)
+    def _resolve_all_store() -> int:
+        count = 0
+        for sess in store.list_sessions(limit=200):
+            updated = False
+            for r in sess.trajectory.reviews:
+                if _is_interception_candidate(r):
+                    original_decision = r.decision
+                    original_score = r.score
+                    _record_operator_resolution(r, allow=True, note=note)
+                    r.decision = original_decision
+                    r.score = original_score
+                    updated = True
+                    count += 1
+            if updated:
+                if sess.status in ("failed", "error"):
+                    sess.status = "completed"
+                store.record_session(sess)
+        return count
+
+    resolved_count += await asyncio.to_thread(_resolve_all_store)
 
     payload = {
         "resolved_count": resolved_count,
@@ -641,7 +674,7 @@ async def stream_watcher_events(
                     if "demo" in str(v.get("session_id", ""))
                     or str(v.get("session_id", "")).startswith("demo-")
                 ]
-            store_hist = _verdicts_from_store_reviews(limit=20)
+            store_hist = await asyncio.to_thread(_verdicts_from_store_reviews, 20)
             seen: set[str] = set()
             history: list[dict[str, Any]] = []
             for row in live_hist + store_hist:

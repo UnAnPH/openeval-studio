@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 ReviewPosture = Literal["blocking", "trailing", "disabled"]
 ReviewDecision = Literal["allow", "warn", "block", "modify", "escalate"]
@@ -227,6 +227,10 @@ class ReviewRecord(BaseModel):
         default=None,
         description="Structured informed consent disclosure for intercepted actions",
     )
+    request_id: str | None = Field(
+        default=None,
+        description="End-to-end request tracing correlation ID",
+    )
 
     @property
     def decision_id(self) -> str:
@@ -325,6 +329,7 @@ class CommandRule(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     rule_id: str = Field(default_factory=lambda: str(uuid4())[:8])
+    is_custom: bool = Field(default=False)
     category: Literal["git", "security", "fs", "system"] = Field(default="git")
     name: str = Field(...)
     pattern: str = Field(..., description="Regex pattern to match command line")
@@ -339,6 +344,19 @@ class CommandRule(BaseModel):
     threat_category: ThreatCategory | None = Field(
         default=None, description="Apollo 13-point threat taxonomy category"
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _sync_ids(cls, data: object) -> object:
+        if isinstance(data, dict) and "rule_id" not in data and "id" in data:
+            data["rule_id"] = data["id"]
+        return data
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def id(self) -> str:
+        """Expose rule_id as id for TypeScript and UI compatibility."""
+        return self.rule_id
 
     def matches(self, cmd: str) -> bool:
         """Check if command matches rule regex."""

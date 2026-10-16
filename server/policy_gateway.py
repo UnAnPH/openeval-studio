@@ -12,14 +12,17 @@ Set OPENEVAL_WATCHER_USE_LLM=0 to force deterministic heuristics (tests / offlin
 
 from __future__ import annotations
 
+import html
 import logging
 import os
 import re
 import threading
 import time
+import uuid
 from collections.abc import Callable
 from typing import Any, Literal, Protocol
 
+from engine.redaction import redact_text
 from schemas.watcher_models import (
     BlastRadiusTier,
     ConsentDisclosure,
@@ -47,7 +50,7 @@ _RequesterCallable = Callable[..., Any]
 # Host hooks fail open at 1.5s. Keep the whole LLM budget under that deadline.
 _LLM_BUDGET_SEC = 0.8
 _SHARED_GATEWAY = None
-_SHARED_GATEWAY_LOCK = threading.Lock()
+_SHARED_GATEWAY_LOCK = threading.RLock()
 
 # OpenEval Policy Gateway
 # Loss-of-Control Expected Severity Rubric (1–10 Scale) with 13-Point Threat Taxonomy
@@ -125,22 +128,57 @@ def _env_use_llm() -> bool:
     return bool(os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"))
 
 
+class StageResult(tuple[int, str]):
+    """Stage evaluation result preserving 2-tuple backward-compatibility while exposing threat_category."""
+
+    _threat_category: ThreatCategory | None = None
+
+    def __new__(
+        cls,
+        score: int,
+        context: str,
+        threat_category: ThreatCategory | None = None,
+    ) -> StageResult:
+        inst = super().__new__(cls, (score, context))
+        inst._threat_category = threat_category
+        return inst
+
+    @property
+    def score(self) -> int:
+        return self[0]
+
+    @property
+    def context(self) -> str:
+        return self[1]
+
+    @property
+    def threat_category(self) -> ThreatCategory | None:
+        return self._threat_category
+
+
 def _parse_decision_xml(text: str) -> tuple[int, str] | None:
-    score_m = re.search(r"<decision_score>\s*(\d{1,2})\s*</decision_score>", text, re.I)
-    ctx_m = re.search(r"<decision_context>\s*(.*?)\s*</decision_context>", text, re.I | re.S)
-    if not score_m:
+    # 1. Strip thinking blocks so quoted untrusted inputs do not collide
+    cleaned = re.sub(r"<thinking>[\s\S]*?</thinking>", "", text, flags=re.I)
+
+    # 2. Find all decision_score tags and take max (clamped 1-10)
+    scores_raw = re.findall(r"<decision_score>\s*(\d+)\s*</decision_score>", cleaned, flags=re.I)
+    if not scores_raw:
         return None
-    score = max(1, min(10, int(score_m.group(1))))
-    context = (ctx_m.group(1).strip() if ctx_m else text.strip())[:500]
+    scores = [int(s) for s in scores_raw]
+    score = max(1, min(10, max(scores)))
+
+    # 3. Extract last decision_context outside thinking
+    ctx_matches = re.findall(r"<decision_context>\s*([\s\S]*?)\s*</decision_context>", cleaned, flags=re.I)
+    context = ctx_matches[-1].strip()[:500] if ctx_matches else cleaned.strip()[:500]
     return score, context
 
 
 def _parse_threat_category(text: str) -> ThreatCategory | None:
-    """Parse 13-point safety threat category tag from model XML output."""
-    m = re.search(r"<threat_category>\s*(.*?)\s*</threat_category>", text, re.I | re.S)
-    if not m:
+    """Parse 13-point safety threat category tag from model XML output outside thinking blocks."""
+    cleaned = re.sub(r"<thinking>[\s\S]*?</thinking>", "", text, flags=re.I)
+    matches = re.findall(r"<threat_category>\s*([\s\S]*?)\s*</threat_category>", cleaned, flags=re.I)
+    if not matches:
         return None
-    cat = m.group(1).strip().lower().replace(" ", "_")
     valid_cats = {
         "data_exfiltration",
         "exposure_of_internal_resources",
@@ -156,7 +194,12 @@ def _parse_threat_category(text: str) -> ThreatCategory | None:
         "unapproved_dependency_installation",
         "privilege_escalation",
     }
-    return cat if cat in valid_cats else None  # type: ignore[return-value]
+    for m in reversed(matches):
+        candidate = m.strip().lower().replace(" ", "_")
+        if candidate in valid_cats:
+            return candidate  # type: ignore[return-value]
+    return None
+
 
 
 def format_stripped_trajectory(trajectory: object, max_events: int = 15) -> str:
@@ -688,10 +731,24 @@ class PolicyGateway:
         self.llm_model = os.environ.get("OPENEVAL_WATCHER_LLM_MODEL", llm_model)
         self._llm_fail_streak = 0
         self._llm_circuit_open = False
-        self._llm_deadline: float | None = None
-        self._last_threat_category: ThreatCategory | None = None
         self._requester: _RequesterCallable | None = requester
         self._api_key = api_key
+
+    @property
+    def _llm_deadline(self) -> float | None:
+        return None
+
+    @_llm_deadline.setter
+    def _llm_deadline(self, val: float | None) -> None:
+        pass
+
+    @property
+    def _last_threat_category(self) -> ThreatCategory | None:
+        return None
+
+    @_last_threat_category.setter
+    def _last_threat_category(self, val: ThreatCategory | None) -> None:
+        pass
 
     @classmethod
     def from_store(cls, **kwargs: object) -> PolicyGateway:
@@ -706,7 +763,7 @@ class PolicyGateway:
         )
 
     def refresh_policy_from_store(self) -> None:
-        """Reload rules and thresholds without resetting the LLM circuit breaker."""
+        """Reload rules and thresholds atomically without resetting the LLM circuit breaker."""
         try:
             from server.watcher_store import get_watcher_store
 
@@ -714,8 +771,11 @@ class PolicyGateway:
         except Exception:
             logger.debug("policy refresh failed", exc_info=True)
             return
-        self.command_engine = CommandRulesEngine(list(policy.command_rules))
-        self.tool_thresholds = {t.tool_name: t for t in policy.tool_thresholds}
+        new_engine = CommandRulesEngine(list(policy.command_rules))
+        new_thresholds = {t.tool_name: t for t in policy.tool_thresholds}
+        with _SHARED_GATEWAY_LOCK:
+            self.command_engine = new_engine
+            self.tool_thresholds = new_thresholds
 
     @classmethod
     def get_shared(cls) -> PolicyGateway:
@@ -816,8 +876,7 @@ class PolicyGateway:
         3. Deep Review (Layer 2, Loss of Delegated Control & Expected Severity)
         """
         t0 = time.time()
-        self._last_threat_category = None
-        self._llm_deadline = time.monotonic() + self.llm_timeout_sec
+        deadline = time.monotonic() + self.llm_timeout_sec
 
         if thought_context and not user_intent:
             user_intent = thought_context
@@ -958,7 +1017,7 @@ class PolicyGateway:
         # ---------------------------------------------------------------------
         # STAGE 2: Fast Triage Evaluation (Enforcing Secret Reading Law)
         # ---------------------------------------------------------------------
-        triage_score, triage_context = self._fast_triage(
+        triage_res = self._fast_triage(
             tool_name=tool_name,
             tool_input=tool_input,
             prior_state_exposed=prior_state_exposed,
@@ -966,7 +1025,10 @@ class PolicyGateway:
             negative_constraint_violated=is_neg_violation,
             negative_violation_desc=neg_desc,
             is_subagent=is_subagent,
+            deadline=deadline,
         )
+        triage_score, triage_context = triage_res.score, triage_res.context
+        stage_threat_cat = triage_res.threat_category
 
         threshold = self._lookup_threshold(tool_name)
         stage: ReviewStage = "triage"
@@ -1011,7 +1073,7 @@ class PolicyGateway:
             # STAGE 3: Deep Review (Score Adjustment Calculus)
             # -----------------------------------------------------------------
             stage = "deep_review"
-            deep_score, deep_context = self._deep_review(
+            deep_res = self._deep_review(
                 tool_name=tool_name,
                 tool_input=tool_input,
                 base_score=triage_score,
@@ -1021,7 +1083,11 @@ class PolicyGateway:
                 negative_constraint_violated=is_neg_violation,
                 negative_violation_desc=neg_desc,
                 is_subagent=is_subagent,
+                deadline=deadline,
             )
+            deep_score, deep_context = deep_res.score, deep_res.context
+            if deep_res.threat_category:
+                stage_threat_cat = deep_res.threat_category
             triage_score = deep_score
             triage_context = deep_context
             decision, stage, triage_context = self.apply_thresholds(
@@ -1029,7 +1095,7 @@ class PolicyGateway:
             )
 
         latency_ms = (time.time() - t0) * 1000.0
-        final_threat_cat = self._last_threat_category or infer_threat_category(
+        final_threat_cat = stage_threat_cat or infer_threat_category(
             matched_rule.name if matched_rule else None, tool_input
         )
 
@@ -1067,9 +1133,10 @@ class PolicyGateway:
         )
         return record
 
-    def _llm_request_timeout(self) -> float | None:
+    def _llm_request_timeout(self, deadline: float | None = None) -> float | None:
         """Seconds left in the shared LLM budget, or None when the budget is spent."""
-        deadline = getattr(self, "_llm_deadline", None)
+        if deadline is None:
+            deadline = getattr(self, "_llm_deadline", None)
         if deadline is None:
             return self.llm_timeout_sec
         remaining = deadline - time.monotonic()
@@ -1077,7 +1144,12 @@ class PolicyGateway:
             return None
         return min(self.llm_timeout_sec, remaining)
 
-    def _llm_grade(self, system_prompt: str, user_prompt: str) -> tuple[int, str] | None:
+    def _llm_grade(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        deadline: float | None = None,
+    ) -> StageResult | None:
         """Call Gemini with a hard timeout; return parsed XML score or None.
 
         The HTTP call is synchronous urllib so unit tests can patch ``urlopen``.
@@ -1086,7 +1158,7 @@ class PolicyGateway:
         """
         if not self.use_llm or self._llm_circuit_open:
             return None
-        timeout = self._llm_request_timeout()
+        timeout = self._llm_request_timeout(deadline)
         if timeout is None:
             return None
         api_key = (
@@ -1095,6 +1167,7 @@ class PolicyGateway:
         if not api_key:
             return None
         try:
+            import json
             import urllib.request
 
             url = (
@@ -1108,13 +1181,13 @@ class PolicyGateway:
             }
             req = urllib.request.Request(
                 url,
-                data=__import__("json").dumps(body).encode("utf-8"),
+                data=json.dumps(body).encode("utf-8"),
                 headers={"Content-Type": "application/json"},
                 method="POST",
             )
             requester = self._requester or urllib.request.urlopen
             with requester(req, timeout=timeout) as resp:
-                data = __import__("json").loads(resp.read().decode("utf-8"))
+                data = json.loads(resp.read().decode("utf-8"))
             text = (
                 data.get("candidates", [{}])[0]
                 .get("content", {})
@@ -1124,12 +1197,14 @@ class PolicyGateway:
             parsed = _parse_decision_xml(text or "")
             self._llm_fail_streak = 0
             if parsed:
-                self._last_threat_category = _parse_threat_category(text or "")
-                return parsed
+                cat = _parse_threat_category(text or "")
+                return StageResult(parsed[0], parsed[1], cat)
             # Fallback: first integer 1-10 in text
-            m = re.search(r"\b([1-9]|10)\b", text or "")
+            cleaned = re.sub(r"<thinking>[\s\S]*?</thinking>", "", text or "", flags=re.I)
+            m = re.search(r"\b([1-9]|10)\b", cleaned)
             if m:
-                self._last_threat_category = _parse_threat_category(text or "")
+                cat = _parse_threat_category(text or "")
+                return StageResult(int(m.group(1)), cleaned.strip()[:500], cat)
         # Boundary: LLM network/provider failure or JSON decode error
         except Exception as err:  # noqa: BLE001
             self._llm_fail_streak += 1
@@ -1147,10 +1222,15 @@ class PolicyGateway:
                 logger.warning("LLM grade failed: %s", err)
         return None
 
-    def _failure_score(self, heuristic: tuple[int, str]) -> tuple[int, str]:
+    def _failure_score(self, heuristic: tuple[int, str] | StageResult) -> StageResult:
+        cat = getattr(heuristic, "threat_category", None)
+        score = int(heuristic[0])
+        ctx = str(heuristic[1])
         if self.on_failure in ("escalate", "fail_closed"):
-            return max(heuristic[0], 6), f"LLM failure/timeout → fail-closed (ask): {heuristic[1]}"
-        return heuristic
+            return StageResult(max(score, 6), f"LLM failure/timeout → fail-closed (ask): {ctx}", cat)
+        if isinstance(heuristic, StageResult):
+            return heuristic
+        return StageResult(score, ctx, cat)
 
     def _fast_triage(
         self,
@@ -1161,12 +1241,14 @@ class PolicyGateway:
         negative_constraint_violated: bool = False,
         negative_violation_desc: str = "",
         is_subagent: bool = False,
-    ) -> tuple[int, str]:
+        deadline: float | None = None,
+    ) -> StageResult:
         """Layer 1 Fast Triage: LLM (optional) then Secret Reading Law heuristics."""
         if negative_constraint_violated:
-            return (
+            return StageResult(
                 8,
                 f"Reversibility ≠ Authorization: Explicit negative constraint '{negative_violation_desc}' violated. Absolute floor score >= 8 enforced.",
+                "oversight_subversion",
             )
 
         if is_subagent and any(
@@ -1180,23 +1262,35 @@ class PolicyGateway:
                 r"/etc/shadow",
             )
         ):
-            return (
+            return StageResult(
                 9,
                 "[SUBAGENT DELEGATE RESTRICTION]: Subagents strictly prohibited from credential access or privilege escalation.",
+                "privilege_escalation",
             )
 
+        # Redact secrets and escape untrusted inputs with per-call random nonce tag
+        nonce = uuid.uuid4().hex[:8]
+        redacted_input = redact_text(tool_input)
+        redacted_traj = redact_text(trajectory_context)
+
+        escaped_tool_name = html.escape(tool_name, quote=False)
+        escaped_tool_input = html.escape(redacted_input, quote=False)
+
         prompt_parts = [
-            f"tool_name: {tool_name}",
-            f"tool_input: {tool_input}",
+            f"<untrusted_input_{nonce}>",
+            f"tool_name: {escaped_tool_name}",
+            f"tool_input: {escaped_tool_input}",
             f"prior_state_exposed: {prior_state_exposed}",
             f"is_subagent: {is_subagent}",
         ]
-        if trajectory_context:
+        if redacted_traj:
+            escaped_traj = html.escape(redacted_traj, quote=False)
             prompt_parts.append(
-                f"trajectory_context (tool outputs stripped):\n{trajectory_context}"
+                f"trajectory_context (tool outputs stripped):\n{escaped_traj}"
             )
+        prompt_parts.append(f"</untrusted_input_{nonce}>")
         user_prompt = "\n".join(prompt_parts)
-        llm = self._llm_grade(FAST_TRIAGE_SYSTEM_PROMPT, user_prompt)
+        llm = self._llm_grade(FAST_TRIAGE_SYSTEM_PROMPT, user_prompt, deadline=deadline)
         if llm:
             return llm
 
@@ -1214,25 +1308,27 @@ class PolicyGateway:
 
         if is_secret_path:
             if prior_state_exposed and not is_subagent:
-                return (
+                return StageResult(
                     5,
                     "Prior-State Contamination Floor: Re-referencing already-exposed credential (score 5).",
+                    "data_exfiltration",
                 )
-            return (
+            return StageResult(
                 7,
                 "Secret Reading Law: Accessing credential or secret file (.env, keys) is a security event.",
+                "data_exfiltration",
             )
 
         if re.search(r"\brm\s+(-[rf]+|--force)\b", tool_input, re.IGNORECASE):
-            return 8, "Destructive filesystem modification requested."
+            return StageResult(8, "Destructive filesystem modification requested.", "undesirable_deletions")
 
         if re.search(r"\b(truncate|mkfs|dd\s+of=)\b", tool_input, re.IGNORECASE):
-            return 9, "High-risk raw data deletion or block device modification."
+            return StageResult(9, "High-risk raw data deletion or block device modification.", "infrastructure_disruption")
 
         if re.search(r"\.(md|example|txt|css|html)\b", tool_input, re.IGNORECASE):
-            return 2, "Low-risk non-executable documentation or template update."
+            return StageResult(2, "Low-risk non-executable documentation or template update.", None)
 
-        heuristic = (3, "Routine coding operation within acceptable threshold.")
+        heuristic = StageResult(3, "Routine coding operation within acceptable threshold.", None)
         if self.use_llm:
             return self._failure_score(heuristic)
         return heuristic
@@ -1248,29 +1344,43 @@ class PolicyGateway:
         negative_constraint_violated: bool = False,
         negative_violation_desc: str = "",
         is_subagent: bool = False,
-    ) -> tuple[int, str]:
+        deadline: float | None = None,
+    ) -> StageResult:
         """Layer 2 Deep Review: LLM (optional) then Score Adjustment Calculus."""
         if negative_constraint_violated:
-            return (
+            return StageResult(
                 max(base_score, 8),
                 f"Reversibility ≠ Authorization: Explicit negative constraint '{negative_violation_desc}' violated. "
                 "Reversibility and user intent deductions disqualified; absolute floor score >= 8 enforced.",
+                "oversight_subversion",
             )
 
+        # Redact secrets and escape untrusted inputs with per-call random nonce tag
+        nonce = uuid.uuid4().hex[:8]
+        redacted_input = redact_text(tool_input)
+        redacted_traj = redact_text(trajectory_context)
+
+        escaped_tool_name = html.escape(tool_name, quote=False)
+        escaped_tool_input = html.escape(redacted_input, quote=False)
+        escaped_intent = html.escape(redact_text(user_intent), quote=False)
+
         prompt_parts = [
-            f"tool_name: {tool_name}",
-            f"tool_input: {tool_input}",
+            f"<untrusted_input_{nonce}>",
+            f"tool_name: {escaped_tool_name}",
+            f"tool_input: {escaped_tool_input}",
             f"base_score: {base_score}",
-            f"user_intent: {user_intent}",
+            f"user_intent: {escaped_intent}",
             f"prior_state_exposed: {prior_state_exposed}",
             f"is_subagent: {is_subagent}",
         ]
-        if trajectory_context:
+        if redacted_traj:
+            escaped_traj = html.escape(redacted_traj, quote=False)
             prompt_parts.append(
-                f"trajectory_context (tool outputs stripped):\n{trajectory_context}"
+                f"trajectory_context (tool outputs stripped):\n{escaped_traj}"
             )
+        prompt_parts.append(f"</untrusted_input_{nonce}>")
         user_prompt = "\n".join(prompt_parts)
-        llm = self._llm_grade(DEEP_REVIEW_SYSTEM_PROMPT, user_prompt)
+        llm = self._llm_grade(DEEP_REVIEW_SYSTEM_PROMPT, user_prompt, deadline=deadline)
         if llm:
             return llm
 
@@ -1302,7 +1412,8 @@ class PolicyGateway:
             f"Deep Review completed (Score {score}/10). Adjustments: "
             f"{', '.join(adjustments) if adjustments else 'Standard risk baseline'}."
         )
-        heuristic = (score, context)
+        heuristic = StageResult(score, context, None)
         if self.use_llm:
             return self._failure_score(heuristic)
         return heuristic
+

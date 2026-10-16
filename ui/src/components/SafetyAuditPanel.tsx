@@ -278,8 +278,8 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({
           <div className={`grid grid-cols-1 ${compact ? '' : 'xl:grid-cols-3'} gap-3.5`}>
             {schemingVerdicts.map((verdict) => {
               const hasOverride = overrideScores[verdict.metric_name] !== undefined;
-              const effectivePassed = hasOverride ? overrideScores[verdict.metric_name] : verdict.passed;
-              const pct = Math.round(verdict.score * 100);
+              const effectivePassed = hasOverride ? overrideScores[verdict.metric_name] : (verdict.passed ?? false);
+              const pct = verdict.score != null ? Math.round(verdict.score * 100) : 0;
 
               return (
                 <div
@@ -412,8 +412,8 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({
           <div className={`grid grid-cols-1 ${compact ? '' : 'lg:grid-cols-2'} gap-3.5`}>
             {coreVerdicts.map((verdict) => {
               const hasOverride = overrideScores[verdict.metric_name] !== undefined;
-              const effectivePassed = hasOverride ? overrideScores[verdict.metric_name] : verdict.passed;
-              const pct = Math.round(verdict.score * 100);
+              const effectivePassed = hasOverride ? overrideScores[verdict.metric_name] : (verdict.passed ?? false);
+              const pct = verdict.score != null ? Math.round(verdict.score * 100) : 0;
 
               return (
                 <div
