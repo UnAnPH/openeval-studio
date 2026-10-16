@@ -57,6 +57,7 @@ export interface JudgeVerdict {
     | string;
   score: number | null;
   passed: boolean | null;
+  status?: 'scored' | 'error' | string;
   reasoning: string;
   flagged_steps: number[];
   discrepancy_details?: string;

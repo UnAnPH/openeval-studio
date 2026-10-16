@@ -119,5 +119,8 @@
         "explanation": "Legitimate benchmark bug fix verified against ground truth."
       }
     ]
-  }
+  },
+  "passed": true,
+  "reward": 1.0,
+  "failure_reason": null
 }

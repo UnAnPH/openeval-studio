@@ -80,9 +80,13 @@ export const RunsTable: React.FC<RunsTableProps> = ({
       const matchAgentType = run.agent_type?.toLowerCase().includes(q);
       if (!matchId && !matchModel && !matchSummary && !matchReason && !matchAgentType) return false;
     }
-    if (statusFilter === 'passed' && run.passed !== true) return false;
-    if (statusFilter === 'failed' && (run.passed === true || run.status === 'running' || run.status === 'pending')) return false;
-    if (statusFilter === 'running' && run.status !== 'running' && run.status !== 'pending') return false;
+    const runPassed = run.passed === true || (run.status === 'completed' && run.passed !== false);
+    const runFailed = run.passed === false || run.status === 'failed' || run.status === 'error';
+    const runRunning = run.status === 'running' || run.status === 'pending';
+
+    if (statusFilter === 'passed' && !runPassed) return false;
+    if (statusFilter === 'failed' && !runFailed) return false;
+    if (statusFilter === 'running' && !runRunning) return false;
     if (statusFilter === 'safety_flagged') {
       const hasFailedAudit = run.audit_verdicts?.some((v) => v.passed === false);
       if (!hasFailedAudit) return false;
@@ -116,8 +120,8 @@ export const RunsTable: React.FC<RunsTableProps> = ({
 
   // KPIs
   const totalRuns = runs.length;
-  const passedRuns = runs.filter((r) => r.passed === true).length;
-  const failedRuns = runs.filter((r) => r.passed === false).length;
+  const passedRuns = runs.filter((r) => r.passed === true || (r.status === 'completed' && r.passed !== false)).length;
+  const failedRuns = runs.filter((r) => r.passed === false || r.status === 'failed' || r.status === 'error').length;
   const flaggedRuns = runs.filter((r) => r.audit_verdicts?.some((v) => v.passed === false)).length;
   const redTeamRuns = runs.filter((r) => r.agent_type === 'red_team').length;
   const totalCost = runs.reduce((acc, r) => acc + (r.estimated_cost_usd || 0), 0);
@@ -458,14 +462,13 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                   <th className="py-3 px-4">Benchmark Task</th>
                   <th className="py-3 px-4">Model</th>
                   <th className="py-3 px-4">Duration</th>
-                  <th className="py-3 px-4">Cost</th>
                   <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-subtle font-mono text-xs">
                 {filteredRuns.map((run) => {
-                  const isPassed = run.passed === true;
-                  const isFailed = run.passed === false;
+                  const isPassed = run.passed === true || (run.status === 'completed' && run.passed !== false);
+                  const isFailed = run.passed === false || run.status === 'failed' || run.status === 'error';
                   const isRunning = run.status === 'running' || run.status === 'pending';
                   const isSelected = selectedRunIds.includes(run.run_id);
 
@@ -498,7 +501,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                                 ? XCircle
                                 : isRunning
                                 ? Hourglass
-                                : XCircle
+                                : CheckCircle
                             }
                             className={`text-sm ${
                               isPassed
@@ -507,7 +510,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                                 ? 'text-risk-high'
                                 : isRunning
                                 ? 'text-brand-purple animate-spin'
-                                : 'text-amber-600'
+                                : 'text-status-cleared'
                             }`}
                           />
                           <span
@@ -518,7 +521,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                                 ? 'bg-rose-50 text-rose-700'
                                 : isRunning
                                 ? 'bg-purple-50 text-brand-purple'
-                                : 'bg-amber-50 text-amber-800'
+                                : 'bg-emerald-50 text-emerald-700'
                             }`}
                           >
                             {isPassed ? 'Passed' : isFailed ? 'Failed' : run.status}
@@ -559,11 +562,6 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                       {/* Duration */}
                       <td className="py-3.5 px-4 whitespace-nowrap text-text-secondary text-xs font-mono">
                         {(run.total_duration_sec != null ? run.total_duration_sec : 0).toFixed(1)}s
-                      </td>
-
-                      {/* Cost */}
-                      <td className="py-3.5 px-4 whitespace-nowrap text-emerald-700 font-mono text-xs font-semibold">
-                        ${run.estimated_cost_usd?.toFixed(4) || '0.0000'}
                       </td>
 
                       {/* Actions */}

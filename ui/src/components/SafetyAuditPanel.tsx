@@ -278,14 +278,17 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({
           <div className={`grid grid-cols-1 ${compact ? '' : 'xl:grid-cols-3'} gap-3.5`}>
             {schemingVerdicts.map((verdict) => {
               const hasOverride = overrideScores[verdict.metric_name] !== undefined;
+              const isUnavailable = !hasOverride && (verdict.status === 'error' || verdict.passed === null || verdict.score === null);
               const effectivePassed = hasOverride ? overrideScores[verdict.metric_name] : (verdict.passed ?? false);
-              const pct = verdict.score != null ? Math.round(verdict.score * 100) : 0;
+              const pct = verdict.score != null ? Math.round(verdict.score * 100) : null;
 
               return (
                 <div
                   key={verdict.metric_name}
                   className={`p-3.5 rounded-xl border flex flex-col justify-between space-y-3 transition-all ${
-                    effectivePassed
+                    isUnavailable
+                      ? 'bg-amber-50/30 border-amber-200'
+                      : effectivePassed
                       ? 'bg-white border-emerald-200'
                       : 'bg-rose-50/50 border-rose-300 ring-1 ring-rose-200'
                   }`}
@@ -299,12 +302,14 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({
                       </div>
                       <span
                         className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full flex-shrink-0 ${
-                          effectivePassed
+                          isUnavailable
+                            ? 'bg-amber-100 text-amber-800'
+                            : effectivePassed
                             ? 'bg-emerald-100 text-emerald-800'
                             : 'bg-rose-100 text-rose-800 animate-pulse'
                         }`}
                       >
-                        {effectivePassed ? 'Passed' : 'Flagged'}
+                        {isUnavailable ? 'Rate Limited' : effectivePassed ? 'Passed' : 'Flagged'}
                       </span>
                     </div>
 
@@ -412,14 +417,17 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({
           <div className={`grid grid-cols-1 ${compact ? '' : 'lg:grid-cols-2'} gap-3.5`}>
             {coreVerdicts.map((verdict) => {
               const hasOverride = overrideScores[verdict.metric_name] !== undefined;
+              const isUnavailable = !hasOverride && (verdict.status === 'error' || verdict.passed === null || verdict.score === null);
               const effectivePassed = hasOverride ? overrideScores[verdict.metric_name] : (verdict.passed ?? false);
-              const pct = verdict.score != null ? Math.round(verdict.score * 100) : 0;
+              const pct = verdict.score != null ? Math.round(verdict.score * 100) : null;
 
               return (
                 <div
                   key={verdict.metric_name}
                   className={`p-3.5 rounded-xl border flex flex-col justify-between space-y-2.5 transition-all ${
-                    effectivePassed
+                    isUnavailable
+                      ? 'bg-amber-50/30 border-amber-200'
+                      : effectivePassed
                       ? 'bg-white border-emerald-200'
                       : 'bg-rose-50/50 border-rose-300'
                   }`}
@@ -427,8 +435,8 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({
                   <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
                     <div className="flex items-center gap-2 min-w-0 flex-1">
                       <Icon
-                        icon={effectivePassed ? CheckCircle : XCircle}
-                        className={`text-base flex-shrink-0 ${effectivePassed ? 'text-status-cleared' : 'text-risk-high'}`}
+                        icon={isUnavailable ? AlertTriangle : effectivePassed ? CheckCircle : XCircle}
+                        className={`text-base flex-shrink-0 ${isUnavailable ? 'text-amber-600' : effectivePassed ? 'text-status-cleared' : 'text-risk-high'}`}
                       />
                       <span className="font-bold text-xs font-mono text-text-primary truncate">
                         {getMetricTitle(verdict.metric_name)}
@@ -437,14 +445,18 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({
 
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <span className="font-mono font-bold text-xs">
-                        Score: {pct}%
+                        Score: {pct != null ? `${pct}%` : 'N/A'}
                       </span>
                       <span
                         className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${
-                          effectivePassed ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                          isUnavailable
+                            ? 'bg-amber-100 text-amber-800'
+                            : effectivePassed
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-rose-100 text-rose-800'
                         }`}
                       >
-                        {effectivePassed ? 'Passed' : 'Failed'}
+                        {isUnavailable ? 'Rate Limited' : effectivePassed ? 'Passed' : 'Failed'}
                       </span>
                     </div>
                   </div>

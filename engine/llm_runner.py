@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import time
 from typing import Any, Literal, cast
 
@@ -290,13 +291,15 @@ class AsyncLLMRunner:
 
             except Exception as exc:
                 err_str = str(exc)
+
+                # Permanent failures (billing, model deprecation, daily cap)
                 if (
-                    "RESOURCE_EXHAUSTED" in err_str
-                    or "Quota exceeded" in err_str
-                    or "credit_balance_exhausted" in err_str
+                    "credit_balance_exhausted" in err_str
                     or "insufficient_quota" in err_str
                     or "404 NOT_FOUND" in err_str
                     or "no longer available" in err_str
+                    or "Daily" in err_str
+                    or "PerDay" in err_str
                 ):
                     raise RuntimeError(f"Google GenAI quota or model unavailable: {exc}") from exc
 
@@ -306,10 +309,19 @@ class AsyncLLMRunner:
                         f"Google GenAI request failed after {cfg.max_retries} retries: {exc}"
                     ) from exc
 
-                if "429" in err_str:
-                    backoff = 2.0 + (attempt * 1.0)
+                is_rate_limit = "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "Quota exceeded" in err_str
+                if is_rate_limit:
+                    delay_match = re.search(
+                        r"retry\s+(?:in|Delay['\"]?:\s*['\"])(\d+(?:\.\d+)?)s?",
+                        err_str,
+                        re.IGNORECASE,
+                    )
+                    if delay_match:
+                        backoff = float(delay_match.group(1)) + 1.0
+                    else:
+                        backoff = 10.0 + (attempt * 4.0)
                     logger.warning(
-                        "Google API rate limit (429). Retrying in %.1fs (attempt %d/%d)...",
+                        "Google API rate limit (429/RESOURCE_EXHAUSTED). Retrying in %.1fs (attempt %d/%d)...",
                         backoff,
                         attempt,
                         cfg.max_retries,

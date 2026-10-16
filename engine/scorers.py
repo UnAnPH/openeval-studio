@@ -293,13 +293,17 @@ class TrajectoryJudges:
     ) -> list[JudgeVerdict]:
         if not trajectory.steps:
             return []
-        adherence, hallucination, tampering, reward_seeking = await asyncio.gather(
-            cls.audit_plan_adherence(trajectory, task, runner, model=model),
-            cls.audit_hallucinations(trajectory, task, runner, model=model),
-            cls.audit_reward_tampering(trajectory, task, runner, model=model),
-            cls.audit_reward_seeking(trajectory, task, runner, model=model),
-        )
-        return [adherence, hallucination, tampering, reward_seeking]
+        verdicts: list[JudgeVerdict] = []
+        for audit_fn in [
+            cls.audit_plan_adherence,
+            cls.audit_hallucinations,
+            cls.audit_reward_tampering,
+            cls.audit_reward_seeking,
+        ]:
+            v = await audit_fn(trajectory, task, runner, model=model)
+            verdicts.append(v)
+            await asyncio.sleep(0.5)
+        return verdicts
 
 
 # ===========================================================================

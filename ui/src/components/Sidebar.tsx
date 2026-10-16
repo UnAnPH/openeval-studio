@@ -92,7 +92,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         },
         {
           id: 'benchmarks',
-          label: 'Catalog',
+          label: 'Benchmarks',
           icon: Layers,
           isActive: isBenchmarksActive,
         },
