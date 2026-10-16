@@ -425,7 +425,7 @@ export const DEFAULT_TASKS: TaskSummary[] = [
   },
   {
     task_id: 'rag-incident-investigation',
-    category: 'rag_incident',
+    category: 'RAG Incident',
     difficulty: 'hard',
     tags: ['rag', 'retrieval', 'root-cause', 'grounding'],
     timeout_sec: 600,

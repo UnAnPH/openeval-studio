@@ -132,7 +132,7 @@ export const SessionPickerModal: React.FC<SessionPickerModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-xl bg-white border border-border-subtle hover:bg-canvas text-text-secondary flex items-center justify-center transition-colors cursor-pointer"
+            className="h-9 w-9 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 shadow-2xs inline-flex items-center justify-center transition-all cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -141,21 +141,21 @@ export const SessionPickerModal: React.FC<SessionPickerModalProps> = ({
         {/* 2. Search & Filters Bar */}
         <div className="p-4 border-b border-border-subtle bg-white space-y-3">
           {/* Main Search Input */}
-          <div className="relative">
+          <div className="relative flex items-center">
             <input
               type="text"
               autoFocus
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search by Session ID, Agent, Model, Project, or Title..."
-              className="w-full bg-canvas border border-border-subtle rounded-xl pl-9 pr-8 py-2 text-xs text-text-primary focus:outline-none focus:border-indigo-500 placeholder:text-text-muted font-mono"
+              className="w-full h-9 bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-8 text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-indigo-500 placeholder:text-slate-400 font-mono shadow-2xs"
             />
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary p-0.5 cursor-pointer"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-0.5 cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -169,7 +169,7 @@ export const SessionPickerModal: React.FC<SessionPickerModalProps> = ({
               <select
                 value={agentFilter}
                 onChange={(e) => setAgentFilter(e.target.value)}
-                className="bg-canvas border border-border-subtle rounded-lg px-2.5 py-1 text-xs text-text-primary font-medium focus:outline-none focus:border-indigo-500"
+                className="h-9 bg-white border border-slate-200 rounded-xl px-3 text-xs text-slate-700 font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-2xs cursor-pointer"
               >
                 <option value="all">All Agents ({uniqueAgents.length})</option>
                 {uniqueAgents.map((agent) => (
@@ -183,7 +183,7 @@ export const SessionPickerModal: React.FC<SessionPickerModalProps> = ({
               <select
                 value={modelFilter}
                 onChange={(e) => setModelFilter(e.target.value)}
-                className="bg-canvas border border-border-subtle rounded-lg px-2.5 py-1 text-xs text-text-primary font-medium focus:outline-none focus:border-indigo-500"
+                className="h-9 bg-white border border-slate-200 rounded-xl px-3 text-xs text-slate-700 font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-2xs cursor-pointer"
               >
                 <option value="all">All Models ({uniqueModels.length})</option>
                 {uniqueModels.map((m) => (
@@ -194,14 +194,14 @@ export const SessionPickerModal: React.FC<SessionPickerModalProps> = ({
               </select>
 
               {/* Status Segmented Buttons */}
-              <div className="flex items-center bg-canvas p-0.5 rounded-lg border border-border-subtle text-[11px] font-bold">
+              <div className="h-9 bg-slate-100 p-1 rounded-xl border border-slate-200/70 inline-flex items-center gap-1">
                 <button
                   type="button"
                   onClick={() => setStatusFilter('all')}
-                  className={`px-2.5 py-0.5 rounded-md transition-colors cursor-pointer ${
+                  className={`h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center transition-all cursor-pointer ${
                     statusFilter === 'all'
-                      ? 'bg-white text-text-primary shadow-2xs'
-                      : 'text-text-muted hover:text-text-primary'
+                      ? 'bg-white text-slate-900 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   All
@@ -209,10 +209,10 @@ export const SessionPickerModal: React.FC<SessionPickerModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setStatusFilter('blocked')}
-                  className={`px-2.5 py-0.5 rounded-md transition-colors cursor-pointer ${
+                  className={`h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center transition-all cursor-pointer ${
                     statusFilter === 'blocked'
-                      ? 'bg-rose-600 text-white shadow-2xs'
-                      : 'text-text-muted hover:text-rose-600'
+                      ? 'bg-rose-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-rose-600'
                   }`}
                 >
                   Blocked
@@ -220,10 +220,10 @@ export const SessionPickerModal: React.FC<SessionPickerModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setStatusFilter('closed')}
-                  className={`px-2.5 py-0.5 rounded-md transition-colors cursor-pointer ${
+                  className={`h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center transition-all cursor-pointer ${
                     statusFilter === 'closed'
-                      ? 'bg-slate-900 text-white shadow-2xs'
-                      : 'text-text-muted hover:text-text-primary'
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   Closed
@@ -232,12 +232,12 @@ export const SessionPickerModal: React.FC<SessionPickerModalProps> = ({
             </div>
 
             {/* Sort Dropdown */}
-            <div className="flex items-center gap-1.5 text-[11px] text-text-muted font-mono">
+            <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-mono">
               <span>Sort:</span>
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as any)}
-                className="bg-canvas border border-border-subtle rounded-lg px-2 py-1 text-[11px] text-text-primary font-medium focus:outline-none"
+                className="h-9 bg-white border border-slate-200 rounded-xl px-3 text-xs text-slate-700 font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-2xs cursor-pointer"
               >
                 <option value="newest">Newest First</option>
                 <option value="oldest">Oldest First</option>
@@ -376,13 +376,13 @@ export const SessionPickerModal: React.FC<SessionPickerModalProps> = ({
                   {/* Selection Button */}
                   <div className="flex items-center gap-2 flex-shrink-0">
                     {isSelected ? (
-                      <span className="px-3 py-1 rounded-lg bg-indigo-600 text-white text-xs font-bold font-mono shadow-xs">
+                      <span className="h-8 px-3 rounded-lg bg-indigo-600 text-white text-xs font-semibold shadow-xs inline-flex items-center justify-center">
                         Selected
                       </span>
                     ) : (
                       <button
                         type="button"
-                        className="px-3.5 py-1.5 rounded-lg border border-border-subtle bg-white hover:bg-canvas text-xs font-bold text-text-primary shadow-2xs transition-colors cursor-pointer"
+                        className="h-8 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 shadow-2xs"
                       >
                         Select
                       </button>
@@ -403,7 +403,7 @@ export const SessionPickerModal: React.FC<SessionPickerModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-1.5 rounded-xl bg-dark-base hover:bg-black text-white text-xs font-bold transition-colors cursor-pointer shadow-xs"
+            className="h-9 px-5 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-slate-900 hover:bg-black text-white shadow-xs"
           >
             Done
           </button>

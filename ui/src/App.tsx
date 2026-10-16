@@ -1261,6 +1261,13 @@ export function App() {
                 onDeleteRun={handleDeleteRun}
                 onSaveRevision={handleSaveRevisedAudit}
                 onCompareWith={handleCompareWithRun}
+                onRerun={() => {
+                  if (detailRunRecord) {
+                    setSelectedTaskId(detailRunRecord.task_id);
+                    setSelectedModelId(detailRunRecord.model);
+                    setRoute(`studio?task=${encodeURIComponent(detailRunRecord.task_id)}&model=${encodeURIComponent(detailRunRecord.model)}`);
+                  }
+                }}
               />
             )}
 
@@ -1393,10 +1400,10 @@ export function App() {
                       type="button"
                       onClick={() => setChaosMode(!chaosMode)}
                       disabled={isStreaming}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all border ${
+                      className={`h-9 px-3.5 rounded-xl border text-xs font-mono font-semibold inline-flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer ${
                         chaosMode
-                          ? 'bg-amber-50 text-amber-800 border-amber-300 shadow-xs'
-                          : 'bg-[#f3f4f6] text-[#6b7280] border-[#e5e7eb] hover:text-[#111827]'
+                          ? 'bg-amber-50 text-amber-800 border-amber-300'
+                          : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                       }`}
                     >
                       {chaosMode ? '🐒 Chaos: ON' : '🐒 Chaos: OFF'}
@@ -1407,7 +1414,7 @@ export function App() {
                       <button
                         type="button"
                         onClick={handleStopEval}
-                        className="px-4 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                        className="h-9 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-xs inline-flex items-center gap-1.5 transition-all cursor-pointer"
                       >
                         <Loader2 className="w-3 h-3 text-white animate-spin" />
                         <span>Stop Run</span>
@@ -1418,7 +1425,7 @@ export function App() {
                           <button
                             type="button"
                             onClick={() => handleSelectPastRun(activeRunId)}
-                            className="px-3 py-1.5 rounded-xl bg-white border border-[#e5e7eb] hover:bg-slate-50 text-indigo-700 font-bold text-xs transition-all cursor-pointer"
+                            className="h-9 px-3.5 rounded-xl bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold shadow-2xs inline-flex items-center gap-1.5 transition-all cursor-pointer"
                           >
                             <span>Inspect Run &rarr;</span>
                           </button>
@@ -1432,7 +1439,7 @@ export function App() {
                               setActiveRunId(null);
                               setRunStatus('idle');
                             }}
-                            className="px-3 py-1.5 rounded-xl bg-white border border-[#e5e7eb] text-slate-600 font-medium text-xs hover:bg-slate-50 transition-all cursor-pointer"
+                            className="h-9 px-3.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs inline-flex items-center gap-1.5 transition-all cursor-pointer"
                           >
                             <span>Clear</span>
                           </button>
@@ -1441,7 +1448,7 @@ export function App() {
                           type="button"
                           onClick={() => handleLaunchEval()}
                           disabled={!selectedTaskId || !serverConnected}
-                          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#111827] hover:bg-black text-white text-xs font-bold transition-all shadow-xs disabled:opacity-50 cursor-pointer"
+                          className="h-9 px-4 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-semibold shadow-xs inline-flex items-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer"
                         >
                           <Play className="w-3.5 h-3.5 fill-current" />
                           <span>Launch Evaluation</span>

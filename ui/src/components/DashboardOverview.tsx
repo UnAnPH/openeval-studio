@@ -371,7 +371,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         </div>
 
         {/* Date Selector Tabs */}
-        <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/60 text-xs font-medium overflow-x-auto">
+        <div className="h-9 flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/60 text-xs overflow-x-auto">
           {[
             { id: 'today', label: 'Today' },
             { id: 'this_week', label: 'This week' },
@@ -382,10 +382,10 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             <button
               key={tab.id}
               onClick={() => setDateFilter(tab.id as any)}
-              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+              className={`h-7 px-3 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap inline-flex items-center justify-center ${
                 dateFilter === tab.id
                   ? 'bg-white text-slate-900 shadow-xs font-bold'
-                  : 'text-slate-600 hover:text-slate-900'
+                  : 'text-slate-600 hover:text-slate-900 font-medium'
               }`}
             >
               {tab.label}

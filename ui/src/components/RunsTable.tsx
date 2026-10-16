@@ -152,7 +152,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
             <button
               type="button"
               onClick={onNavigateToStudio}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold bg-slate-900 text-white rounded-xl hover:bg-black transition-all shadow-xs cursor-pointer"
+              className="h-9 px-4 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-slate-900 hover:bg-black text-white shadow-xs"
             >
               <Icon icon={Play} className="text-xs" />
               <span>New Run</span>
@@ -289,10 +289,10 @@ export const RunsTable: React.FC<RunsTableProps> = ({
               <button
                 type="button"
                 onClick={() => setStatusFilter(statusFilter === 'red_team' ? 'all' : 'red_team')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all cursor-pointer ${
+                className={`h-9 px-3 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
                   statusFilter === 'red_team'
                     ? 'bg-rose-50 text-rose-800 border-rose-300 ring-2 ring-rose-300/30'
-                    : 'bg-canvas border-border-subtle hover:bg-surface-subtle text-text-secondary'
+                    : 'bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 shadow-2xs'
                 }`}
               >
                 <span className="w-2 h-2 rounded-full bg-rose-500" />
@@ -305,7 +305,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
               <select
                 value={selectedModel}
                 onChange={(e) => setSelectedModel(e.target.value)}
-                className="bg-canvas border border-border-subtle rounded-xl px-3 py-1.5 text-xs text-text-primary font-medium focus:outline-none focus:border-brand-primary cursor-pointer"
+                className="h-9 bg-white border border-slate-200 rounded-xl px-3 text-xs text-slate-700 font-medium focus:outline-none focus:border-brand-primary cursor-pointer shadow-2xs"
               >
                 <option value="all">All Models</option>
                 {modelOptions.map((m) => (
@@ -320,7 +320,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
             <select
               value={selectedTaskId}
               onChange={(e) => setSelectedTaskId(e.target.value)}
-              className="bg-canvas border border-border-subtle rounded-xl px-3 py-1.5 text-xs text-text-primary font-medium focus:outline-none focus:border-brand-primary cursor-pointer"
+              className="h-9 bg-white border border-slate-200 rounded-xl px-3 text-xs text-slate-700 font-medium focus:outline-none focus:border-brand-primary cursor-pointer shadow-2xs"
             >
               <option value="all">All Benchmarks</option>
               {tasks.map((t) => (
@@ -337,11 +337,11 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value)}
                 placeholder="Search run ID, task, model..."
-                className="w-full bg-canvas border border-border-subtle rounded-xl pl-7 pr-3 py-1.5 text-xs text-text-primary focus:outline-none focus:border-brand-primary font-sans"
+                className="h-9 w-full bg-white border border-slate-200 rounded-xl pl-8 pr-3 text-xs text-slate-800 focus:outline-none focus:border-brand-primary font-sans shadow-2xs"
               />
               <Icon
                 icon={Search}
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted text-xs pointer-events-none"
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"
               />
             </div>
           </div>
@@ -353,7 +353,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
               <button
                 type="button"
                 onClick={() => setShowClearAllModal(true)}
-                className="px-3 py-1.5 rounded-xl bg-white text-rose-600 hover:bg-rose-50 border border-rose-200 text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer"
+                className="h-9 px-3.5 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-rose-600 hover:bg-rose-700 text-white shadow-xs"
                 title="Clear All Runs"
               >
                 <Icon icon={Trash2} className="text-xs" />
@@ -377,7 +377,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                 <button
                   type="button"
                   onClick={() => onCompareSelected([selectedRunIds[0], selectedRunIds[1]])}
-                  className="px-3.5 py-1.5 rounded-xl bg-slate-900 text-white text-xs font-semibold flex items-center gap-1.5 hover:bg-black transition-all shadow-xs cursor-pointer"
+                  className="h-9 px-3.5 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-slate-900 hover:bg-black text-white shadow-xs"
                 >
                   <Icon icon={GitCompare} className="text-xs" />
                   <span>Compare Top 2 Selected</span>
@@ -389,7 +389,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                 <button
                   type="button"
                   onClick={() => onExportSFT(selectedRecords)}
-                  className="px-3 py-1.5 rounded-lg bg-white border border-border-subtle text-brand-purple text-xs font-bold flex items-center gap-1.5 hover:bg-surface-subtle transition-all cursor-pointer"
+                  className="h-9 px-3.5 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 shadow-2xs"
                 >
                   <Icon icon={Download} className="text-xs" />
                   <span>Export SFT JSONL ({selectedRunIds.length})</span>
@@ -401,7 +401,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowBatchDeleteModal(true)}
-                  className="px-3 py-1.5 rounded-lg bg-rose-100 text-rose-800 hover:bg-rose-200 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                  className="h-9 px-3.5 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-rose-600 hover:bg-rose-700 text-white shadow-xs"
                 >
                   <Icon icon={Trash2} className="text-xs" />
                   <span>Delete Selected ({selectedRunIds.length})</span>
@@ -411,7 +411,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
               <button
                 type="button"
                 onClick={() => setSelectedRunIds([])}
-                className="px-2.5 py-1.5 text-xs text-text-secondary hover:text-text-primary cursor-pointer"
+                className="h-9 px-3 rounded-xl text-xs font-semibold inline-flex items-center justify-center transition-all cursor-pointer bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 shadow-2xs"
               >
                 Deselect All
               </button>
@@ -440,14 +440,14 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                   setSelectedModel('all');
                   setSelectedTaskId('all');
                 }}
-                className="px-3.5 py-1.5 rounded-xl bg-canvas border border-border-subtle text-xs font-medium text-text-primary hover:bg-surface-subtle cursor-pointer"
+                className="h-9 px-4 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 shadow-2xs"
               >
                 Reset Filters
               </button>
               <button
                 type="button"
                 onClick={onNavigateToStudio}
-                className="px-3.5 py-1.5 rounded-xl bg-dark-base text-white text-xs font-bold hover:bg-black cursor-pointer"
+                className="h-9 px-4 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-slate-900 hover:bg-black text-white shadow-xs"
               >
                 Launch Evaluation
               </button>
@@ -579,7 +579,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                           <button
                             type="button"
                             onClick={() => onSelectRun(run.run_id)}
-                            className="px-3 py-1 rounded-lg bg-surface-subtle text-brand-purple text-xs font-bold flex items-center gap-1 hover:bg-purple-100 transition-colors cursor-pointer"
+                            className="h-8 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs"
                           >
                             <span>Inspect</span>
                             <Icon icon={ArrowRight} className="text-[11px]" />
@@ -592,7 +592,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                                 e.stopPropagation();
                                 setRunPendingDelete(run);
                               }}
-                              className="p-1.5 rounded-lg text-text-muted hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                              className="h-8 w-8 rounded-lg text-xs font-semibold inline-flex items-center justify-center transition-all cursor-pointer bg-white hover:bg-rose-50 border border-slate-200 text-rose-600 hover:border-rose-300 shadow-2xs"
                               title="Delete run"
                             >
                               <Icon icon={Trash2} className="text-xs pointer-events-none" />
@@ -643,7 +643,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
               <button
                 type="button"
                 onClick={() => setRunPendingDelete(null)}
-                className="px-4 py-2 rounded-xl bg-canvas border border-border-subtle text-text-secondary text-xs font-bold hover:bg-surface-subtle transition-colors cursor-pointer"
+                className="h-9 px-4 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 shadow-2xs"
               >
                 Cancel
               </button>
@@ -653,7 +653,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                   if (onDeleteRun) onDeleteRun(runPendingDelete.run_id);
                   setRunPendingDelete(null);
                 }}
-                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
+                className="h-9 px-4 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-rose-600 hover:bg-rose-700 text-white shadow-xs"
               >
                 Delete Run
               </button>
@@ -690,7 +690,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
               <button
                 type="button"
                 onClick={() => setShowBatchDeleteModal(false)}
-                className="px-4 py-2 rounded-xl bg-canvas border border-border-subtle text-text-secondary text-xs font-bold hover:bg-surface-subtle transition-colors cursor-pointer"
+                className="h-9 px-4 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 shadow-2xs"
               >
                 Cancel
               </button>
@@ -703,7 +703,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                   setSelectedRunIds([]);
                   setShowBatchDeleteModal(false);
                 }}
-                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
+                className="h-9 px-4 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-rose-600 hover:bg-rose-700 text-white shadow-xs"
               >
                 Delete {selectedRunIds.length} Runs
               </button>
@@ -740,7 +740,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
               <button
                 type="button"
                 onClick={() => setShowClearAllModal(false)}
-                className="px-4 py-2 rounded-xl bg-canvas border border-border-subtle text-text-secondary text-xs font-bold hover:bg-surface-subtle transition-colors cursor-pointer"
+                className="h-9 px-4 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 shadow-2xs"
               >
                 Cancel
               </button>
@@ -751,7 +751,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                   setSelectedRunIds([]);
                   setShowClearAllModal(false);
                 }}
-                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
+                className="h-9 px-4 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-rose-600 hover:bg-rose-700 text-white shadow-xs"
               >
                 Purge All Runs
               </button>

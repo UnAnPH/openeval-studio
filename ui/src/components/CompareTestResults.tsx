@@ -148,7 +148,7 @@ const RunPickerModal: React.FC<RunPickerModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-xl bg-white border border-border-subtle hover:bg-canvas text-text-secondary flex items-center justify-center transition-colors cursor-pointer"
+            className="h-9 w-9 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 inline-flex items-center justify-center transition-colors cursor-pointer shadow-2xs"
           >
             <Icon icon={X} className="text-base" />
           </button>
@@ -164,17 +164,17 @@ const RunPickerModal: React.FC<RunPickerModalProps> = ({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search by Task ID, Model, Run ID prefix, or failure reason..."
-              className="w-full bg-canvas border border-border-subtle rounded-xl pl-9 pr-8 py-2 text-xs text-text-primary focus:outline-none focus:border-brand-primary placeholder:text-text-muted"
+              className="h-9 w-full bg-white border border-slate-200 rounded-xl pl-9 pr-8 text-xs text-slate-800 focus:outline-none focus:border-brand-primary placeholder:text-slate-400 font-mono shadow-2xs"
             />
             <Icon
               icon={Search}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted text-sm pointer-events-none"
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none"
             />
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary text-xs cursor-pointer"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-xs cursor-pointer"
               >
                 <Icon icon={X} />
               </button>
@@ -188,7 +188,7 @@ const RunPickerModal: React.FC<RunPickerModalProps> = ({
               <select
                 value={taskFilter}
                 onChange={(e) => setTaskFilter(e.target.value)}
-                className="bg-canvas border border-border-subtle rounded-lg px-2.5 py-1 text-xs text-text-primary font-medium focus:outline-none focus:border-brand-primary"
+                className="h-9 bg-white border border-slate-200 rounded-xl px-2.5 text-xs text-slate-700 font-medium focus:outline-none focus:border-brand-primary shadow-2xs cursor-pointer"
               >
                 <option value="all">All Tasks ({uniqueTasks.length})</option>
                 {uniqueTasks.map((taskId) => (
@@ -202,7 +202,7 @@ const RunPickerModal: React.FC<RunPickerModalProps> = ({
               <select
                 value={modelFilter}
                 onChange={(e) => setModelFilter(e.target.value)}
-                className="bg-canvas border border-border-subtle rounded-lg px-2.5 py-1 text-xs text-text-primary font-medium focus:outline-none focus:border-brand-primary"
+                className="h-9 bg-white border border-slate-200 rounded-xl px-2.5 text-xs text-slate-700 font-medium focus:outline-none focus:border-brand-primary shadow-2xs cursor-pointer"
               >
                 <option value="all">All Models ({uniqueModels.length})</option>
                 {uniqueModels.map((m) => (
@@ -213,12 +213,12 @@ const RunPickerModal: React.FC<RunPickerModalProps> = ({
               </select>
 
               {/* Status Segmented Buttons */}
-              <div className="flex items-center bg-canvas p-0.5 rounded-lg border border-border-subtle text-[11px] font-bold">
+              <div className="h-9 bg-slate-100 p-1 rounded-xl border border-slate-200/70 inline-flex items-center gap-1">
                 <button
                   type="button"
                   onClick={() => setStatusFilter('all')}
-                  className={`px-2.5 py-0.5 rounded-md transition-colors ${
-                    statusFilter === 'all' ? 'bg-white text-text-primary shadow-2xs' : 'text-text-muted hover:text-text-primary'
+                  className={`h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center transition-all cursor-pointer ${
+                    statusFilter === 'all' ? 'bg-white text-slate-900 shadow-2xs font-semibold' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   All
@@ -226,8 +226,8 @@ const RunPickerModal: React.FC<RunPickerModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setStatusFilter('passed')}
-                  className={`px-2.5 py-0.5 rounded-md transition-colors ${
-                    statusFilter === 'passed' ? 'bg-emerald-600 text-white shadow-2xs' : 'text-text-muted hover:text-text-primary'
+                  className={`h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center transition-all cursor-pointer ${
+                    statusFilter === 'passed' ? 'bg-white text-slate-900 shadow-2xs font-semibold' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   Passed
@@ -235,8 +235,8 @@ const RunPickerModal: React.FC<RunPickerModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setStatusFilter('failed')}
-                  className={`px-2.5 py-0.5 rounded-md transition-colors ${
-                    statusFilter === 'failed' ? 'bg-rose-600 text-white shadow-2xs' : 'text-text-muted hover:text-text-primary'
+                  className={`h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center transition-all cursor-pointer ${
+                    statusFilter === 'failed' ? 'bg-white text-slate-900 shadow-2xs font-semibold' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   Failed
@@ -328,15 +328,15 @@ const RunPickerModal: React.FC<RunPickerModalProps> = ({
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className="flex items-center gap-2 shrink-0">
                     {isSelected ? (
-                      <span className="px-3 py-1 rounded-lg bg-dark-base text-white text-xs font-bold font-mono">
+                      <span className="h-8 px-3 rounded-lg text-xs font-semibold font-mono inline-flex items-center justify-center bg-slate-900 text-white shadow-xs">
                         Selected
                       </span>
                     ) : (
                       <button
                         type="button"
-                        className="px-3 py-1.5 rounded-lg border border-border-subtle bg-white hover:bg-canvas text-xs font-bold text-text-primary shadow-2xs"
+                        className="h-8 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 shadow-2xs"
                       >
                         Select
                       </button>
@@ -356,7 +356,7 @@ const RunPickerModal: React.FC<RunPickerModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="px-3 py-1.5 rounded-xl bg-white border border-border-subtle text-text-primary font-bold hover:bg-canvas cursor-pointer shadow-2xs"
+            className="h-9 px-4 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-slate-900 hover:bg-black text-white shadow-xs"
           >
             Done
           </button>
@@ -453,7 +453,7 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
             <button
               type="button"
               onClick={onNavigateToStudio}
-              className="px-4 py-2 rounded-xl bg-brand-purple text-white text-xs font-bold hover:opacity-90 cursor-pointer"
+              className="h-9 px-4 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-slate-900 hover:bg-black text-white shadow-xs"
             >
               Launch Evaluation
             </button>
@@ -462,7 +462,7 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
             <button
               type="button"
               onClick={onNavigateToRuns}
-              className="px-4 py-2 rounded-xl bg-dark-base text-white text-xs font-bold hover:bg-black cursor-pointer"
+              className="h-9 px-4 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 shadow-2xs"
             >
               Go to Runs
             </button>
@@ -475,7 +475,6 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
   const durationDelta = (runA.total_duration_sec || 0) - (runB.total_duration_sec || 0);
   const tokenDelta = runA.total_tokens - runB.total_tokens;
   const costDelta = runA.estimated_cost_usd - runB.estimated_cost_usd;
-  const rewardDelta = (runA.reward ?? 0) - (runB.reward ?? 0);
 
   const statusShiftText =
     runA.passed === runB.passed
@@ -651,7 +650,7 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
           <button
             type="button"
             onClick={handleSwapRuns}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700 transition-all shadow-xs cursor-pointer"
+            className="h-9 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-2xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
             title="Swap Run A (Candidate) and Run B (Baseline)"
           >
             <Icon icon={ArrowLeftRight} className="text-sm text-indigo-600" />
@@ -663,21 +662,21 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
             <button
               type="button"
               onClick={handleMatchSameTask}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-semibold transition-all shadow-xs cursor-pointer"
+              className="h-9 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-2xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
             >
-              <Icon icon={Sparkles} className="text-sm" />
+              <Icon icon={Sparkles} className="text-sm text-indigo-600" />
               <span>Match Task</span>
             </button>
           )}
 
           {/* View mode toggle */}
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/60 text-xs font-medium">
+          <div className="h-9 bg-slate-100 p-1 rounded-xl border border-slate-200/70 inline-flex items-center gap-1">
             <button
               type="button"
               onClick={() => setActiveTab('timeline')}
-              className={`px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer ${
+              className={`h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center transition-all cursor-pointer ${
                 activeTab === 'timeline'
-                  ? 'bg-white text-slate-900 shadow-xs font-bold'
+                  ? 'bg-white text-slate-900 shadow-2xs font-semibold'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
@@ -686,9 +685,9 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('diff')}
-              className={`px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer ${
+              className={`h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center transition-all cursor-pointer ${
                 activeTab === 'diff'
-                  ? 'bg-white text-slate-900 shadow-xs font-bold'
+                  ? 'bg-white text-slate-900 shadow-2xs font-semibold'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
@@ -745,7 +744,7 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
 
           {/* Action Row: Non-editable selector on the left, Choose button on the right */}
           <div className="flex items-center gap-2">
-            <div className="flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-slate-700 min-w-0 overflow-hidden">
+            <div className="h-9 flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 text-xs font-mono text-slate-700 min-w-0 overflow-hidden shadow-2xs">
               <span className="text-slate-400 select-none text-[11px] shrink-0">Selected:</span>
               <span className="font-bold text-slate-900" title={runA.run_id}>{formatRunIdTail(runA.run_id, 36)}</span>
               <span className="text-slate-500 truncate text-[11px] min-w-0">({runA.model})</span>
@@ -753,7 +752,7 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
             <button
               type="button"
               onClick={() => setPickerTarget('candidate')}
-              className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer shrink-0"
+              className="h-9 px-4 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-slate-900 hover:bg-black text-white shadow-xs shrink-0"
             >
               <Icon icon={Search} className="text-sm" />
               <span>Choose Run</span>
@@ -806,7 +805,7 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
 
           {/* Action Row: Non-editable selector on the left, Choose button on the right */}
           <div className="flex items-center gap-2">
-            <div className="flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-slate-700 min-w-0 overflow-hidden">
+            <div className="h-9 flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 text-xs font-mono text-slate-700 min-w-0 overflow-hidden shadow-2xs">
               <span className="text-slate-400 select-none text-[11px] shrink-0">Selected:</span>
               <span className="font-bold text-slate-900" title={runB.run_id}>{formatRunIdTail(runB.run_id, 36)}</span>
               <span className="text-slate-500 truncate text-[11px] min-w-0">({runB.model})</span>
@@ -814,7 +813,7 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
             <button
               type="button"
               onClick={() => setPickerTarget('baseline')}
-              className="px-4 py-2 rounded-xl bg-accent-orange hover:bg-orange-600 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer shrink-0"
+              className="h-9 px-4 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-slate-900 hover:bg-black text-white shadow-xs shrink-0"
             >
               <Icon icon={Search} className="text-sm" />
               <span>Choose Run</span>
@@ -829,14 +828,11 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
         <div className="p-4 rounded-2xl bg-white border border-border-subtle shadow-sm space-y-1">
           <div className="text-[10px] uppercase font-mono font-bold text-text-muted">Outcome Shift</div>
           <div className="text-xs font-bold text-text-primary font-mono">{statusShiftText}</div>
-          <div className="text-[10px] font-mono text-brand-purple">
-            Δ Reward: {rewardDelta >= 0 ? `+${rewardDelta.toFixed(1)}` : rewardDelta.toFixed(1)}
-          </div>
         </div>
 
         {/* Duration Delta */}
         <div className="p-4 rounded-2xl bg-white border border-border-subtle shadow-sm space-y-1">
-          <div className="text-[10px] uppercase font-mono font-bold text-text-muted">Δ Duration</div>
+          <div className="text-[10px] uppercase font-mono font-bold text-text-muted">Duration</div>
           <div className={`text-base font-bold font-mono ${durationDelta <= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
             {durationDelta <= 0 ? `${durationDelta.toFixed(1)}s (Faster)` : `+${durationDelta.toFixed(1)}s (Slower)`}
           </div>
@@ -847,7 +843,7 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
 
         {/* Tokens Delta */}
         <div className="p-4 rounded-2xl bg-white border border-border-subtle shadow-sm space-y-1">
-          <div className="text-[10px] uppercase font-mono font-bold text-text-muted">Δ Tokens</div>
+          <div className="text-[10px] uppercase font-mono font-bold text-text-muted">Tokens</div>
           <div className={`text-base font-bold font-mono ${tokenDelta <= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
             {tokenDelta <= 0 ? `${tokenDelta.toLocaleString()} tok` : `+${tokenDelta.toLocaleString()} tok`}
           </div>
@@ -858,7 +854,7 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
 
         {/* Cost Delta */}
         <div className="p-4 rounded-2xl bg-white border border-border-subtle shadow-sm space-y-1">
-          <div className="text-[10px] uppercase font-mono font-bold text-text-muted">Δ Estimated Cost</div>
+          <div className="text-[10px] uppercase font-mono font-bold text-text-muted">Estimated Cost</div>
           <div className={`text-base font-bold font-mono ${costDelta <= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
             {costDelta <= 0 ? `-$${Math.abs(costDelta).toFixed(4)}` : `+$${costDelta.toFixed(4)}`}
           </div>
@@ -880,9 +876,6 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
                 <h3 className="text-sm font-bold text-text-primary">
                   AI Semantic Trajectory Judge
                 </h3>
-                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-surface-subtle text-brand-purple">
-                  LLM Semantic Evaluator
-                </span>
               </div>
               <p className="text-xs text-text-secondary">
                 Evaluates functional equivalence, filters cosmetic syntax noise, and identifies true strategic divergence
@@ -894,10 +887,9 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
             type="button"
             onClick={handleRunSemanticCompare}
             disabled={isLoadingSemantic}
-            className="px-4 py-2 rounded-xl bg-brand-purple hover:bg-purple-700 text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-50 flex-shrink-0"
+            className="h-9 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer disabled:opacity-50 shrink-0"
           >
-            <Icon icon={Sparkles} className={`text-sm ${isLoadingSemantic ? 'animate-spin' : ''}`} />
-            <span>{isLoadingSemantic ? 'Evaluating Trajectory Delta...' : '⚡ Run AI Semantic Comparison'}</span>
+            <span>{isLoadingSemantic ? 'Evaluating Trajectory Delta...' : 'Run AI Semantic Comparison'}</span>
           </button>
         </div>
 

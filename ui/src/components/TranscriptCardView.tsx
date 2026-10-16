@@ -236,19 +236,19 @@ export const TranscriptCardView: React.FC<TranscriptCardViewProps> = ({
           <button
             type="button"
             onClick={handleExpandAll}
-            className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg shadow-2xs transition-colors cursor-pointer"
+            className="h-8 px-2.5 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 shadow-2xs"
             title="Expand all messages, reasoning traces, tool calls, and results"
           >
-            <Maximize2 className="w-3 h-3 text-slate-500" />
+            <Maximize2 className="w-3.5 h-3.5 text-slate-500" />
             <span>Expand All</span>
           </button>
           <button
             type="button"
             onClick={handleCollapseAll}
-            className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg shadow-2xs transition-colors cursor-pointer"
+            className="h-8 px-2.5 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 shadow-2xs"
             title="Collapse all messages into compact summary rows"
           >
-            <Minimize2 className="w-3 h-3 text-slate-500" />
+            <Minimize2 className="w-3.5 h-3.5 text-slate-500" />
             <span>Collapse All</span>
           </button>
         </div>

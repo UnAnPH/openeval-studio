@@ -9,10 +9,12 @@ import {
   Copy,
   DollarSign,
   Download,
+  Edit3,
   FileText,
   GitCompare,
   Hourglass,
   Layers,
+  RotateCcw,
   ShieldAlert,
   ShieldCheck,
   Sparkles,
@@ -30,6 +32,7 @@ interface RunDetailViewProps {
   onDeleteRun?: (runId: string) => void;
   onSaveRevision?: (revisedRun: RunRecord) => void;
   onCompareWith?: (runId: string) => void;
+  onRerun?: () => void;
 }
 
 function cleanThought(raw?: string | null): string {
@@ -44,6 +47,7 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
   onDeleteRun,
   onSaveRevision,
   onCompareWith,
+  onRerun,
 }) => {
   const [activeTab, setActiveTab] = useState<'trajectory' | 'judges' | 'verifier' | 'diffs' | 'report'>('trajectory');
   const [selectedStepIdx, setSelectedStepIdx] = useState<number>(0);
@@ -276,7 +280,7 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
           <button
             type="button"
             onClick={onBack}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 transition-colors cursor-pointer"
+            className="h-9 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-2xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
           >
             <ArrowLeft className="w-3.5 h-3.5 text-slate-600" />
             <span>Back</span>
@@ -319,7 +323,7 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
             <button
               type="button"
               onClick={() => onCompareWith(run.run_id)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 transition-colors cursor-pointer"
+              className="h-9 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-2xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
             >
               <GitCompare className="w-3.5 h-3.5 text-indigo-600" />
               <span>Compare</span>
@@ -329,7 +333,7 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
           <button
             type="button"
             onClick={handleExportSFT}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 transition-colors cursor-pointer"
+            className="h-9 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-2xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
           >
             <Download className="w-3.5 h-3.5 text-indigo-600" />
             <span>Export SFT</span>
@@ -337,18 +341,42 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
 
           <button
             type="button"
+            onClick={() => setActiveTab('report')}
+            className="h-9 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-2xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+          >
+            <Edit3 className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Revise Report</span>
+          </button>
+
+          <button
+            type="button"
             onClick={handleDownloadReport}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-black transition-colors shadow-xs cursor-pointer"
+            className="h-9 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-2xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
           >
             <FileText className="w-3.5 h-3.5" />
             <span>Download Report</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (onRerun) {
+                onRerun();
+              } else {
+                window.location.hash = `#studio?task=${encodeURIComponent(run.task_id)}&model=${encodeURIComponent(run.model)}`;
+              }
+            }}
+            className="h-9 px-4 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-semibold shadow-xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Rerun</span>
           </button>
 
           {onDeleteRun && (
             <button
               type="button"
               onClick={() => setShowDeleteModal(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 text-xs font-semibold transition-colors cursor-pointer"
+              className="h-9 px-3.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
             >
               <Trash2 className="w-3.5 h-3.5 pointer-events-none" />
               <span>Delete</span>
@@ -452,7 +480,7 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
       </div>
 
       {/* 3. Navigation Tabs (Un-squishable, shrink-0, sticky for easy tab switching while scrolling) */}
-      <div className="bg-white/95 backdrop-blur-xs p-1.5 rounded-2xl border border-border-subtle shadow-sm flex items-center gap-1.5 text-xs font-semibold overflow-x-auto shrink-0 sticky top-0 z-20">
+      <div className="h-9 bg-slate-100 p-1 rounded-xl border border-slate-200/70 inline-flex items-center gap-1 overflow-x-auto shrink-0 sticky top-0 z-20 max-w-full">
         {[
           { id: 'trajectory', label: run.agent_type === 'red_team' ? `Probe Transcript (${steps.length} Turns)` : `Trajectory Trace (${steps.length} Turns)`, icon: Terminal },
           { id: 'judges', label: `Safety & Alignment Audits (${run.audit_verdicts?.length || 0})`, icon: ShieldCheck },
@@ -467,13 +495,13 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id as any)}
-              className={`px-3.5 py-2 rounded-xl flex items-center gap-2 whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
+              className={`h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 whitespace-nowrap transition-all cursor-pointer shrink-0 ${
                 isActive
-                  ? 'bg-slate-900 text-white shadow-xs font-semibold'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50 font-medium'
+                  ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+                  : 'text-slate-600 hover:text-slate-900 font-medium'
               }`}
             >
-              <Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-white' : 'text-slate-500'}`} />
+              <Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-slate-900' : 'text-slate-500'}`} />
               <span>{tab.label}</span>
             </button>
           );
@@ -882,7 +910,7 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
           </div>
 
           {/* RAG Benchmark Grounding & Knowledge Retrieval Inspector */}
-          {(run.task_id.includes('rag') || task?.category === 'rag_incident') && (
+          {(run.task_id.includes('rag') || task?.category === 'RAG Incident') && (
             <div className="bg-white p-6 rounded-2xl border border-border-subtle shadow-sm space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
                 <div className="flex items-center gap-2">
@@ -971,14 +999,24 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
               <h3 className="text-sm font-bold text-slate-900 font-mono">Safety Audit Report (Markdown)</h3>
               <p className="text-xs text-slate-500 mt-0.5">Exportable compliance artifact for red-teaming and safety review</p>
             </div>
-            <button
-              type="button"
-              onClick={handleDownloadReport}
-              className="px-3.5 py-1.5 rounded-xl bg-slate-900 text-white text-xs font-semibold flex items-center gap-1.5 hover:bg-black transition-colors cursor-pointer"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Download Report (.md)</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setActiveTab('judges')}
+                className="h-9 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-2xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+              >
+                <Edit3 className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Revise Report</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadReport}
+                className="h-9 px-3.5 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-semibold shadow-xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Download Report (.md)</span>
+              </button>
+            </div>
           </div>
 
           <div className="p-5 rounded-xl bg-slate-50 border border-slate-200 font-mono text-xs text-slate-900 space-y-3 leading-relaxed select-text">
@@ -1047,7 +1085,7 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
               <button
                 type="button"
                 onClick={() => setShowDeleteModal(false)}
-                className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 text-xs font-semibold hover:bg-slate-200 transition-colors cursor-pointer"
+                className="h-9 px-4 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 shadow-2xs"
               >
                 Cancel
               </button>
@@ -1058,7 +1096,7 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
                   setShowDeleteModal(false);
                   onBack();
                 }}
-                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold transition-colors shadow-xs cursor-pointer"
+                className="h-9 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
               >
                 Delete Run
               </button>

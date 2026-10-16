@@ -380,7 +380,7 @@ export const GraderWorkbenchView: React.FC = () => {
 
         {/* Real Telemetry Pills (Truthful: no fake fallbacks) */}
         <div className="flex flex-wrap items-center gap-3 text-xs font-mono">
-          <div className="bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-200 flex items-center gap-2">
+          <div className="h-9 px-3 rounded-xl border border-gray-200 bg-gray-50 flex items-center gap-2 text-xs font-mono shadow-2xs">
             <Icon icon={Gauge} className="text-teal-600" />
             <span className="text-gray-500">Triage p50:</span>
             <span className="font-bold text-gray-900">
@@ -389,7 +389,7 @@ export const GraderWorkbenchView: React.FC = () => {
                 : '0ms (Idle)'}
             </span>
           </div>
-          <div className="bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-200 flex items-center gap-2">
+          <div className="h-9 px-3 rounded-xl border border-gray-200 bg-gray-50 flex items-center gap-2 text-xs font-mono shadow-2xs">
             <Icon icon={Activity} className="text-purple-600" />
             <span className="text-gray-500">Deep p95:</span>
             <span className="font-bold text-gray-900">
@@ -398,7 +398,7 @@ export const GraderWorkbenchView: React.FC = () => {
                 : '0.0s (Idle)'}
             </span>
           </div>
-          <div className="bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200 flex items-center gap-2 text-emerald-800">
+          <div className="h-9 px-3 rounded-xl border border-emerald-200 bg-emerald-50 flex items-center gap-2 text-xs font-mono text-emerald-800 shadow-2xs">
             <Icon icon={ShieldCheck} className="text-emerald-600" />
             <span>F1 Score:</span>
             <span className="font-bold">
@@ -463,15 +463,17 @@ export const GraderWorkbenchView: React.FC = () => {
                   </span>
                 )}
                 <button
+                  type="button"
                   onClick={handleResetPrompt}
-                  className="text-[10px] text-gray-400 hover:text-gray-600 font-semibold cursor-pointer px-2 py-1 rounded hover:bg-gray-100 transition-colors"
+                  className="h-8 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 shadow-2xs"
                 >
                   Reset Default
                 </button>
                 <button
+                  type="button"
                   onClick={handleSavePrompt}
                   disabled={isSavingPrompt}
-                  className="text-[10px] bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-1 rounded-lg cursor-pointer transition-colors shadow-xs disabled:opacity-50"
+                  className="h-8 px-3.5 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-slate-900 hover:bg-black text-white shadow-xs disabled:opacity-50"
                 >
                   {isSavingPrompt ? 'Saving...' : 'Save Prompt'}
                 </button>
@@ -521,42 +523,33 @@ export const GraderWorkbenchView: React.FC = () => {
         {/* Right Column: Live Audit / Rubric Guide / Historical Benchmark (7 cols) */}
         <div className="lg:col-span-7 flex flex-col gap-4 min-w-0">
           {/* Right Mode Navigation Tabs */}
-          <div className="flex items-center justify-between bg-white p-2 rounded-2xl border border-border-subtle shadow-sm min-w-0">
-            <div className="flex items-center gap-1">
+          <div className="flex items-center justify-between min-w-0">
+            <div className="h-9 bg-slate-100 p-1 rounded-xl border border-slate-200/70 inline-flex items-center gap-1">
               <button
+                type="button"
                 onClick={() => setRightTab('live_audit')}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                className={`h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                   rightTab === 'live_audit'
-                    ? 'bg-slate-900 text-white shadow-xs'
-                    : 'text-gray-600 hover:bg-gray-100'
+                    ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+                    : 'text-slate-600 hover:text-slate-900 font-medium'
                 }`}
               >
-                <Icon icon={Play} />
+                <Icon icon={Play} className="text-xs" />
                 <span>Live Session Audit</span>
               </button>
-              {/* <button
-                onClick={() => setRightTab('rubric_guide')}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                  rightTab === 'rubric_guide'
-                    ? 'bg-slate-900 text-white shadow-xs'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                <Icon icon={FileText} />
-                <span>Rubric Calibration Scale</span>
-              </button> */}
               <button
+                type="button"
                 onClick={() => setRightTab('backtest')}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                className={`h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                   rightTab === 'backtest'
-                    ? 'bg-slate-900 text-white shadow-xs'
-                    : 'text-gray-600 hover:bg-gray-100'
+                    ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+                    : 'text-slate-600 hover:text-slate-900 font-medium'
                 }`}
               >
-                <Icon icon={GitCompare} />
+                <Icon icon={GitCompare} className="text-xs" />
                 <span>Golden Benchmark</span>
                 {report && (
-                  <span className="ml-1 w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
                 )}
               </button>
             </div>
@@ -582,7 +575,7 @@ export const GraderWorkbenchView: React.FC = () => {
                   <select
                     value={selectedModel}
                     onChange={(e) => setSelectedModel(e.target.value)}
-                    className="text-xs font-mono bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-indigo-500"
+                    className="h-8 text-xs font-mono bg-white border border-slate-200 rounded-lg px-2.5 outline-none focus:border-indigo-500 shadow-2xs"
                   >
                     <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite (Fast)</option>
                     <option value="gemini-3.7-flash">gemini-3.7-flash (Deep Reasoning)</option>
@@ -594,7 +587,7 @@ export const GraderWorkbenchView: React.FC = () => {
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 min-w-0">
                 <div
                   onClick={() => setIsPickerOpen(true)}
-                  className="flex-1 min-w-0 min-h-[41px] h-[41px] px-3.5 sm:px-4 rounded-xl border border-gray-200 bg-gray-50/70 hover:bg-gray-100/80 transition-all cursor-pointer flex items-center justify-between gap-2.5 sm:gap-3 group shadow-2xs select-none"
+                  className="h-9 flex-1 min-w-0 px-3.5 sm:px-4 rounded-xl border border-gray-200 bg-gray-50/70 hover:bg-gray-100/80 transition-all cursor-pointer flex items-center justify-between gap-2.5 sm:gap-3 group shadow-2xs select-none"
                   title="Click to choose a monitored agent session"
                 >
                   {selectedSession ? (
@@ -651,11 +644,12 @@ export const GraderWorkbenchView: React.FC = () => {
                 </div>
 
                 <button
+                  type="button"
                   onClick={runLiveAudit}
                   disabled={isAuditing || !selectedSessionId}
-                  className="min-h-[41px] h-[41px] px-4 sm:px-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50 shrink-0 whitespace-nowrap"
+                  className="h-9 px-4 sm:px-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs shadow-xs transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 disabled:opacity-50 shrink-0 whitespace-nowrap"
                 >
-                  <Icon icon={isAuditing ? RotateCw : Play} className={isAuditing ? 'animate-spin text-[15px]' : 'text-[15px]'} />
+                  <Icon icon={isAuditing ? RotateCw : Play} className={isAuditing ? 'animate-spin text-xs' : 'text-xs'} />
                   <span>{isAuditing ? 'Auditing...' : 'Audit Live Session'}</span>
                 </button>
               </div>
@@ -827,9 +821,10 @@ export const GraderWorkbenchView: React.FC = () => {
                 </div>
 
                 <button
+                  type="button"
                   onClick={runBacktest}
                   disabled={isRunningBacktest}
-                  className="py-2 px-4 rounded-xl bg-slate-900 hover:bg-black text-white font-semibold text-xs shadow-xs transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50 shrink-0"
+                  className="h-9 px-4 rounded-xl bg-slate-900 hover:bg-black text-white font-semibold text-xs shadow-xs transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 disabled:opacity-50 shrink-0"
                 >
                   <Icon icon={RotateCw} className={isRunningBacktest ? 'animate-spin' : ''} />
                   <span>{isRunningBacktest ? 'Evaluating Incidents...' : 'Run Golden Benchmark'}</span>

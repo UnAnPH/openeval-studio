@@ -96,8 +96,8 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
   watcherConfig: propConfig,
   liveInterceptions = [],
   discoveredSessions: _discoveredSessions = [],
-  isDemoSeed,
-  isDemo,
+  isDemoSeed: _isDemoSeed,
+  isDemo: _isDemo,
   onUpdateWatcherConfig,
   onNavigateToSessions,
 }) => {
@@ -106,10 +106,9 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [expandedLiveIdxs, setExpandedLiveIdxs] = useState<Set<number>>(new Set());
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
-  /*
   const [isResolving, setIsResolving] = useState<boolean>(false);
 
-  const handleAllowAll = async () => {
+  const handleResolveAll = async () => {
     try {
       setIsResolving(true);
       await fetch('/api/v1/watcher/reviews/resolve-all', { method: 'POST' });
@@ -119,7 +118,6 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
       setIsResolving(false);
     }
   };
-  */
 
   const handleResolveSingle = async (v: WatcherVerdict) => {
     try {
@@ -241,50 +239,26 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
     setExpandedLiveIdxs(new Set());
   };
 
-  const filterPillClass = (bucket: LiveStreamBucket, accent?: string) => {
-    const selected = streamFilter === bucket;
-    if (selected) {
-      return 'bg-white text-slate-900 shadow-xs font-bold';
-    }
-    if (accent && bucket === 'blocked' && totalBlockedCount > 0) {
-      return 'text-rose-600 font-bold hover:text-rose-800';
-    }
-    return 'text-slate-600 hover:text-slate-900 font-medium';
-  };
-
   return (
     <div className="flex flex-col h-full bg-[#fcfcfd] text-[#1e2029] font-sans p-6 space-y-5 overflow-y-auto">
-      {isDemo && isDemoSeed && (
-        <div className="sticky top-0 z-20 flex items-center justify-between gap-3 px-4 py-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-900 text-xs font-medium shadow-xs shrink-0 backdrop-blur-sm">
-          <div className="flex items-center gap-2.5">
-            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500 text-white tracking-wide uppercase">
-              DEMO
-            </span>
-            <span>
-              <strong>DEMO-ONLY DATA</strong> — Displaying simulated developer session fixtures for hosted demonstration. Live agent hooks are inactive in this environment.
-            </span>
-          </div>
-        </div>
-      )}
-
       {/* 1. Card Header */}
       <div className="bg-white p-4 sm:p-5 rounded-2xl border border-border-subtle shadow-sm flex items-center justify-between shrink-0">
         <h1 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
           Control
         </h1>
 
-        <div className="inline-flex items-center gap-1.5 rounded-full bg-slate-100/90 border border-slate-200/80 px-2 py-1.5">
-          <span className="pl-1.5 pr-1 text-[11px] font-semibold text-slate-600 whitespace-nowrap">
+        <div className="h-9 inline-flex items-center gap-1.5 rounded-xl bg-slate-100 p-1 border border-slate-200/70">
+          <span className="px-1.5 text-xs font-semibold text-slate-500 whitespace-nowrap">
             Mode :
           </span>
-          <div className="inline-flex items-center gap-0.5 rounded-full bg-white/80 p-0.5 border border-slate-200/70">
+          <div className="inline-flex items-center gap-1">
             <button
               type="button"
               onClick={() => handleModeChange('enforce')}
-              className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide transition-colors ${
+              className={`h-7 px-3 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all inline-flex items-center justify-center ${
                 config.mode === 'enforce'
                   ? 'bg-rose-600 text-white shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                  : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/50'
               }`}
             >
               Enforce
@@ -292,10 +266,10 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
             <button
               type="button"
               onClick={() => handleModeChange('observe')}
-              className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide transition-colors ${
+              className={`h-7 px-3 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all inline-flex items-center justify-center ${
                 config.mode === 'observe'
                   ? 'bg-brand-purple text-white shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                  : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/50'
               }`}
             >
               Observe
@@ -303,10 +277,10 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
             <button
               type="button"
               onClick={() => handleModeChange('paused')}
-              className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide transition-colors ${
+              className={`h-7 px-3 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all inline-flex items-center justify-center ${
                 config.mode === 'paused'
-                  ? 'bg-dark-base text-white shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                  ? 'bg-slate-700 text-white shadow-xs'
+                  : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/50'
               }`}
             >
               Paused
@@ -319,51 +293,64 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
       <div className="bg-white rounded-2xl border border-border-subtle shadow-sm overflow-hidden space-y-0">
         {/* Decision filter pills + Open Sessions on one toolbar row */}
         <div className="p-3 px-4 border-b border-border-subtle bg-white flex items-center justify-between gap-3">
-          <div className="grid grid-cols-3 bg-slate-100 p-1 rounded-xl gap-1 text-center max-w-md flex-1 min-w-0">
+          <div className="h-9 bg-slate-100 p-1 rounded-xl border border-slate-200/70 inline-flex items-center gap-1">
             <button
               type="button"
               onClick={() => setFilter('all')}
-              className={`py-1.5 px-1 rounded-lg transition-all cursor-pointer flex flex-col items-center justify-center ${filterPillClass('all')}`}
+              className={`h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                streamFilter === 'all'
+                  ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+                  : 'text-slate-600 hover:text-slate-900 font-medium'
+              }`}
             >
-              <span className="text-[10px] uppercase tracking-wider font-bold">All</span>
-              <span className="font-mono text-xs font-bold tabular-nums">{totalAllCount}</span>
+              <span>All</span>
+              <span className="font-mono text-[11px] tabular-nums font-bold">({totalAllCount})</span>
             </button>
             <button
               type="button"
               onClick={() => setFilter('blocked')}
-              className={`py-1.5 px-1 rounded-lg transition-all cursor-pointer flex flex-col items-center justify-center ${filterPillClass('blocked', 'rose')}`}
+              className={`h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                streamFilter === 'blocked'
+                  ? 'bg-rose-600 text-white shadow-xs font-semibold'
+                  : totalBlockedCount > 0
+                  ? 'text-rose-600 hover:text-rose-700 font-semibold'
+                  : 'text-slate-600 hover:text-slate-900 font-medium'
+              }`}
             >
-              <span className="text-[10px] uppercase tracking-wider font-bold">Blocked</span>
-              <span className={`font-mono text-xs font-bold tabular-nums ${totalBlockedCount > 0 ? 'text-rose-600' : ''}`}>
-                {totalBlockedCount}
-              </span>
+              <span>Blocked</span>
+              <span className="font-mono text-[11px] tabular-nums font-bold">({totalBlockedCount})</span>
             </button>
             <button
               type="button"
               onClick={() => setFilter('closed')}
-              className={`py-1.5 px-1 rounded-lg transition-all cursor-pointer flex flex-col items-center justify-center ${filterPillClass('closed')}`}
+              className={`h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                streamFilter === 'closed'
+                  ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+                  : 'text-slate-600 hover:text-slate-900 font-medium'
+              }`}
             >
-              <span className="text-[10px] uppercase tracking-wider font-bold">Closed</span>
-              <span className="font-mono text-xs font-bold tabular-nums">{totalClosedCount}</span>
+              <span>Closed</span>
+              <span className="font-mono text-[11px] tabular-nums font-bold">({totalClosedCount})</span>
             </button>
           </div>
+
           <div className="flex items-center gap-2 shrink-0">
-            {/* {totalBlockedCount > 0 && (
+            {totalBlockedCount > 0 && (
               <button
                 type="button"
-                onClick={handleAllowAll}
+                onClick={handleResolveAll}
                 disabled={isResolving}
-                className="px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 cursor-pointer transition-colors flex items-center gap-1.5 shadow-2xs"
-                title="Mark all existing blocked commands as operator-allowed for clarity"
+                className="h-9 px-3.5 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-slate-900 hover:bg-black text-white shadow-xs disabled:opacity-50"
+                title="Mark all blocked incidents as operator-allowed"
               >
-                <span>{isResolving ? 'Allowing...' : '👤 Allow All for Clarity'}</span>
+                <span>{isResolving ? 'Resolving...' : 'Resolve All'}</span>
               </button>
-            )} */}
+            )}
             {onNavigateToSessions && (
               <button
                 type="button"
                 onClick={onNavigateToSessions}
-                className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-white text-text-primary border border-border-subtle hover:bg-canvas cursor-pointer shrink-0"
+                className="h-9 px-3.5 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 shadow-2xs shrink-0"
               >
                 Open Sessions →
               </button>
@@ -377,7 +364,7 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
             <button
               type="button"
               onClick={() => toggleExpandAll(displayedLive.length)}
-              className="px-2.5 py-1 rounded-lg bg-white border border-border-subtle hover:bg-canvas text-text-primary text-[11px] font-bold transition-all shadow-2xs flex items-center gap-1 cursor-pointer"
+              className="h-8 px-3 rounded-lg bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold shadow-2xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
             >
               <Icon
                 icon={
@@ -562,7 +549,7 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
                                 e.stopPropagation();
                                 handleResolveSingle(v);
                               }}
-                              className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-colors shadow-2xs cursor-pointer flex items-center gap-1.5"
+                              className="h-8 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs"
                             >
                               <span>👤 Mark as Operator Allowed</span>
                             </button>
@@ -592,7 +579,7 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
                 type="button"
                 disabled={currentPage <= 1}
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                className="px-2.5 py-1 rounded-lg border border-border-subtle bg-white text-text-primary disabled:opacity-40 disabled:cursor-not-allowed hover:bg-canvas font-medium text-xs shadow-2xs"
+                className="h-8 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed shadow-2xs"
               >
                 &larr; Prev
               </button>
@@ -602,10 +589,10 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
                   key={pageNum}
                   type="button"
                   onClick={() => setCurrentPage(pageNum)}
-                  className={`w-7 h-7 rounded-lg text-xs font-mono font-bold transition-colors ${
+                  className={`w-8 h-8 rounded-lg text-xs font-semibold inline-flex items-center justify-center transition-all cursor-pointer ${
                     currentPage === pageNum
-                      ? 'bg-dark-base text-white shadow-xs'
-                      : 'bg-white border border-border-subtle text-text-secondary hover:text-text-primary hover:bg-canvas'
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shadow-2xs'
                   }`}
                 >
                   {pageNum}
@@ -616,7 +603,7 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
                 type="button"
                 disabled={currentPage >= totalPages}
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                className="px-2.5 py-1 rounded-lg border border-border-subtle bg-white text-text-primary disabled:opacity-40 disabled:cursor-not-allowed hover:bg-canvas font-medium text-xs shadow-2xs"
+                className="h-8 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed shadow-2xs"
               >
                 Next &rarr;
               </button>

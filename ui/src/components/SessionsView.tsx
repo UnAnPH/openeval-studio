@@ -576,18 +576,6 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-[#fcfcfd] text-[#1e2029] font-sans p-6 space-y-5 overflow-hidden">
-      {isDemo && isDemoSeed && (
-        <div className="sticky top-0 z-20 flex items-center justify-between gap-3 px-4 py-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-900 text-xs font-medium shadow-xs shrink-0 backdrop-blur-sm">
-          <div className="flex items-center gap-2.5">
-            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500 text-white tracking-wide uppercase">
-              DEMO
-            </span>
-            <span>
-              <strong>DEMO-ONLY DATA</strong> — Displaying simulated developer session fixtures for hosted demonstration. Live agent hooks are inactive in this environment.
-            </span>
-          </div>
-        </div>
-      )}
 
       {/* 1. TOP TOOLBAR CARD */}
       <div className="bg-white p-4 sm:p-5 rounded-2xl border border-border-subtle shadow-sm flex items-center justify-between shrink-0">
@@ -599,17 +587,19 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
 
         <div className="flex items-center gap-2">
           <button
+            type="button"
             onClick={() => setShowIngestModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-slate-900 text-white rounded-lg hover:bg-black transition-colors cursor-pointer shadow-xs"
+            className="h-9 px-4 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-slate-900 hover:bg-black text-white shadow-xs"
           >
             <Upload className="w-3.5 h-3.5" />
             <span>Ingest Agent Log</span>
           </button>
 
           <button
+            type="button"
             onClick={() => fetchSessions(false)}
             disabled={isLoading}
-            className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+            className="h-9 w-9 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 shadow-2xs inline-flex items-center justify-center transition-all cursor-pointer disabled:opacity-50"
             title="Refresh sessions"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
@@ -617,11 +607,13 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
 
           {sessions.length > 0 && (
             <button
+              type="button"
               onClick={handleClearSessions}
-              className="p-1.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+              className="h-9 px-3.5 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-rose-600 hover:bg-rose-700 text-white shadow-xs"
               title="Clear all sessions"
             >
               <Trash2 className="w-4 h-4" />
+              <span>Clear Sessions</span>
             </button>
           )}
         </div>
@@ -634,7 +626,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
           {/* Filter & Status Tabs */}
           <div className="p-3 border-b border-[#e5e7eb] space-y-2">
             {/* Status Tabs: All, Live, Blocked, and Closed */}
-            <div className="grid grid-cols-4 bg-slate-100 p-1 rounded-xl gap-1 text-center">
+            <div className="grid grid-cols-4 bg-slate-100 p-1 rounded-xl border border-slate-200/70 gap-1 text-center">
               <button
                 type="button"
                 onClick={() => setStatusFilter('all')}
@@ -729,14 +721,14 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
             </div>
 
             {/* Keyword Filter Input */}
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 absolute left-2.5 top-2 text-slate-400" />
+            <div className="relative flex items-center">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
               <input
                 type="text"
                 placeholder="Filter sessions..."
                 value={sessionFilter}
                 onChange={(e) => setSessionFilter(e.target.value)}
-                className="w-full pl-8 pr-3 py-1 text-xs bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                className="w-full h-9 pl-8 pr-3 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono shadow-2xs"
               />
             </div>
           </div>
@@ -892,10 +884,10 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
                   <button
                     type="button"
                     onClick={() => copyToClipboard(selectedSession.working_dir || '/workspace', 'wdir')}
-                    className="flex items-center gap-1 text-[11px] font-mono text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-lg transition-colors cursor-pointer shrink-0 shadow-2xs"
+                    className="h-8 px-2.5 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 shadow-2xs shrink-0 font-mono"
                     title="Copy working directory"
                   >
-                    {copiedId === 'wdir' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3 text-slate-400" />}
+                    {copiedId === 'wdir' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-400" />}
                     <span>{copiedId === 'wdir' ? 'Copied' : 'Copy'}</span>
                   </button>
                 </div>
@@ -1026,20 +1018,20 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
 
                   {/* LLM Fragment Search Bar */}
                   <form onSubmit={handleSearch} className="flex items-center gap-2">
-                    <div className="relative">
-                      <Search className="w-3.5 h-3.5 absolute left-2.5 top-2 text-slate-400" />
+                    <div className="relative flex items-center">
+                      <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                       <input
                         type="text"
                         placeholder="Search transcript fragments..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-8 pr-3 py-1 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono w-64"
+                        className="h-9 pl-8 pr-3 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono w-64 shadow-2xs"
                       />
                     </div>
                     <button
                       type="submit"
                       disabled={isSearching}
-                      className="px-3 py-1 text-xs font-semibold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors cursor-pointer"
+                      className="h-9 px-3.5 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs disabled:opacity-50"
                     >
                       {isSearching ? 'Searching...' : 'LLM Search'}
                     </button>
@@ -1050,10 +1042,10 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
                           setFragmentMatches([]);
                           setSearchQuery('');
                         }}
-                        className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+                        className="h-9 w-9 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 hover:text-slate-700 shadow-2xs inline-flex items-center justify-center transition-all cursor-pointer"
                         title="Clear search"
                       >
-                        <X className="w-3.5 h-3.5" />
+                        <X className="w-4 h-4" />
                       </button>
                     )}
                   </form>
@@ -1134,7 +1126,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
                           <button
                             type="button"
                             onClick={() => setVisibleFragmentsCount(fragmentMatches.length)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-700 bg-white hover:bg-indigo-50 border border-indigo-200 rounded-lg shadow-2xs transition-colors cursor-pointer"
+                            className="h-8 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-white hover:bg-indigo-50 border border-indigo-200 text-indigo-700 shadow-2xs"
                           >
                             <span>Show More ({fragmentMatches.length - visibleFragmentsCount} more)</span>
                             <ChevronDown className="w-3.5 h-3.5" />
@@ -1143,7 +1135,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
                           <button
                             type="button"
                             onClick={() => setVisibleFragmentsCount(5)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-700 bg-white hover:bg-indigo-50 border border-indigo-200 rounded-lg shadow-2xs transition-colors cursor-pointer"
+                            className="h-8 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-white hover:bg-indigo-50 border border-indigo-200 text-indigo-700 shadow-2xs"
                           >
                             <span>Show Less</span>
                             <ChevronUp className="w-3.5 h-3.5" />
@@ -1180,8 +1172,10 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-slate-900">Ingest Monitored Agent Log</h3>
               <button
+                type="button"
                 onClick={() => setShowIngestModal(false)}
-                className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer"
+                className="h-9 w-9 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 hover:text-slate-700 shadow-2xs inline-flex items-center justify-center transition-all cursor-pointer"
+                title="Close"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1198,7 +1192,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
                 placeholder="/Users/.../.claude/sessions/session.jsonl"
                 value={ingestFilePath}
                 onChange={(e) => setIngestFilePath(e.target.value)}
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                className="w-full h-9 px-3 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono shadow-2xs"
               />
             </div>
 
@@ -1214,17 +1208,19 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
               </div>
             )}
 
-            <div className="flex items-center justify-end gap-2 pt-2">
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
               <button
+                type="button"
                 onClick={() => setShowIngestModal(false)}
-                className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-800 cursor-pointer"
+                className="h-9 px-4 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 shadow-2xs"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={handleIngest}
                 disabled={isIngesting || !ingestFilePath.trim()}
-                className="px-4 py-1.5 text-xs font-bold bg-slate-900 text-white rounded-lg hover:bg-black disabled:opacity-50 transition-colors cursor-pointer"
+                className="h-9 px-4 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-slate-900 hover:bg-black text-white shadow-xs disabled:opacity-50"
               >
                 {isIngesting ? 'Ingesting...' : 'Ingest Log'}
               </button>

@@ -76,9 +76,6 @@ export const Scorecard: React.FC<ScorecardProps> = ({ run }) => {
                     ? 'EVALUATION IN PROGRESS'
                     : run.status.toUpperCase()}
                 </span>
-                <span className="text-[10px] px-1.5 py-0.2 rounded bg-white border border-current font-mono font-normal">
-                  Threshold: 1.0
-                </span>
               </div>
               <div className="text-[11px] opacity-85 mt-0.5">
                 {isPassed
