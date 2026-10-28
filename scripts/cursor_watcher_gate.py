@@ -57,11 +57,16 @@ if str(_REPO_ROOT) not in sys.path:
 try:
     from engine.redaction import redact_payload, redact_text
 except ImportError:
+
     def redact_text(text: str) -> str:
         if not text:
             return text
         t = re.sub(r"\bsk-ant-[a-zA-Z0-9_-]{20,}\b", "[REDACTED:ANTHROPIC_API_KEY]", text)
-        t = re.sub(r"\b(?:sk-proj-[a-zA-Z0-9_-]{20,}|sk-[a-zA-Z0-9]{20,})\b", "[REDACTED:OPENAI_API_KEY]", t)
+        t = re.sub(
+            r"\b(?:sk-proj-[a-zA-Z0-9_-]{20,}|sk-[a-zA-Z0-9]{20,})\b",
+            "[REDACTED:OPENAI_API_KEY]",
+            t,
+        )
         t = re.sub(r"\b(?:ghp|gho|ghu|ghs|ghr)_[a-zA-Z0-9]{36}\b", "[REDACTED:GITHUB_TOKEN]", t)
         t = re.sub(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b", "[REDACTED:AWS_ACCESS_KEY]", t)
         return t
@@ -107,10 +112,14 @@ OPENEVAL_API_KEY = os.environ.get("OPENEVAL_API_KEY", "").strip()
 TIMEOUT_SEC = _safe_float(os.environ.get("OPENEVAL_WATCHER_TIMEOUT"), 1.5)
 # For beforeShellExecution, default to "ask" so Cursor prompts the user
 SHELL_LOCKOUT_PERMISSION = os.environ.get("OPENEVAL_LOCKOUT_PERMISSION", "ask")
-FAIL_MODE = os.environ.get(
-    "OPENEVAL_GATE_FAIL_MODE",
-    os.environ.get("OPENEVAL_FAIL_MODE", os.environ.get("OPENEVAL_ON_FAILURE", "open")),
-).strip().lower()
+FAIL_MODE = (
+    os.environ.get(
+        "OPENEVAL_GATE_FAIL_MODE",
+        os.environ.get("OPENEVAL_FAIL_MODE", os.environ.get("OPENEVAL_ON_FAILURE", "open")),
+    )
+    .strip()
+    .lower()
+)
 LOG_PATH = Path.home() / ".openeval" / "cursor-watcher-gate.log"
 
 
@@ -147,6 +156,7 @@ def _record_gateway_failure() -> int:
         with open(lock_file, "w", encoding="utf-8") as lf:
             try:
                 import fcntl
+
                 fcntl.flock(lf.fileno(), fcntl.LOCK_EX)
             except Exception:  # noqa: BLE001
                 pass
@@ -164,12 +174,15 @@ def _record_gateway_failure() -> int:
             failures.append(now)
             try:
                 tmp = CIRCUIT_STATE_FILE.with_name(f"{CIRCUIT_STATE_FILE.name}.{os.getpid()}.tmp")
-                tmp.write_text(json.dumps({"failures": failures, "updated_at": now}), encoding="utf-8")
+                tmp.write_text(
+                    json.dumps({"failures": failures, "updated_at": now}), encoding="utf-8"
+                )
                 os.replace(tmp, CIRCUIT_STATE_FILE)
             except OSError:
                 pass
             try:
                 import fcntl
+
                 fcntl.flock(lf.fileno(), fcntl.LOCK_UN)
             except Exception:  # noqa: BLE001
                 pass
@@ -187,6 +200,7 @@ def _reset_gateway_failures() -> None:
             with open(lock_file, "w", encoding="utf-8") as lf:
                 try:
                     import fcntl
+
                     fcntl.flock(lf.fileno(), fcntl.LOCK_EX)
                 except Exception:  # noqa: BLE001
                     pass
@@ -195,6 +209,7 @@ def _reset_gateway_failures() -> None:
                         CIRCUIT_STATE_FILE.unlink()
                 try:
                     import fcntl
+
                     fcntl.flock(lf.fileno(), fcntl.LOCK_UN)
                 except Exception:  # noqa: BLE001
                     pass
@@ -747,7 +762,9 @@ def _emit(
             sys.stderr.write(f"\n{redacted_box}\n\n")
             sys.stderr.flush()
             display_message = (
-                f"{message}\n\n{redacted_box}" if message and message not in redacted_box else redacted_box
+                f"{message}\n\n{redacted_box}"
+                if message and message not in redacted_box
+                else redacted_box
             )
         else:
             display_message = redact_text(message)

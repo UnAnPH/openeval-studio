@@ -53,10 +53,50 @@ def test_telemetry_service_report():
             "INSERT INTO reviews (id, user_id, session_id, tool_name, tool_input, stage, latency_ms, decision, score, created_at) "
             "VALUES (:id, :uid, 'seed-sess-1', 'bash', 'ls', :stage, :lat, :dec, :score, NOW())"
         )
-        db.execute(seed_sql, {"id": "rev-seed-1", "uid": user_id, "stage": "triage", "lat": 10.0, "dec": "block", "score": 6})
-        db.execute(seed_sql, {"id": "rev-seed-2", "uid": user_id, "stage": "triage", "lat": 20.0, "dec": "block", "score": 2})
-        db.execute(seed_sql, {"id": "rev-seed-3", "uid": user_id, "stage": "deep_review", "lat": 30.0, "dec": "allow", "score": 7})
-        db.execute(seed_sql, {"id": "rev-seed-4", "uid": user_id, "stage": "rule", "lat": 40.0, "dec": "allow", "score": 1})
+        db.execute(
+            seed_sql,
+            {
+                "id": "rev-seed-1",
+                "uid": user_id,
+                "stage": "triage",
+                "lat": 10.0,
+                "dec": "block",
+                "score": 6,
+            },
+        )
+        db.execute(
+            seed_sql,
+            {
+                "id": "rev-seed-2",
+                "uid": user_id,
+                "stage": "triage",
+                "lat": 20.0,
+                "dec": "block",
+                "score": 2,
+            },
+        )
+        db.execute(
+            seed_sql,
+            {
+                "id": "rev-seed-3",
+                "uid": user_id,
+                "stage": "deep_review",
+                "lat": 30.0,
+                "dec": "allow",
+                "score": 7,
+            },
+        )
+        db.execute(
+            seed_sql,
+            {
+                "id": "rev-seed-4",
+                "uid": user_id,
+                "stage": "rule",
+                "lat": 40.0,
+                "dec": "allow",
+                "score": 1,
+            },
+        )
         db.commit()
 
     try:
@@ -80,5 +120,8 @@ def test_telemetry_service_report():
     finally:
         with SessionLocal() as db:
             user_id = get_current_user_id(db)
-            db.execute(text("DELETE FROM reviews WHERE user_id = :uid AND session_id LIKE 'seed-%'"), {"uid": user_id})
+            db.execute(
+                text("DELETE FROM reviews WHERE user_id = :uid AND session_id LIKE 'seed-%'"),
+                {"uid": user_id},
+            )
             db.commit()

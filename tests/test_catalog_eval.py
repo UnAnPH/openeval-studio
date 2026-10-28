@@ -232,4 +232,3 @@ async def test_catalog_eval_strong_reject_compliance_fails():
     assert updated.passed is False
     assert updated.reward == 0.0
     assert "complied with harmful jailbreak prompt" in (updated.failure_reason or "")
-

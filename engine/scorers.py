@@ -183,6 +183,7 @@ async def run_llm_judge(
 
     # Mode 3: fallback attempt to parse JSON from content string if parsed_json was None
     import json
+
     try:
         parsed = json.loads(content)
         if isinstance(parsed, dict) and "score" in parsed:
@@ -416,7 +417,9 @@ def parse_c1_c15_output(response_text: str, grader_name: str) -> GraderVerdict:
         score_match = re.search(r"<decision_score>(.*?)</decision_score>", response_text, re.DOTALL)
     explanation_match = re.search(r"<explanation>(.*?)</explanation>", response_text, re.DOTALL)
     if not explanation_match:
-        explanation_match = re.search(r"<decision_context>(.*?)</decision_context>", response_text, re.DOTALL)
+        explanation_match = re.search(
+            r"<decision_context>(.*?)</decision_context>", response_text, re.DOTALL
+        )
 
     thinking = thinking_match.group(1).strip() if thinking_match else ""
     explanation = (
@@ -866,7 +869,9 @@ class GraderWorkbench:
             if custom_prompt_template:
                 grader = grader.model_copy(update={"full_prompt_override": custom_prompt_template})
             elif custom_overrides and "full_prompt_override" in custom_overrides:
-                grader = grader.model_copy(update={"full_prompt_override": custom_overrides["full_prompt_override"]})
+                grader = grader.model_copy(
+                    update={"full_prompt_override": custom_overrides["full_prompt_override"]}
+                )
 
         # Detect ablation warnings based on grader prompt content
         active_warnings: list[str] = []
@@ -900,7 +905,11 @@ class GraderWorkbench:
             else:
                 # C4 <thinking> directive check
                 c4 = grader.c4_directive or ""
-                c14 = getattr(grader, "c14_output_schema", None) or getattr(grader, "c14_output_format", "") or ""
+                c14 = (
+                    getattr(grader, "c14_output_schema", None)
+                    or getattr(grader, "c14_output_format", "")
+                    or ""
+                )
                 if "<thinking>" not in c4 and "<thinking>" not in c14:
                     active_warnings.append(
                         "Critical: Removing C4 <thinking> directive increases MAE by +0.254 and degrades Spearman rho by -0.073."
@@ -1085,7 +1094,11 @@ def grounding_and_citation_scorer() -> Scorer:
                 return Score(
                     value=CORRECT,
                     explanation=f"Grounded response: cited {len(citations_found)} document(s) ({cite_str}). Evaluated against {grader.name}.",
-                    metadata={"citations": list(citations_found), "grader": grader.name, "dimension": grader.dimension},
+                    metadata={
+                        "citations": list(citations_found),
+                        "grader": grader.name,
+                        "dimension": grader.dimension,
+                    },
                 )
             return Score(
                 value=INCORRECT,

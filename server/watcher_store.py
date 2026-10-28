@@ -116,8 +116,10 @@ def is_session_blocked(session: Session) -> bool:
         human_override = getattr(r, "human_override", None)
         resolution_status = getattr(r, "resolution_status", None)
         if (
-            decision in ("block", "deny", "reject", "escalate") or score >= 8
-        ) and human_override != "allow" and resolution_status != "human_approved":
+            (decision in ("block", "deny", "reject", "escalate") or score >= 8)
+            and human_override != "allow"
+            and resolution_status != "human_approved"
+        ):
             has_unresolved_block = True
             break
 
@@ -128,7 +130,8 @@ def is_session_blocked(session: Session) -> bool:
         return True
 
     return session.status == "blocked" and not any(
-        getattr(r, "human_override", None) == "allow" or getattr(r, "resolution_status", None) == "human_approved"
+        getattr(r, "human_override", None) == "allow"
+        or getattr(r, "resolution_status", None) == "human_approved"
         for r in reviews
     )
 
@@ -498,7 +501,11 @@ class WatcherStore:
                 {"id": session_id, "uid": user_id},
             ).fetchone()
 
-            if (not row or not row[0]) and session_id.startswith("eval-") and current_user_slug.get() == "demo":
+            if (
+                (not row or not row[0])
+                and session_id.startswith("eval-")
+                and current_user_slug.get() == "demo"
+            ):
                 # If not found for active user, check if this is an eval run across tenants (demo only)
                 row = db.execute(
                     text("SELECT payload FROM sessions WHERE id = :id AND id LIKE 'eval-%'"),
@@ -514,7 +521,9 @@ class WatcherStore:
                             payload = json.loads(disk_file.read_text(encoding="utf-8"))
                             sess = Session.model_validate(payload)
                             normalize_session_status(sess)
-                            if sess.agent_type == "inspect_eval" or sess.session_id.startswith("eval-"):
+                            if sess.agent_type == "inspect_eval" or sess.session_id.startswith(
+                                "eval-"
+                            ):
                                 with self._lock:
                                     self._cache_session(sess)
                                 return sess
@@ -545,7 +554,9 @@ class WatcherStore:
             return None
 
         # Guard: if session is blocked or being updated with status in ("working", "active", "running") when blocked
-        if updates.get("status") in ("working", "active", "running") and is_session_blocked(session):
+        if updates.get("status") in ("working", "active", "running") and is_session_blocked(
+            session
+        ):
             updates["status"] = "blocked"
 
         for k, v in updates.items():
@@ -556,7 +567,15 @@ class WatcherStore:
         session.updated_at = datetime.now(UTC).isoformat()
         self._write_session_to_db(session)
 
-        terminal_statuses = {"completed", "failed", "aborted", "lockout", "error", "cancelled", "blocked"}
+        terminal_statuses = {
+            "completed",
+            "failed",
+            "aborted",
+            "lockout",
+            "error",
+            "cancelled",
+            "blocked",
+        }
         if getattr(session, "status", "") in terminal_statuses:
             self.materialize_session(session_id)
 
@@ -621,7 +640,9 @@ class WatcherStore:
         if current_user_slug.get() != "demo":
             with SessionLocal() as db:
                 user_id = get_current_user_id(db)
-                db.execute(text("DELETE FROM session_events WHERE user_id = :uid"), {"uid": user_id})
+                db.execute(
+                    text("DELETE FROM session_events WHERE user_id = :uid"), {"uid": user_id}
+                )
                 db.execute(text("DELETE FROM sessions WHERE user_id = :uid"), {"uid": user_id})
                 db.commit()
         with self._lock:
@@ -683,16 +704,16 @@ class WatcherStore:
             with SessionLocal() as db:
                 user_id = get_current_user_id(db)
                 rows = db.execute(
-                    text(
-                        "SELECT id FROM sessions WHERE user_id = :uid AND updated_at < :cutoff"
-                    ),
+                    text("SELECT id FROM sessions WHERE user_id = :uid AND updated_at < :cutoff"),
                     {"uid": user_id, "cutoff": cutoff},
                 ).fetchall()
                 session_ids_to_prune = [str(r[0]) for r in rows]
 
                 if session_ids_to_prune:
                     db.execute(
-                        text("DELETE FROM session_events WHERE user_id = :uid AND session_id = ANY(:ids)"),
+                        text(
+                            "DELETE FROM session_events WHERE user_id = :uid AND session_id = ANY(:ids)"
+                        ),
                         {"uid": user_id, "ids": session_ids_to_prune},
                     )
                     db.execute(
@@ -710,7 +731,9 @@ class WatcherStore:
 
         with self._lock:
             for _key, session in list(self._sessions.items()):
-                created_str = getattr(session, "created_at", None) or getattr(session, "updated_at", None)
+                created_str = getattr(session, "created_at", None) or getattr(
+                    session, "updated_at", None
+                )
                 if created_str:
                     try:
                         created_dt = datetime.fromisoformat(str(created_str).replace("Z", "+00:00"))
@@ -772,6 +795,7 @@ class WatcherStore:
 
     def append_event(self, event: SessionEventRecord, db: DbSession | None = None) -> None:
         """Insert an immutable event row into session_events for the active tenant."""
+
         def _execute_append(active_db: DbSession) -> None:
             user_id = current_user_id.get()
             if user_id is None:
@@ -783,7 +807,9 @@ class WatcherStore:
             payload_data = event.payload
             if hasattr(payload_data, "model_dump"):
                 payload_data = cast(Any, payload_data).model_dump()
-            payload_data = redact_payload(payload_data) if isinstance(payload_data, dict) else payload_data
+            payload_data = (
+                redact_payload(payload_data) if isinstance(payload_data, dict) else payload_data
+            )
             payload_json = json.dumps(_to_jsonable(payload_data))
 
             active_db.execute(
@@ -1020,7 +1046,15 @@ class WatcherStore:
         get_event_bus().xadd_sync("review_decision", redacted_review_dump, user_id=uid)
 
         # 6. Trigger materialization: synchronously if terminal or blocked, asynchronously with debounce otherwise
-        terminal_statuses = {"completed", "failed", "aborted", "lockout", "error", "cancelled", "blocked"}
+        terminal_statuses = {
+            "completed",
+            "failed",
+            "aborted",
+            "lockout",
+            "error",
+            "cancelled",
+            "blocked",
+        }
         cached_sess = self._cached_session(review.session_id)
         if is_blocked or (cached_sess and getattr(cached_sess, "status", "") in terminal_statuses):
             self.materialize_session(review.session_id)

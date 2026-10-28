@@ -132,7 +132,9 @@ async def run_single_eval(spec: dict[str, str]) -> dict:
     pg_status = None
     with SessionLocal() as db:
         row = db.execute(
-            text("SELECT id, status, passed, reward, total_tokens, payload FROM sessions WHERE id = :id"),
+            text(
+                "SELECT id, status, passed, reward, total_tokens, payload FROM sessions WHERE id = :id"
+            ),
             {"id": run_id},
         ).fetchone()
         if row:
@@ -169,7 +171,8 @@ async def main():
     target_task = sys.argv[1] if len(sys.argv) > 1 else None
     target_model = sys.argv[2] if len(sys.argv) > 2 else None
     specs = [
-        s for s in RUN_SPECS
+        s
+        for s in RUN_SPECS
         if (target_task is None or s["task_id"] == target_task)
         and (target_model is None or s["model"] == target_model)
     ]
@@ -180,18 +183,28 @@ async def main():
             res = await run_single_eval(spec)
             results.append(res)
         except Exception as exc:
-            logger.error("Evaluation failed with exception for %s (%s): %s", spec["task_id"], spec["model"], exc, exc_info=True)
-            results.append({
-                "task_id": spec["task_id"],
-                "model": spec["model"],
-                "error": str(exc),
-            })
+            logger.error(
+                "Evaluation failed with exception for %s (%s): %s",
+                spec["task_id"],
+                spec["model"],
+                exc,
+                exc_info=True,
+            )
+            results.append(
+                {
+                    "task_id": spec["task_id"],
+                    "model": spec["model"],
+                    "error": str(exc),
+                }
+            )
 
     print("\n" + "=" * 90)
     print("EVALUATION MATRIX SUMMARY")
     print("=" * 90)
     for r in results:
-        print(f"Task: {r.get('task_id'):<22} | Model: {r.get('model'):<30} | Status: {r.get('status')} | Steps: {r.get('total_steps')} | Reward: {r.get('reward')} | Verdicts: {r.get('verdicts_count')}/7")
+        print(
+            f"Task: {r.get('task_id'):<22} | Model: {r.get('model'):<30} | Status: {r.get('status')} | Steps: {r.get('total_steps')} | Reward: {r.get('reward')} | Verdicts: {r.get('verdicts_count')}/7"
+        )
     print("=" * 90)
 
 

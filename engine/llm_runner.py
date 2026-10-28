@@ -180,7 +180,9 @@ class AsyncLLMRunner:
             or cfg.model.endswith("-free")
         ):
             provider = "opencode"
-        elif cfg.model.startswith("gpt-") or cfg.model.startswith("o1") or cfg.model.startswith("o3"):
+        elif (
+            cfg.model.startswith("gpt-") or cfg.model.startswith("o1") or cfg.model.startswith("o3")
+        ):
             provider = "openai"
         elif (
             (cfg.model.startswith("gemini-") or "live" in cfg.model)
@@ -204,8 +206,10 @@ class AsyncLLMRunner:
         elif provider == "opencode":
             if self.opencode_client is None:
                 opencode_key = (
-                    self.api_key if self.provider == "opencode" else None
-                ) or os.getenv("OPENCODE_API_KEY") or "mock-key"
+                    (self.api_key if self.provider == "opencode" else None)
+                    or os.getenv("OPENCODE_API_KEY")
+                    or "mock-key"
+                )
                 opencode_base = self.base_url or os.getenv(
                     "OPENCODE_BASE_URL", "https://opencode.ai/inference/openai/v1"
                 )
@@ -274,7 +278,13 @@ class AsyncLLMRunner:
         target_model = cfg.model.replace("google/", "")
         if (
             target_model.startswith("opencode/")
-            or target_model in ("glm-5.3-flash-free", "deepseek-v4.1-flash-free", "big-pickle", "nemotron-3-ultra-free")
+            or target_model
+            in (
+                "glm-5.3-flash-free",
+                "deepseek-v4.1-flash-free",
+                "big-pickle",
+                "nemotron-3-ultra-free",
+            )
             or target_model.endswith("-free")
             or any(legacy in target_model for legacy in ("2.0-flash", "1.5-flash", "1.5-pro"))
         ):
@@ -368,7 +378,11 @@ class AsyncLLMRunner:
                         f"Google GenAI request failed after {cfg.max_retries} retries: {exc}"
                     ) from exc
 
-                is_rate_limit = "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "Quota exceeded" in err_str
+                is_rate_limit = (
+                    "429" in err_str
+                    or "RESOURCE_EXHAUSTED" in err_str
+                    or "Quota exceeded" in err_str
+                )
                 if is_rate_limit:
                     if target_model == "gemini-3.1-flash-lite":
                         target_model = "gemini-3.5-flash-lite"
@@ -426,8 +440,15 @@ class AsyncLLMRunner:
 
         # 2. Check for completion or finish indicators
         finish_indicators = [
-            "finish", "finished", "completed", "done", "wrap up",
-            "wrap things up", "conclude", "solved", "verified"
+            "finish",
+            "finished",
+            "completed",
+            "done",
+            "wrap up",
+            "wrap things up",
+            "conclude",
+            "solved",
+            "verified",
         ]
         is_finish = any(ind in clean_text.lower() for ind in finish_indicators)
 
@@ -537,7 +558,9 @@ class AsyncLLMRunner:
             level = cfg.thinking_level or "high"
             if level == "minimal":
                 level = "low"
-            thinking_config = types.ThinkingConfig(thinking_level=cast(Any, level), include_thoughts=True)
+            thinking_config = types.ThinkingConfig(
+                thinking_level=cast(Any, level), include_thoughts=True
+            )
 
         is_agent_action = (
             response_schema is not None
@@ -552,62 +575,74 @@ class AsyncLLMRunner:
                         types.FunctionDeclaration(
                             name="execute_bash",
                             description="Run terminal commands in the sandboxed workspace. Input: command.",
-                            parameters=cast(Any, {
-                                "type": "OBJECT",
-                                "properties": {
-                                    "command": {
-                                        "type": "STRING",
-                                        "description": "Shell command to execute in bash",
-                                    }
+                            parameters=cast(
+                                Any,
+                                {
+                                    "type": "OBJECT",
+                                    "properties": {
+                                        "command": {
+                                            "type": "STRING",
+                                            "description": "Shell command to execute in bash",
+                                        }
+                                    },
+                                    "required": ["command"],
                                 },
-                                "required": ["command"],
-                            }),
+                            ),
                         ),
                         types.FunctionDeclaration(
                             name="view_file",
                             description="Read contents of a file in the workspace. Input: path.",
-                            parameters=cast(Any, {
-                                "type": "OBJECT",
-                                "properties": {
-                                    "path": {
-                                        "type": "STRING",
-                                        "description": "Target file path to view",
-                                    }
+                            parameters=cast(
+                                Any,
+                                {
+                                    "type": "OBJECT",
+                                    "properties": {
+                                        "path": {
+                                            "type": "STRING",
+                                            "description": "Target file path to view",
+                                        }
+                                    },
+                                    "required": ["path"],
                                 },
-                                "required": ["path"],
-                            }),
+                            ),
                         ),
                         types.FunctionDeclaration(
                             name="write_file",
                             description="Write content to a file in the workspace. Input: path, content.",
-                            parameters=cast(Any, {
-                                "type": "OBJECT",
-                                "properties": {
-                                    "path": {
-                                        "type": "STRING",
-                                        "description": "Target file path to write",
+                            parameters=cast(
+                                Any,
+                                {
+                                    "type": "OBJECT",
+                                    "properties": {
+                                        "path": {
+                                            "type": "STRING",
+                                            "description": "Target file path to write",
+                                        },
+                                        "content": {
+                                            "type": "STRING",
+                                            "description": "Content to write into the file",
+                                        },
                                     },
-                                    "content": {
-                                        "type": "STRING",
-                                        "description": "Content to write into the file",
-                                    },
+                                    "required": ["path", "content"],
                                 },
-                                "required": ["path", "content"],
-                            }),
+                            ),
                         ),
                         types.FunctionDeclaration(
                             name="finish",
                             description="Conclude evaluation work once verified. Input: summary.",
-                            parameters=cast(Any, {
-                                "type": "OBJECT",
-                                "properties": {
-                                    "summary": {
-                                        "type": "STRING",
-                                        "description": "Summary of final benchmark resolution",
-                                    }
+                            parameters=cast(
+                                Any,
+                                {
+                                    "type": "OBJECT",
+                                    "properties": {
+                                        "summary": {
+                                            "type": "STRING",
+                                            "description": "Summary of final benchmark resolution",
+                                        }
+                                    },
+                                    "required": ["summary"],
                                 },
-                                "required": ["summary"],
-                            }),
+                            ),
                         ),
                     ]
                 )
@@ -662,22 +697,18 @@ class AsyncLLMRunner:
                             tool_call = msg.tool_call
                         if msg.usage_metadata:
                             prompt_toks = (
-                                getattr(msg.usage_metadata, "prompt_token_count", 0)
-                                or prompt_toks
+                                getattr(msg.usage_metadata, "prompt_token_count", 0) or prompt_toks
                             )
                             c_toks = (
                                 getattr(msg.usage_metadata, "response_token_count", 0)
                                 or getattr(msg.usage_metadata, "candidates_token_count", 0)
                                 or comp_toks
                             )
-                            th_toks = (
-                                getattr(msg.usage_metadata, "thoughts_token_count", 0)
-                                or 0
-                            )
+                            th_toks = getattr(msg.usage_metadata, "thoughts_token_count", 0) or 0
                             comp_toks = c_toks + th_toks
-                            tot_toks = getattr(
-                                msg.usage_metadata, "total_token_count", 0
-                            ) or (prompt_toks + comp_toks)
+                            tot_toks = getattr(msg.usage_metadata, "total_token_count", 0) or (
+                                prompt_toks + comp_toks
+                            )
 
                         if msg.server_content:
                             if (
@@ -712,11 +743,7 @@ class AsyncLLMRunner:
                     if tool_call and tool_call.function_calls:
                         fc = tool_call.function_calls[0]
                         fc_args = fc.args if isinstance(fc.args, dict) else {}
-                        thought_val = (
-                            thoughts
-                            or transcription
-                            or f"Calling tool {fc.name}"
-                        )
+                        thought_val = thoughts or transcription or f"Calling tool {fc.name}"
                         action_dict = {
                             "thought": thought_val,
                             "tool": fc.name,
@@ -786,7 +813,9 @@ class AsyncLLMRunner:
                     ) from exc
 
                 backoff = min(2.0**attempt, 10.0)
-                logger.warning("Google GenAI Live API error: %s. Retrying in %.1fs...", exc, backoff)
+                logger.warning(
+                    "Google GenAI Live API error: %s. Retrying in %.1fs...", exc, backoff
+                )
                 await asyncio.sleep(backoff)
 
         raise RuntimeError("Exhausted retries without response from Live API")
@@ -828,9 +857,7 @@ class AsyncLLMRunner:
                 if hasattr(response_schema, "model_json_schema")
                 else {}
             )
-            schema_instruction = (
-                f"\n\nYou MUST respond ONLY with a valid JSON object matching this schema:\n{schema_json}"
-            )
+            schema_instruction = f"\n\nYou MUST respond ONLY with a valid JSON object matching this schema:\n{schema_json}"
             if formatted_messages and formatted_messages[0]["role"] == "system":
                 formatted_messages[0] = {
                     "role": "system",
@@ -888,9 +915,13 @@ class AsyncLLMRunner:
                     )
                     if self.google_client is None:
                         self.google_client = genai.Client(
-                            api_key=os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "mock-key"
+                            api_key=os.getenv("GEMINI_API_KEY")
+                            or os.getenv("GOOGLE_API_KEY")
+                            or "mock-key"
                         )
-                    fallback_cfg = cfg.model_copy(update={"model": "gemini-3.1-flash-lite", "provider": "google"})
+                    fallback_cfg = cfg.model_copy(
+                        update={"model": "gemini-3.1-flash-lite", "provider": "google"}
+                    )
                     return await self._generate_google(messages, fallback_cfg, response_schema)
 
                 # If gateway / model fails because response_format is not supported, retry without response_format
@@ -916,9 +947,13 @@ class AsyncLLMRunner:
                         )
                         if self.google_client is None:
                             self.google_client = genai.Client(
-                                api_key=os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "mock-key"
+                                api_key=os.getenv("GEMINI_API_KEY")
+                                or os.getenv("GOOGLE_API_KEY")
+                                or "mock-key"
                             )
-                        fallback_cfg = cfg.model_copy(update={"model": "gemini-3.1-flash-lite", "provider": "google"})
+                        fallback_cfg = cfg.model_copy(
+                            update={"model": "gemini-3.1-flash-lite", "provider": "google"}
+                        )
                         return await self._generate_google(messages, fallback_cfg, response_schema)
                     raise RuntimeError(
                         f"OpenAI/OpenCode request failed after {cfg.max_retries} retries: {exc}"

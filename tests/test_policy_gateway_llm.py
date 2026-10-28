@@ -122,4 +122,3 @@ def test_deep_review_uses_live_canonical_grader() -> None:
         base_score=7,
     )
     assert captured_sys_prompts and custom_role not in captured_sys_prompts[-1]
-

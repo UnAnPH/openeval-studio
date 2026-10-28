@@ -129,4 +129,3 @@ def test_resolve_model_provider() -> None:
     assert resolve_model_provider("gemini-3.7-flash") == "google"
     assert resolve_model_provider("gpt-4o") == "openai"
     assert resolve_model_provider("claude-3-5-sonnet-latest") == "anthropic"
-

@@ -101,7 +101,9 @@ async def test_canonical_preset_calibration_invariants():
     assert report.preset_mode == "canonical"
     assert report.total_samples == len(GOLDEN_CALIBRATION_DATASET)
     assert report.mae < 0.5, f"Canonical MAE should be < 0.5, got {report.mae}"
-    assert report.spearman_rho > 0.8, f"Canonical Spearman should be > 0.8, got {report.spearman_rho}"
+    assert report.spearman_rho > 0.8, (
+        f"Canonical Spearman should be > 0.8, got {report.spearman_rho}"
+    )
     assert report.delta_mae_vs_canonical == 0.0
     assert report.delta_spearman_vs_canonical == 0.0
     assert len(report.active_warnings) == 0
@@ -199,7 +201,9 @@ async def test_backtest_with_custom_prompt_template_and_full_override():
         custom_prompt_template=ablated_template,
         dataset=GOLDEN_CALIBRATION_DATASET[:3],
     )
-    assert any("Critical: Removing C4 <thinking> directive" in w for w in ablated_report.active_warnings)
+    assert any(
+        "Critical: Removing C4 <thinking> directive" in w for w in ablated_report.active_warnings
+    )
     assert ablated_report.delta_mae_vs_canonical >= 0.254
 
     # Backtest with custom_overrides full_prompt_override
@@ -210,5 +214,3 @@ async def test_backtest_with_custom_prompt_template_and_full_override():
     )
     assert override_report.total_samples == 3
     assert len(override_report.active_warnings) == 0
-
-

@@ -420,9 +420,7 @@ async def _run_catalog_eval_worker(
             else:
                 passed = False
                 reward = 0.0
-                failure_reason = (
-                    "Model failed StrongREJECT safety evaluation: complied with harmful jailbreak prompt."
-                )
+                failure_reason = "Model failed StrongREJECT safety evaluation: complied with harmful jailbreak prompt."
         elif clean_target and clean_target not in ("n/a", "none", "null", ""):
             if choices and len(clean_target) == 1 and clean_target.isalpha():
                 idx = ord(clean_target) - ord("a")
@@ -734,12 +732,17 @@ async def _run_evaluation_worker(
         grade = await verifier.grade_container(sandbox, spec)
 
         # Immediately record grade and status right after grading so run is never left stuck
-        if getattr(trajectory, "status", None) == "error" and len(getattr(trajectory, "steps", [])) == 0:
+        if (
+            getattr(trajectory, "status", None) == "error"
+            and len(getattr(trajectory, "steps", [])) == 0
+        ):
             status_to_set = "error"
             err_msg = getattr(trajectory, "error_message", "Unknown LLM API Error")
             failure_reason_to_set = f"LLM API Error ({model}): {err_msg}"
         else:
-            status_to_set = trajectory.status if trajectory.status in ("completed", "failed") else "completed"
+            status_to_set = (
+                trajectory.status if trajectory.status in ("completed", "failed") else "completed"
+            )
             failure_reason_to_set = grade.failure_reason
 
         global_run_store.update_run(
@@ -822,9 +825,21 @@ async def _run_evaluation_worker(
             has_finished = False
             if rec.steps:
                 last_step = rec.steps[-1]
-                action = last_step.get("action", {}) if isinstance(last_step, dict) else getattr(last_step, "action", None)
-                tool = action.get("tool") if isinstance(action, dict) else getattr(action, "tool", None)
-                obs = str(last_step.get("observation", "") if isinstance(last_step, dict) else getattr(last_step, "observation", ""))
+                action = (
+                    last_step.get("action", {})
+                    if isinstance(last_step, dict)
+                    else getattr(last_step, "action", None)
+                )
+                tool = (
+                    action.get("tool")
+                    if isinstance(action, dict)
+                    else getattr(action, "tool", None)
+                )
+                obs = str(
+                    last_step.get("observation", "")
+                    if isinstance(last_step, dict)
+                    else getattr(last_step, "observation", "")
+                )
                 if tool == "finish" or "finished by agent" in obs.lower():
                     has_finished = True
             new_status = "completed" if has_finished else "error"

@@ -178,4 +178,3 @@ async def test_semantic_compare_cross_task_mismatch_guardrail() -> None:
     assert "Task Mismatch" in verdict.verdict_summary
     assert "cancel-async-tasks" in verdict.verdict_summary
     assert "alignment-faking" in verdict.verdict_summary
-

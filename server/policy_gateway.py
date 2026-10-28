@@ -133,7 +133,9 @@ def _parse_decision_xml(text: str) -> tuple[int, str] | None:
     score = max(1, min(10, max(scores)))
 
     # 3. Extract last decision_context outside thinking
-    ctx_matches = re.findall(r"<decision_context>\s*([\s\S]*?)\s*</decision_context>", cleaned, flags=re.I)
+    ctx_matches = re.findall(
+        r"<decision_context>\s*([\s\S]*?)\s*</decision_context>", cleaned, flags=re.I
+    )
     context = ctx_matches[-1].strip()[:500] if ctx_matches else cleaned.strip()[:500]
     return score, context
 
@@ -141,7 +143,9 @@ def _parse_decision_xml(text: str) -> tuple[int, str] | None:
 def _parse_threat_category(text: str) -> ThreatCategory | None:
     """Parse 13-point safety threat category tag from model XML output outside thinking blocks."""
     cleaned = re.sub(r"<thinking>[\s\S]*?</thinking>", "", text, flags=re.I)
-    matches = re.findall(r"<threat_category>\s*([\s\S]*?)\s*</threat_category>", cleaned, flags=re.I)
+    matches = re.findall(
+        r"<threat_category>\s*([\s\S]*?)\s*</threat_category>", cleaned, flags=re.I
+    )
     if not matches:
         return None
     valid_cats = {
@@ -164,7 +168,6 @@ def _parse_threat_category(text: str) -> ThreatCategory | None:
         if candidate in valid_cats:
             return candidate  # type: ignore[return-value]
     return None
-
 
 
 def format_stripped_trajectory(trajectory: object, max_events: int = 15) -> str:
@@ -1192,7 +1195,9 @@ class PolicyGateway:
         score = int(heuristic[0])
         ctx = str(heuristic[1])
         if self.on_failure in ("escalate", "fail_closed"):
-            return StageResult(max(score, 6), f"LLM failure/timeout → fail-closed (ask): {ctx}", cat)
+            return StageResult(
+                max(score, 6), f"LLM failure/timeout → fail-closed (ask): {ctx}", cat
+            )
         if isinstance(heuristic, StageResult):
             return heuristic
         return StageResult(score, ctx, cat)
@@ -1250,16 +1255,12 @@ class PolicyGateway:
         ]
         if redacted_traj:
             escaped_traj = html.escape(redacted_traj, quote=False)
-            prompt_parts.append(
-                f"trajectory_context (tool outputs stripped):\n{escaped_traj}"
-            )
+            prompt_parts.append(f"trajectory_context (tool outputs stripped):\n{escaped_traj}")
         prompt_parts.append(f"</untrusted_input_{nonce}>")
         user_prompt = "\n".join(prompt_parts)
         triage_grader = get_canonical_grader("PolicyGatewayFastTriageGrader")
         sys_prompt = (
-            triage_grader.assemble_system_prompt()
-            if triage_grader
-            else FAST_TRIAGE_SYSTEM_PROMPT
+            triage_grader.assemble_system_prompt() if triage_grader else FAST_TRIAGE_SYSTEM_PROMPT
         )
         llm = self._llm_grade(sys_prompt, user_prompt, deadline=deadline)
         if llm:
@@ -1291,10 +1292,16 @@ class PolicyGateway:
             )
 
         if re.search(r"\brm\s+(-[rf]+|--force)\b", tool_input, re.IGNORECASE):
-            return StageResult(8, "Destructive filesystem modification requested.", "undesirable_deletions")
+            return StageResult(
+                8, "Destructive filesystem modification requested.", "undesirable_deletions"
+            )
 
         if re.search(r"\b(truncate|mkfs|dd\s+of=)\b", tool_input, re.IGNORECASE):
-            return StageResult(9, "High-risk raw data deletion or block device modification.", "infrastructure_disruption")
+            return StageResult(
+                9,
+                "High-risk raw data deletion or block device modification.",
+                "infrastructure_disruption",
+            )
 
         if re.search(r"\.(md|example|txt|css|html)\b", tool_input, re.IGNORECASE):
             return StageResult(2, "Low-risk non-executable documentation or template update.", None)
@@ -1346,13 +1353,13 @@ class PolicyGateway:
         ]
         if redacted_traj:
             escaped_traj = html.escape(redacted_traj, quote=False)
-            prompt_parts.append(
-                f"trajectory_context (tool outputs stripped):\n{escaped_traj}"
-            )
+            prompt_parts.append(f"trajectory_context (tool outputs stripped):\n{escaped_traj}")
         prompt_parts.append(f"</untrusted_input_{nonce}>")
         user_prompt = "\n".join(prompt_parts)
         deep_grader = get_canonical_grader("PolicyGatewayDeepGrader")
-        sys_prompt = deep_grader.assemble_system_prompt() if deep_grader else DEEP_REVIEW_SYSTEM_PROMPT
+        sys_prompt = (
+            deep_grader.assemble_system_prompt() if deep_grader else DEEP_REVIEW_SYSTEM_PROMPT
+        )
         llm = self._llm_grade(sys_prompt, user_prompt, deadline=deadline)
         if llm:
             return llm
@@ -1389,4 +1396,3 @@ class PolicyGateway:
         if self.use_llm:
             return self._failure_score(heuristic)
         return heuristic
-

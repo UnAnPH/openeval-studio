@@ -165,7 +165,10 @@ class _AuthMiddleware(BaseHTTPMiddleware):
             or path.startswith("/docs")
             or path.startswith("/redoc")
             or path == "/openapi.json"
-            or (method in ("GET", "HEAD") and (path.startswith("/api/tasks") or path == "/api/models"))
+            or (
+                method in ("GET", "HEAD")
+                and (path.startswith("/api/tasks") or path == "/api/models")
+            )
         ):
             return await call_next(request)
 
@@ -218,7 +221,8 @@ class _AuthMiddleware(BaseHTTPMiddleware):
         if is_demo_surface:
             is_permitted_demo_action = (
                 method in ("GET", "HEAD", "OPTIONS")
-                or path in (
+                or path
+                in (
                     "/api/eval/run",
                     "/api/eval/launch",
                     "/api/eval/runs",
@@ -628,7 +632,9 @@ def _verdicts_from_store_reviews(limit: int = 40) -> list[dict[str, Any]]:
                 raw_payload = r[12]
                 if raw_payload:
                     try:
-                        pdata = json.loads(raw_payload) if isinstance(raw_payload, str) else raw_payload
+                        pdata = (
+                            json.loads(raw_payload) if isinstance(raw_payload, str) else raw_payload
+                        )
                         session = Session.model_validate(pdata)
                     except Exception:
                         session = None
@@ -1451,9 +1457,21 @@ async def get_task_detail(task_id: str) -> TaskDetail:
     if target_dir:
         try:
             spec = load_task_spec(target_dir)
-            task_toml_text = (target_dir / "task.toml").read_text(encoding="utf-8") if (target_dir / "task.toml").exists() else None
-            dockerfile_text = spec.dockerfile_path.read_text(encoding="utf-8") if spec.dockerfile_path.exists() else None
-            verifier_text = spec.test_outputs_path.read_text(encoding="utf-8") if spec.test_outputs_path.exists() else None
+            task_toml_text = (
+                (target_dir / "task.toml").read_text(encoding="utf-8")
+                if (target_dir / "task.toml").exists()
+                else None
+            )
+            dockerfile_text = (
+                spec.dockerfile_path.read_text(encoding="utf-8")
+                if spec.dockerfile_path.exists()
+                else None
+            )
+            verifier_text = (
+                spec.test_outputs_path.read_text(encoding="utf-8")
+                if spec.test_outputs_path.exists()
+                else None
+            )
 
             # Gather seed files in environment/
             env_dir = target_dir / "environment"
@@ -1493,7 +1511,9 @@ async def get_task_detail(task_id: str) -> TaskDetail:
             )
         except Exception as e:
             logger.warning("Failed loading task spec for %s: %s", task_id, e)
-            raise HTTPException(status_code=500, detail=f"Failed loading task {task_id}: {e}") from e
+            raise HTTPException(
+                status_code=500, detail=f"Failed loading task {task_id}: {e}"
+            ) from e
 
     # Fallback to INSPECT_EVALS_CATALOG
     for item in INSPECT_EVALS_CATALOG:
@@ -1508,7 +1528,8 @@ async def get_task_detail(task_id: str) -> TaskDetail:
                 memory_mb=item.memory_mb,
                 cpus=2,
                 allow_internet=False,
-                instruction_text=item.instruction_preview or f"Inspect Evals benchmark suite: {item.task_id}",
+                instruction_text=item.instruction_preview
+                or f"Inspect Evals benchmark suite: {item.task_id}",
                 task_toml=f'[task]\nid = "{item.task_id}"\ncategory = "{item.category}"\n\n[environment]\nmemory_mb = {item.memory_mb}\nallow_internet = false',
                 dockerfile="FROM python:3.11-slim\nWORKDIR /workspace\n# Hermetic Inspect AI Evaluation Sandbox\nRUN pip install inspect-ai pytest",
                 verifier_code=f"# Native Inspect AI benchmark solver for {item.task_id}\nfrom inspect_ai import eval, task\n\n# Verified via Inspect AI automated rubric",
@@ -1864,7 +1885,8 @@ async def ingest_agent_log(payload: IngestAgentLogPayload) -> dict[str, Any]:
             )
     else:
         raise HTTPException(
-            status_code=400, detail="Must provide either 'file_content' (file upload) or 'file_path'"
+            status_code=400,
+            detail="Must provide either 'file_content' (file upload) or 'file_path'",
         )
 
     try:
@@ -2111,7 +2133,9 @@ async def audit_session_with_grader(req: GraderAuditSessionRequest) -> dict[str,
         if req.custom_prompt_template:
             grader = grader.model_copy(update={"full_prompt_override": req.custom_prompt_template})
         elif req.custom_overrides and "full_prompt_override" in req.custom_overrides:
-            grader = grader.model_copy(update={"full_prompt_override": req.custom_overrides["full_prompt_override"]})
+            grader = grader.model_copy(
+                update={"full_prompt_override": req.custom_overrides["full_prompt_override"]}
+            )
         try:
             verdict = await grader.evaluate(
                 trajectory_text, runner, config=cfg, preset_mode=req.preset_mode

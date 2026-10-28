@@ -231,7 +231,10 @@ class TrajectoryDiffEngine:
                 structural_mismatch = (
                     not tool_match
                     or (sa.action.path and sb.action.path and sa.action.path != sb.action.path)
-                    or (sa.action.tool in ("write_file", "edit_file", "replace_file_content") and not args_match)
+                    or (
+                        sa.action.tool in ("write_file", "edit_file", "replace_file_content")
+                        and not args_match
+                    )
                     or sim < 0.3
                 )
 
@@ -250,9 +253,7 @@ class TrajectoryDiffEngine:
                                 f"'{sa.action.path}' vs Model B '{sb.action.path}'."
                             )
                         elif sa.action.tool in ("write_file", "edit_file", "replace_file_content"):
-                            divergence_reason = (
-                                f"File modification divergence at Turn {step_num}: Different contents written."
-                            )
+                            divergence_reason = f"File modification divergence at Turn {step_num}: Different contents written."
                         else:
                             divergence_reason = (
                                 f"Reasoning divergence at Turn {step_num}: Thought similarity "
@@ -456,10 +457,15 @@ class TrajectoryDiffEngine:
 
                     # Grounding Invariant: If one run passed and the other failed, it cannot be identical_strategy or 100% equivalence
                     if run_a.passed != run_b.passed:
-                        if verdict.nature_of_divergence in ("identical_strategy", "cosmetic_variation"):
+                        if verdict.nature_of_divergence in (
+                            "identical_strategy",
+                            "cosmetic_variation",
+                        ):
                             verdict.nature_of_divergence = "substantive_divergence"
                         if verdict.semantic_similarity_score > 0.60:
-                            verdict.semantic_similarity_score = min(verdict.semantic_similarity_score, 0.45)
+                            verdict.semantic_similarity_score = min(
+                                verdict.semantic_similarity_score, 0.45
+                            )
                     return verdict
             except Exception as e:
                 logger.warning(

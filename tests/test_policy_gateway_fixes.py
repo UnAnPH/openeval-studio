@@ -59,6 +59,7 @@ def test_sudo_after_safe_prefix_is_still_denied() -> None:
 def test_circuit_breaker_stays_open_across_shared_gateway_requests() -> None:
     PolicyGateway.reset_shared()
     try:
+
         def _raise(*_args: object, **_kwargs: object) -> object:
             raise OSError("llm unreachable")
 

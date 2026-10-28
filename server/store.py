@@ -82,18 +82,38 @@ class RunStore:
             reconciled = True
         if s.status in ("running", "pending") and s.steps:
             last_step = s.steps[-1]
-            action = last_step.get("action", {}) if isinstance(last_step, dict) else getattr(last_step, "action", None)
+            action = (
+                last_step.get("action", {})
+                if isinstance(last_step, dict)
+                else getattr(last_step, "action", None)
+            )
             tool = action.get("tool") if isinstance(action, dict) else getattr(action, "tool", None)
-            obs = str(last_step.get("observation", "") if isinstance(last_step, dict) else getattr(last_step, "observation", ""))
-            if tool == "finish" or "Task marked as finished by agent." in obs or "finished by agent" in obs.lower():
+            obs = str(
+                last_step.get("observation", "")
+                if isinstance(last_step, dict)
+                else getattr(last_step, "observation", "")
+            )
+            if (
+                tool == "finish"
+                or "Task marked as finished by agent." in obs
+                or "finished by agent" in obs.lower()
+            ):
                 s.status = "completed"
                 reconciled = True
                 if s.total_steps == 0 or s.total_steps is None:
                     s.total_steps = len(s.steps)
                 if s.total_duration_sec is None or s.total_duration_sec <= 0:
                     try:
-                        t0 = float(s.steps[0].get("timestamp", 0) if isinstance(s.steps[0], dict) else getattr(s.steps[0], "timestamp", 0))
-                        t1 = float(s.steps[-1].get("timestamp", 0) if isinstance(s.steps[-1], dict) else getattr(s.steps[-1], "timestamp", 0))
+                        t0 = float(
+                            s.steps[0].get("timestamp", 0)
+                            if isinstance(s.steps[0], dict)
+                            else getattr(s.steps[0], "timestamp", 0)
+                        )
+                        t1 = float(
+                            s.steps[-1].get("timestamp", 0)
+                            if isinstance(s.steps[-1], dict)
+                            else getattr(s.steps[-1], "timestamp", 0)
+                        )
                         if t1 > t0 > 0:
                             s.total_duration_sec = round(t1 - t0, 2)
                         else:
@@ -129,7 +149,9 @@ class RunStore:
         # 2. In-memory check across scoped, raw, or any tenant-scoped key
         for key, s in self._runs.items():
             for cid in candidates:
-                if (key == cid or key.endswith(f":{cid}")) or (s.run_id in candidates or s.session_id in candidates):
+                if (key == cid or key.endswith(f":{cid}")) or (
+                    s.run_id in candidates or s.session_id in candidates
+                ):
                     return self._reconcile_and_persist(s)
 
         # 3. Direct PostgreSQL lookup across all tenants
@@ -182,18 +204,23 @@ class RunStore:
 
         # Fetch eval runs for the active user in DB
         from server.db import current_user_slug, get_current_user_id
+
         is_demo_user = current_user_slug.get() == "demo"
 
         with SessionLocal() as db:
             if is_demo_user:
                 eval_rows = db.execute(
-                    text("SELECT payload FROM sessions WHERE (agent_type = 'inspect_eval' OR id LIKE 'eval-%') ORDER BY created_at DESC LIMIT 100")
+                    text(
+                        "SELECT payload FROM sessions WHERE (agent_type = 'inspect_eval' OR id LIKE 'eval-%') ORDER BY created_at DESC LIMIT 100"
+                    )
                 ).fetchall()
             else:
                 user_id = get_current_user_id(db)
                 eval_rows = db.execute(
-                    text("SELECT payload FROM sessions WHERE user_id = :uid AND (agent_type = 'inspect_eval' OR id LIKE 'eval-%') ORDER BY created_at DESC LIMIT 100"),
-                    {"uid": user_id}
+                    text(
+                        "SELECT payload FROM sessions WHERE user_id = :uid AND (agent_type = 'inspect_eval' OR id LIKE 'eval-%') ORDER BY created_at DESC LIMIT 100"
+                    ),
+                    {"uid": user_id},
                 ).fetchall()
             for r in eval_rows:
                 if r[0]:

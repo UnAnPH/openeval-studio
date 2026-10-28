@@ -412,9 +412,7 @@ async def evaluate_action_watcher_gateway(
         if cfg.mode == "observe" and mapped_decision != "allow":
             activity = f"shadow:{mapped_decision}"
         new_status = (
-            "blocked"
-            if mapped_decision in ("deny", "reject", "block", "escalate")
-            else "working"
+            "blocked" if mapped_decision in ("deny", "reject", "block", "escalate") else "working"
         )
         await asyncio.to_thread(
             store.update_session,
@@ -528,7 +526,9 @@ async def resolve_watcher_interception(
     # 2. Update canonical WatcherStore sessions already scoped to this user via background thread.
     def _update_store_sessions() -> int:
         target_sessions = (
-            [store.get_session(req.session_id)] if req.session_id else store.list_sessions(limit=200)
+            [store.get_session(req.session_id)]
+            if req.session_id
+            else store.list_sessions(limit=200)
         )
         count = 0
         for sess in target_sessions:

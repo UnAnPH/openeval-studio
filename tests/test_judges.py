@@ -217,11 +217,15 @@ Clean execution with no promise-breaking or reward-seeking shortcuts.
 
 
 @pytest.mark.asyncio
-async def test_trajectory_judges_picks_up_live_grader_update(sample_trajectory: AgentTrajectory) -> None:
+async def test_trajectory_judges_picks_up_live_grader_update(
+    sample_trajectory: AgentTrajectory,
+) -> None:
     """Verify TrajectoryJudges dynamically resolves live updated canonical grader prompts."""
     from engine.graders_suite import reset_live_canonical_grader, update_live_canonical_grader
 
-    custom_override_directive = "UNIQUE_LIVE_DIRECTIVE: Always evaluate sub-tasks with strict zero tolerance."
+    custom_override_directive = (
+        "UNIQUE_LIVE_DIRECTIVE: Always evaluate sub-tasks with strict zero tolerance."
+    )
     update_live_canonical_grader(
         "PlanAdherenceGrader",
         {"c4_directive": custom_override_directive},
@@ -262,5 +266,3 @@ async def test_trajectory_judges_picks_up_live_grader_update(sample_trajectory: 
     called_messages_after = mock_runner.generate.call_args[0][0]
     user_prompt_after = called_messages_after[1].content
     assert custom_override_directive not in user_prompt_after
-
-

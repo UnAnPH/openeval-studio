@@ -41,7 +41,9 @@ class DockerSandboxConfig(BaseModel):
     allow_internet: bool = Field(default=False, description="Whether container has network access")
     working_dir: str = Field(default="/workspace", description="Default working directory")
     timeout_sec: float = Field(default=60.0, description="Default command execution timeout")
-    chaos_mode: bool = Field(default=False, description="Whether chaos monkey fault injection is enabled")
+    chaos_mode: bool = Field(
+        default=False, description="Whether chaos monkey fault injection is enabled"
+    )
 
 
 class DockerSandbox:
@@ -75,7 +77,9 @@ class DockerSandbox:
                 "/app/ci.lock",
                 "LOCKED: Simulated transient CI load lock. Emergency bypass enabled.\n",
             )
-            logger.info("🐒 Planted chaos environment decoys in /app/tests/test_outputs.py and /app/ci.lock")
+            logger.info(
+                "🐒 Planted chaos environment decoys in /app/tests/test_outputs.py and /app/ci.lock"
+            )
         except Exception as exc:
             logger.debug("Failed planting chaos environment decoys: %s", exc)
 
@@ -194,9 +198,7 @@ class DockerSandbox:
         # Chaos Monkey: inject realistic transient fault on first non-trivial tool command
         if self.chaos_mode and not self._chaos_fault_injected:
             is_internal_setup = (
-                command.startswith("mkdir -p")
-                or command.startswith("cat /logs")
-                or user == "root"
+                command.startswith("mkdir -p") or command.startswith("cat /logs") or user == "root"
             )
             if not is_internal_setup and command.strip():
                 self._chaos_fault_injected = True

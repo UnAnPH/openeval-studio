@@ -65,7 +65,12 @@ def test_catalog_flash_and_live_models() -> None:
     assert "live_api" in spec_live.capabilities
 
     # Quota documentation checks
-    for flash_id in ["gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-2.5-flash"]:
+    for flash_id in [
+        "gemini-3.7-flash",
+        "gemini-3.6-flash",
+        "gemini-3.5-flash",
+        "gemini-2.5-flash",
+    ]:
         s = get_model_spec(flash_id)
         assert s is not None
         assert "5 RPM / 20 RPD" in s.description
@@ -78,6 +83,7 @@ def test_catalog_flash_and_live_models() -> None:
 
 def test_model_rewriting_rules() -> None:
     """Verify legacy rewrite list removes 2.5-flash and maps gemini-3-flash to preview."""
+
     # Test target_model rewrite logic directly
     def rewrite(model: str) -> str:
         target = model.replace("google/", "")
@@ -156,6 +162,7 @@ def test_fallback_parse_agent_action() -> None:
 
 def test_fallback_parse_schema() -> None:
     """Test fallback parsing for general Pydantic response_schema."""
+
     class GradingVerdict(BaseModel):
         passed: bool
         score: float
@@ -187,8 +194,12 @@ async def test_live_runner_live_integration() -> None:
 
     # 2. AgentAction with gemini-3.8-live
     messages = [
-        ChatMessage(role="system", content="You are a terminal evaluation agent. Execute bash commands."),
-        ChatMessage(role="user", content="Inspect the current directory with execute_bash(command='ls')."),
+        ChatMessage(
+            role="system", content="You are a terminal evaluation agent. Execute bash commands."
+        ),
+        ChatMessage(
+            role="user", content="Inspect the current directory with execute_bash(command='ls')."
+        ),
     ]
     res_action = await runner.generate(
         messages=messages,
@@ -210,7 +221,9 @@ async def test_react_agent_live_loop() -> None:
 
     async def mock_executor(action: AgentAction) -> str:
         if action.tool == "execute_bash":
-            return "total 0\n-rw-r--r-- 1 root root 0 main.py\n-rw-r--r-- 1 root root 0 test_main.py"
+            return (
+                "total 0\n-rw-r--r-- 1 root root 0 main.py\n-rw-r--r-- 1 root root 0 test_main.py"
+            )
         return "Task finished."
 
     agent = ReActAgent(runner=runner, executor=mock_executor)

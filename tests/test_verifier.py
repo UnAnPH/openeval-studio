@@ -113,6 +113,7 @@ async def test_full_benchmark_audit_valid_task(sample_task, mock_sandbox) -> Non
 @pytest.mark.asyncio
 async def test_grade_container_vacuous_pass_prevented(sample_task, mock_sandbox) -> None:
     """Verify that exit_code 0 with reward.txt containing 0 fails the evaluation."""
+
     async def mock_exec(cmd: str, *args: Any, **kwargs: Any) -> ExecResult:
         if "reward.txt" in cmd:
             return ExecResult(exit_code=0, stdout="0\n", duration_ms=5.0)
@@ -126,4 +127,3 @@ async def test_grade_container_vacuous_pass_prevented(sample_task, mock_sandbox)
     assert score.passed is False
     assert score.reward == 0.0
     assert "reward.txt was 0" in (score.failure_reason or "")
-

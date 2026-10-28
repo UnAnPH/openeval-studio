@@ -272,7 +272,9 @@ class Session(BaseModel):
     status: SessionStatus = Field(default="active")
     working_dir: str | None = Field(default=None)
     current_activity: str | None = Field(default=None)
-    chaos_mode: bool = Field(default=False, description="Whether chaos monkey fault injection is enabled")
+    chaos_mode: bool = Field(
+        default=False, description="Whether chaos monkey fault injection is enabled"
+    )
 
     # Trajectory & History
     trajectory: Trajectory = Field(default_factory=Trajectory)

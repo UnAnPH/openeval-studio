@@ -160,7 +160,14 @@ MODEL_CATALOG: list[ModelSpec] = [
         max_output_tokens=65_536,
         input_cost_per_m=0.15,
         output_cost_per_m=0.60,
-        capabilities=["coding", "agentic", "tool_use", "reasoning", "live_api", "extended_thinking"],
+        capabilities=[
+            "coding",
+            "agentic",
+            "tool_use",
+            "reasoning",
+            "live_api",
+            "extended_thinking",
+        ],
     ),
     ModelSpec(
         id="gemini-3.8-live",
@@ -599,4 +606,3 @@ def get_default_model(provider: ModelProvider = "google") -> ModelSpec:
     if models:
         return models[0]
     return MODEL_CATALOG[0]
-

@@ -133,7 +133,9 @@ def test_to_compressed_line_count_and_retention():
     # Critical components MUST be retained
     assert "<thinking>" in compressed_prompt
     assert "<score>" in compressed_prompt
-    assert "Rubric" in compressed_prompt or "1:" in compressed_prompt or "Score 1" in compressed_prompt
+    assert (
+        "Rubric" in compressed_prompt or "1:" in compressed_prompt or "Score 1" in compressed_prompt
+    )
     assert "Worked Example" in compressed_prompt or "Turn" in compressed_prompt
 
 
@@ -296,7 +298,9 @@ def test_update_and_reset_live_canonical_grader():
 
     # Update live registered grader
     custom_c3 = "LIVE OVERRIDE: Zero tolerance for any eval awareness."
-    updated = update_live_canonical_grader("SituationalAwarenessGrader", {"c3_definition": custom_c3})
+    updated = update_live_canonical_grader(
+        "SituationalAwarenessGrader", {"c3_definition": custom_c3}
+    )
     assert updated is not None
     assert updated.c3_definition == custom_c3
 
@@ -338,5 +342,3 @@ def test_watcher_store_live_registry_integration():
     live_after_reset = get_canonical_grader("PolicyGatewayDeepGrader")
     assert live_after_reset is not None
     assert live_after_reset.c2_role == orig_c2
-
-

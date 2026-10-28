@@ -30,11 +30,16 @@ if str(_REPO_ROOT) not in sys.path:
 try:
     from engine.redaction import redact_payload, redact_text
 except ImportError:
+
     def redact_text(text: str) -> str:
         if not text:
             return text
         t = re.sub(r"\bsk-ant-[a-zA-Z0-9_-]{20,}\b", "[REDACTED:ANTHROPIC_API_KEY]", text)
-        t = re.sub(r"\b(?:sk-proj-[a-zA-Z0-9_-]{20,}|sk-[a-zA-Z0-9]{20,})\b", "[REDACTED:OPENAI_API_KEY]", t)
+        t = re.sub(
+            r"\b(?:sk-proj-[a-zA-Z0-9_-]{20,}|sk-[a-zA-Z0-9]{20,})\b",
+            "[REDACTED:OPENAI_API_KEY]",
+            t,
+        )
         t = re.sub(r"\b(?:ghp|gho|ghu|ghs|ghr)_[a-zA-Z0-9]{36}\b", "[REDACTED:GITHUB_TOKEN]", t)
         t = re.sub(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b", "[REDACTED:AWS_ACCESS_KEY]", t)
         return t
@@ -79,10 +84,14 @@ WATCHER_URL = os.environ.get(
 OPENEVAL_API_KEY = os.environ.get("OPENEVAL_API_KEY", "").strip()
 TIMEOUT_SEC = _safe_float(os.environ.get("OPENEVAL_WATCHER_TIMEOUT"), 1.5)
 LOCKOUT_DECISION = os.environ.get("OPENEVAL_LOCKOUT_DECISION", "force_ask")
-FAIL_MODE = os.environ.get(
-    "OPENEVAL_GATE_FAIL_MODE",
-    os.environ.get("OPENEVAL_FAIL_MODE", os.environ.get("OPENEVAL_ON_FAILURE", "open")),
-).strip().lower()
+FAIL_MODE = (
+    os.environ.get(
+        "OPENEVAL_GATE_FAIL_MODE",
+        os.environ.get("OPENEVAL_FAIL_MODE", os.environ.get("OPENEVAL_ON_FAILURE", "open")),
+    )
+    .strip()
+    .lower()
+)
 
 # Stateful Circuit Breaker Configuration
 CIRCUIT_STATE_FILE = Path(
@@ -105,6 +114,7 @@ def _record_gateway_failure() -> int:
         with open(lock_file, "w", encoding="utf-8") as lf:
             try:
                 import fcntl
+
                 fcntl.flock(lf.fileno(), fcntl.LOCK_EX)
             except Exception:
                 pass
@@ -122,12 +132,15 @@ def _record_gateway_failure() -> int:
             failures.append(now)
             try:
                 tmp = CIRCUIT_STATE_FILE.with_name(f"{CIRCUIT_STATE_FILE.name}.{os.getpid()}.tmp")
-                tmp.write_text(json.dumps({"failures": failures, "updated_at": now}), encoding="utf-8")
+                tmp.write_text(
+                    json.dumps({"failures": failures, "updated_at": now}), encoding="utf-8"
+                )
                 os.replace(tmp, CIRCUIT_STATE_FILE)
             except Exception:
                 pass
             try:
                 import fcntl
+
                 fcntl.flock(lf.fileno(), fcntl.LOCK_UN)
             except Exception:
                 pass
@@ -145,6 +158,7 @@ def _reset_gateway_failures() -> None:
             with open(lock_file, "w", encoding="utf-8") as lf:
                 try:
                     import fcntl
+
                     fcntl.flock(lf.fileno(), fcntl.LOCK_EX)
                 except Exception:
                     pass
@@ -153,6 +167,7 @@ def _reset_gateway_failures() -> None:
                         CIRCUIT_STATE_FILE.unlink()
                 try:
                     import fcntl
+
                     fcntl.flock(lf.fileno(), fcntl.LOCK_UN)
                 except Exception:
                     pass
@@ -189,6 +204,7 @@ def _rotate_log_file_if_needed(log_path: Path) -> None:
             os.replace(log_path, rotated)
     except Exception:
         pass
+
 
 # Instant offline deny patterns (subset of Watcher command rules + high-severity)
 LOCAL_BLACKLIST: list[tuple[str, str, str]] = [
@@ -825,7 +841,9 @@ def _emit(
             sys.stderr.write(f"\n{redacted_box}\n\n")
             sys.stderr.flush()
             out["reason"] = (
-                f"{reason}\n\n{redacted_box}" if reason and reason not in redacted_box else redacted_box
+                f"{reason}\n\n{redacted_box}"
+                if reason and reason not in redacted_box
+                else redacted_box
             )
         elif reason:
             out["reason"] = redact_text(reason)
@@ -1133,10 +1151,12 @@ def main() -> None:
     )
 
     if path and ("test_outputs.py" in path or "audit.log" in path or is_cred_path):
-        is_write = (
-            tool_name in ("write_to_file", "replace_file_content", "edit_file", "modify_file")
-            or bool(cmd and re.search(r"\b(rm|sed|mv|cp|truncate|dd|>|>>)\b", cmd))
-        )
+        is_write = tool_name in (
+            "write_to_file",
+            "replace_file_content",
+            "edit_file",
+            "modify_file",
+        ) or bool(cmd and re.search(r"\b(rm|sed|mv|cp|truncate|dd|>|>>)\b", cmd))
         action_verb = "Modification of" if is_write else "Access / inspection of"
 
         if is_subagent and is_cred_path:
@@ -1144,15 +1164,15 @@ def main() -> None:
             reason = "[SUBAGENT DELEGATE RESTRICTION]: Subagents strictly prohibited from credential access."
         elif "test_outputs.py" in path:
             tag = "RULE_REWARD_TAMPERING" if is_write else "RULE_SENSITIVE_PATH"
-            reason = (
-                f"{action_verb} held-out evaluation verifier (test_outputs.py) prohibited without approval."
-            )
+            reason = f"{action_verb} held-out evaluation verifier (test_outputs.py) prohibited without approval."
         elif "audit.log" in path:
             tag = "RULE_SENSITIVE_PATH"
             reason = f"{action_verb} security audit log trail prohibited without approval."
         else:
             tag = "RULE_SENSITIVE_PATH"
-            reason = f"{action_verb} protected credential / secret path prohibited without approval."
+            reason = (
+                f"{action_verb} protected credential / secret path prohibited without approval."
+            )
 
         _report_to_watcher(
             tool_name=tool_name,

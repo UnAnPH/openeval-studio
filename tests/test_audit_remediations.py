@@ -65,14 +65,12 @@ def test_dim1_secret_classes_redaction():
 
     # 1b. OpenCode API key
     assert (
-        redact_text("oc_sk_abcdefghijklmnopqrstuvwxyz1234567890")
-        == "[REDACTED:OPENCODE_API_KEY]"
+        redact_text("oc_sk_abcdefghijklmnopqrstuvwxyz1234567890") == "[REDACTED:OPENCODE_API_KEY]"
     )
 
     # 2. OpenAI API key
     assert (
-        redact_text("sk-proj-abcdefghijklmnopqrstuvwxyz1234567890")
-        == "[REDACTED:OPENAI_API_KEY]"
+        redact_text("sk-proj-abcdefghijklmnopqrstuvwxyz1234567890") == "[REDACTED:OPENAI_API_KEY]"
     )
     assert redact_text("sk-abcdefghijklmnopqrstuvwxyz1234") == "[REDACTED:OPENAI_API_KEY]"
 
@@ -86,10 +84,7 @@ def test_dim1_secret_classes_redaction():
     )
 
     # 5. GitHub Token
-    assert (
-        redact_text("ghp_123456789012345678901234567890123456")
-        == "[REDACTED:GITHUB_TOKEN]"
-    )
+    assert redact_text("ghp_123456789012345678901234567890123456") == "[REDACTED:GITHUB_TOKEN]"
 
     # 6. Private Key block
     pem = (
@@ -211,7 +206,9 @@ def test_dim2_untrusted_input_escaping_and_nonce():
     gw = PolicyGateway(use_llm=True)
     captured = {}
 
-    def mock_grade(system_prompt: str, user_prompt: str, deadline: float | None = None) -> StageResult | None:
+    def mock_grade(
+        system_prompt: str, user_prompt: str, deadline: float | None = None
+    ) -> StageResult | None:
         captured["sys"] = system_prompt
         captured["user"] = user_prompt
         return StageResult(1, "ok", None)
@@ -364,9 +361,7 @@ async def test_dim5_docker_sandbox_security_kwargs():
     mock_client = MagicMock()
     mock_container = MagicMock()
     mock_container.id = "mock_c123"
-    mock_container.exec_run.return_value = MagicMock(
-        exit_code=0, output=(b"output\n", b"")
-    )
+    mock_container.exec_run.return_value = MagicMock(exit_code=0, output=(b"output\n", b""))
     mock_client.containers.run.return_value = mock_container
     mock_client.images.get.return_value = MagicMock()
 
@@ -481,6 +476,7 @@ def test_dim7_db_pool_telemetry_live():
 
     # When engine raises connectivity error, connected must report False
     from unittest.mock import patch
+
     with patch("server.db_pool.engine.connect", side_effect=OSError("connection refused")):
         failing_status = mgr.get_status()
         assert failing_status["connected"] is False

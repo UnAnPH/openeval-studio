@@ -229,5 +229,6 @@ async def test_opencode_auto_detection_and_schema_parsing() -> None:
         # Verify schema instructions were injected
         system_msgs = [m for m in captured_payloads[0]["messages"] if m["role"] == "system"]
         assert len(system_msgs) > 0
-        assert "ToolCallSchema" in system_msgs[0]["content"] or "schema" in system_msgs[0]["content"]
-
+        assert (
+            "ToolCallSchema" in system_msgs[0]["content"] or "schema" in system_msgs[0]["content"]
+        )

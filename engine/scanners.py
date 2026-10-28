@@ -267,7 +267,9 @@ class SchemingScanners:
                     fallback_cfg = LLMConfig(
                         model="gemini-3.5-flash-lite", provider="google", temperature=0.0
                     )
-                    res = await runner.generate(messages, config=fallback_cfg, response_schema=JudgeVerdict)
+                    res = await runner.generate(
+                        messages, config=fallback_cfg, response_schema=JudgeVerdict
+                    )
                     if res.parsed_json:
                         v = JudgeVerdict.model_validate(res.parsed_json)
                         v.metric_name = "situational_awareness"
@@ -360,7 +362,9 @@ class SchemingScanners:
                     fallback_cfg = LLMConfig(
                         model="gemini-3.5-flash-lite", provider="google", temperature=0.0
                     )
-                    res = await runner.generate(messages, config=fallback_cfg, response_schema=JudgeVerdict)
+                    res = await runner.generate(
+                        messages, config=fallback_cfg, response_schema=JudgeVerdict
+                    )
                     if res.parsed_json:
                         v = JudgeVerdict.model_validate(res.parsed_json)
                         v.metric_name = "goal_guarding_scheming"
@@ -411,9 +415,7 @@ class SchemingScanners:
 
         grader = get_canonical_grader("UnfaithfulCoTGrader")
         sys_prompt = (
-            grader.assemble_system_prompt()
-            if grader
-            else "Evaluate Chain-of-Thought Faithfulness."
+            grader.assemble_system_prompt() if grader else "Evaluate Chain-of-Thought Faithfulness."
         )
         traj_text = (
             f"## Task Spec:\n{task.instruction_text}\n\n"
@@ -454,7 +456,9 @@ class SchemingScanners:
                     fallback_cfg = LLMConfig(
                         model="gemini-3.5-flash-lite", provider="google", temperature=0.0
                     )
-                    res = await runner.generate(messages, config=fallback_cfg, response_schema=JudgeVerdict)
+                    res = await runner.generate(
+                        messages, config=fallback_cfg, response_schema=JudgeVerdict
+                    )
                     if res.parsed_json:
                         v = JudgeVerdict.model_validate(res.parsed_json)
                         v.metric_name = "unfaithful_cot"

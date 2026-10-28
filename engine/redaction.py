@@ -24,19 +24,13 @@ _PRIVATE_KEY_RE = re.compile(
 )
 
 # 2. OpenCode API keys (starts with oc_sk_)
-_OPENCODE_KEY_RE = re.compile(
-    r"\boc_sk_[a-zA-Z0-9_-]+\b"
-)
+_OPENCODE_KEY_RE = re.compile(r"\boc_sk_[a-zA-Z0-9_-]+\b")
 
 # 3. Anthropic API keys (must be evaluated before generic sk- to prevent collision)
-_ANTHROPIC_KEY_RE = re.compile(
-    r"\bsk-ant-[a-zA-Z0-9_-]{20,}\b"
-)
+_ANTHROPIC_KEY_RE = re.compile(r"\bsk-ant-[a-zA-Z0-9_-]{20,}\b")
 
 # 3. OpenAI API keys
-_OPENAI_KEY_RE = re.compile(
-    r"\b(?:sk-proj-[a-zA-Z0-9_-]{20,}|sk-[a-zA-Z0-9]{20,})\b"
-)
+_OPENAI_KEY_RE = re.compile(r"\b(?:sk-proj-[a-zA-Z0-9_-]{20,}|sk-[a-zA-Z0-9]{20,})\b")
 
 # 4. GitHub tokens
 _GITHUB_TOKEN_RE = re.compile(
@@ -44,9 +38,7 @@ _GITHUB_TOKEN_RE = re.compile(
 )
 
 # 5. AWS Access Key IDs
-_AWS_KEY_ID_RE = re.compile(
-    r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"
-)
+_AWS_KEY_ID_RE = re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b")
 
 # 6. AWS Secret Access Key assignments (with preserved quotes for shell/JSON)
 _AWS_SECRET_RE = re.compile(
@@ -54,9 +46,7 @@ _AWS_SECRET_RE = re.compile(
 )
 
 # 7. Bearer Authorization Tokens
-_BEARER_TOKEN_RE = re.compile(
-    r"(?i)\b(Bearer\s+)[a-zA-Z0-9_\-\.]{16,}\b"
-)
+_BEARER_TOKEN_RE = re.compile(r"(?i)\b(Bearer\s+)[a-zA-Z0-9_\-\.]{16,}\b")
 
 # 8. Generic sensitive environment variable assignments (with preserved quotes for shell/JSON)
 _ENV_SECRET_RE = re.compile(
@@ -112,7 +102,15 @@ def redact_payload(obj: T) -> T:
                     result[k] = redacted_v
                     continue
                 k_upper = str(k).upper()
-                if any(kw in k_upper for kw in ("AWS_SECRET_ACCESS_KEY", "SECRET_ACCESS_KEY", "AWS_ACCESS_KEY_ID", "AWS_ACCESS_KEY")):
+                if any(
+                    kw in k_upper
+                    for kw in (
+                        "AWS_SECRET_ACCESS_KEY",
+                        "SECRET_ACCESS_KEY",
+                        "AWS_ACCESS_KEY_ID",
+                        "AWS_ACCESS_KEY",
+                    )
+                ):
                     result[k] = "[REDACTED:AWS_ACCESS_KEY]"
                 elif "GITHUB_TOKEN" in k_upper or "GH_TOKEN" in k_upper or "GITHUB_PAT" in k_upper:
                     result[k] = "[REDACTED:GITHUB_TOKEN]"

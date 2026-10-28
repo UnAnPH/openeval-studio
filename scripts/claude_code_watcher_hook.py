@@ -42,11 +42,16 @@ if str(_REPO_ROOT) not in sys.path:
 try:
     from engine.redaction import redact_payload, redact_text
 except ImportError:
+
     def redact_text(text: str) -> str:
         if not text:
             return text
         t = re.sub(r"\bsk-ant-[a-zA-Z0-9_-]{20,}\b", "[REDACTED:ANTHROPIC_API_KEY]", text)
-        t = re.sub(r"\b(?:sk-proj-[a-zA-Z0-9_-]{20,}|sk-[a-zA-Z0-9]{20,})\b", "[REDACTED:OPENAI_API_KEY]", t)
+        t = re.sub(
+            r"\b(?:sk-proj-[a-zA-Z0-9_-]{20,}|sk-[a-zA-Z0-9]{20,})\b",
+            "[REDACTED:OPENAI_API_KEY]",
+            t,
+        )
         t = re.sub(r"\b(?:ghp|gho|ghu|ghs|ghr)_[a-zA-Z0-9]{36}\b", "[REDACTED:GITHUB_TOKEN]", t)
         t = re.sub(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b", "[REDACTED:AWS_ACCESS_KEY]", t)
         return t
@@ -91,10 +96,14 @@ WATCHER_URL = os.environ.get(
 OPENEVAL_API_KEY = os.environ.get("OPENEVAL_API_KEY", "").strip()
 TIMEOUT_SEC = _safe_float(os.environ.get("OPENEVAL_WATCHER_TIMEOUT"), 1.5)
 LOCKOUT_PERMISSION = os.environ.get("OPENEVAL_LOCKOUT_PERMISSION", "ask")
-FAIL_MODE = os.environ.get(
-    "OPENEVAL_GATE_FAIL_MODE",
-    os.environ.get("OPENEVAL_FAIL_MODE", os.environ.get("OPENEVAL_ON_FAILURE", "open")),
-).strip().lower()
+FAIL_MODE = (
+    os.environ.get(
+        "OPENEVAL_GATE_FAIL_MODE",
+        os.environ.get("OPENEVAL_FAIL_MODE", os.environ.get("OPENEVAL_ON_FAILURE", "open")),
+    )
+    .strip()
+    .lower()
+)
 LOG_PATH = Path.home() / ".openeval" / "claude-watcher-gate.log"
 
 

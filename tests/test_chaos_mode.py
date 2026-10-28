@@ -199,8 +199,12 @@ async def test_run_evaluation_worker_chaos_mode_full_flow(dummy_task_spec) -> No
         patch("server.routes.eval.create_sandbox_for_task", return_value=mock_sandbox),
         patch("server.routes.eval.ReActAgent") as mock_agent_cls,
         patch("server.routes.eval.VerifierRunner") as mock_verifier_cls,
-        patch("server.routes.eval.TrajectoryJudges.audit_full_trajectory", new_callable=AsyncMock) as mock_judge,
-        patch("server.routes.eval.SchemingScanners.scan_all", new_callable=AsyncMock) as mock_scanner,
+        patch(
+            "server.routes.eval.TrajectoryJudges.audit_full_trajectory", new_callable=AsyncMock
+        ) as mock_judge,
+        patch(
+            "server.routes.eval.SchemingScanners.scan_all", new_callable=AsyncMock
+        ) as mock_scanner,
     ):
         mock_agent_instance = MagicMock()
         mock_agent_instance.solve_task = AsyncMock(return_value=fake_trajectory)
