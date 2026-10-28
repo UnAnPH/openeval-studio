@@ -109,12 +109,6 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
   const isDemoActive = Boolean(
     propIsDemo ?? (isDemoSeed || (typeof window !== 'undefined' && (window.location.pathname.startsWith('/demo') || window.location.hash.startsWith('#/demo'))))
   );
-  const isLocalEnvironment = typeof window !== 'undefined' && (
-    window.location.hostname === 'localhost' ||
-    window.location.hostname === '127.0.0.1' ||
-    window.location.hostname === '0.0.0.0' ||
-    window.location.hostname.endsWith('.local')
-  );
   const [sessions, setSessions] = useState<WatcherSession[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(initialSessionId || null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -128,14 +122,11 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
   const [visibleFragmentsCount, setVisibleFragmentsCount] = useState<number>(5);
   const [targetMessageId, setTargetMessageId] = useState<string | null>(null);
 
-  // Log Ingest Modal state
+  // Log Ingest Modal state (Web file upload - cloud-safe)
   const [showIngestModal, setShowIngestModal] = useState<boolean>(false);
-  const [ingestMode, setIngestMode] = useState<'upload' | 'path'>('upload');
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isDragging, setIsDragging] = useState<boolean>(false);
-  const [ingestFilePath, setIngestFilePath] = useState<string>('');
   const [isIngesting, setIsIngesting] = useState<boolean>(false);
-  const [isScanningLocal, setIsScanningLocal] = useState<boolean>(false);
   const [ingestStatus, setIngestStatus] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -378,101 +369,51 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
     }
   };
 
-  // Handle Agent Log Ingest (supports multi-file upload or server CLI path)
+  // Handle Agent Log Ingest (multi-file upload)
   const handleIngest = async () => {
+    if (selectedFiles.length === 0) return;
     setIsIngesting(true);
     setIngestStatus(null);
     try {
-      if (ingestMode === 'upload') {
-        if (selectedFiles.length === 0) return;
-        let successCount = 0;
-        let failCount = 0;
-        for (let i = 0; i < selectedFiles.length; i++) {
-          const file = selectedFiles[i];
-          if (selectedFiles.length > 1) {
-            setIngestStatus(`Ingesting (${i + 1}/${selectedFiles.length}): ${file.name}...`);
-          }
-          try {
-            const content = await file.text();
-            const res = await fetch('/api/v1/agent-logs/ingest', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                filename: file.name,
-                file_content: content,
-                agent_type: 'auto',
-              }),
-            });
-            if (res.ok) successCount++;
-            else failCount++;
-          } catch {
-            failCount++;
-          }
+      let successCount = 0;
+      let failCount = 0;
+      for (let i = 0; i < selectedFiles.length; i++) {
+        const file = selectedFiles[i];
+        if (selectedFiles.length > 1) {
+          setIngestStatus(`Ingesting (${i + 1}/${selectedFiles.length}): ${file.name}...`);
         }
-        if (failCount === 0) {
-          setIngestStatus(`Successfully ingested ${successCount} agent session${successCount > 1 ? 's' : ''}!`);
-        } else {
-          setIngestStatus(`Ingested ${successCount} session(s), ${failCount} failed.`);
-        }
-        setSelectedFiles([]);
-        fetchSessions(true);
-        setTimeout(() => {
-          setShowIngestModal(false);
-          setIngestStatus(null);
-        }, 1500);
-      } else {
-        if (!ingestFilePath.trim()) return;
-        const res = await fetch('/api/v1/agent-logs/ingest', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            file_path: ingestFilePath.trim(),
-            agent_type: 'auto',
-          }),
-        });
-
-        if (res.ok) {
-          setIngestStatus('Successfully ingested agent log!');
-          setIngestFilePath('');
-          fetchSessions(true);
-          setTimeout(() => {
-            setShowIngestModal(false);
-            setIngestStatus(null);
-          }, 1200);
-        } else {
-          const err = await res.json().catch(() => ({}));
-          setIngestStatus(`Error: ${err.detail || 'Ingestion failed'}`);
+        try {
+          const content = await file.text();
+          const res = await fetch('/api/v1/agent-logs/ingest', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              filename: file.name,
+              file_content: content,
+              agent_type: 'auto',
+            }),
+          });
+          if (res.ok) successCount++;
+          else failCount++;
+        } catch {
+          failCount++;
         }
       }
+      if (failCount === 0) {
+        setIngestStatus(`Successfully ingested ${successCount} agent session${successCount > 1 ? 's' : ''}!`);
+      } else {
+        setIngestStatus(`Ingested ${successCount} session(s), ${failCount} failed.`);
+      }
+      setSelectedFiles([]);
+      fetchSessions(true);
+      setTimeout(() => {
+        setShowIngestModal(false);
+        setIngestStatus(null);
+      }, 1500);
     } catch {
       setIngestStatus('Error: Network or server connection failed');
     } finally {
       setIsIngesting(false);
-    }
-  };
-
-  // Handle Scanning all local agent sessions on the host machine
-  const handleScanLocal = async () => {
-    setIsScanningLocal(true);
-    setIngestStatus('Scanning local agent directories (~/.gemini, ~/.cursor, ~/.claude)...');
-    try {
-      const res = await fetch('/api/v1/agent-logs/scan-local?limit=200', { method: 'POST' });
-      if (res.ok) {
-        const data = await res.json();
-        setIngestStatus(`Successfully ingested ${data.ingested_count} local session(s)!`);
-        fetchSessions(true);
-        setTimeout(() => {
-          setShowIngestModal(false);
-          setIngestStatus(null);
-        }, 1500);
-      } else {
-        const err = await res.json().catch(() => ({}));
-        setIngestStatus(`Error: ${err.detail || 'Scan failed'}`);
-      }
-    } catch {
-      setIngestStatus('Error: Failed to connect to local scan service');
-    } finally {
-      setIsScanningLocal(false);
     }
   };
 
@@ -1417,177 +1358,90 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
               </button>
             </div>
 
-            {/* Mode Segmented Controls - Only displayed in local development environments */}
-            {isLocalEnvironment ? (
-              <div className="h-9 bg-slate-100 p-1 rounded-xl border border-slate-200/70 inline-flex items-center gap-1 w-full">
-                <button
-                  type="button"
-                  onClick={() => setIngestMode('upload')}
-                  className={`h-7 flex-1 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                    ingestMode === 'upload'
-                      ? 'bg-white text-slate-900 shadow-xs font-bold'
-                      : 'text-slate-500 hover:text-slate-900'
-                  }`}
-                >
-                  <Upload className="w-3.5 h-3.5" />
-                  <span>Upload Files (Cloud-Safe)</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIngestMode('path')}
-                  className={`h-7 flex-1 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                    ingestMode === 'path'
-                      ? 'bg-white text-slate-900 shadow-xs font-bold'
-                      : 'text-slate-500 hover:text-slate-900'
-                  }`}
-                >
-                  <Terminal className="w-3.5 h-3.5" />
-                  <span>Server Path (CLI)</span>
-                </button>
-              </div>
-            ) : null}
 
-            {/* Auto-Scan Local Sessions Card (Available when running locally) */}
-            {isLocalEnvironment && (
-              <div className="p-3.5 bg-indigo-50/60 border border-indigo-100 rounded-xl space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Zap className="w-4 h-4 text-indigo-600" />
-                    <span className="text-xs font-bold text-slate-900">Auto-Scan Local Agents</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleScanLocal}
-                    disabled={isScanningLocal || isIngesting}
-                    className="h-7 px-3 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-semibold rounded-lg shadow-2xs inline-flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-                  >
-                    {isScanningLocal ? (
-                      <>
-                        <RefreshCw className="w-3 h-3 animate-spin" />
-                        <span>Scanning...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Zap className="w-3 h-3" />
-                        <span>Scan & Ingest All</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-                <p className="text-[11px] text-slate-500 leading-relaxed">
-                  Automatically discover and ingest all local Claude Code (<code className="font-mono text-indigo-700">~/.claude</code>), Cursor (<code className="font-mono text-indigo-700">~/.cursor</code>), and Antigravity (<code className="font-mono text-indigo-700">~/.gemini</code>) sessions with automatic PII sanitization.
-                </p>
-                <div className="flex items-center justify-between bg-white/80 px-2.5 py-1.5 rounded-lg border border-indigo-100/80 text-[10px] font-mono text-slate-600">
-                  <span className="truncate">uv run python scripts/ingest_local_agent_logs.py --user jayson</span>
-                  <button
-                    type="button"
-                    onClick={() => copyToClipboard('uv run python scripts/ingest_local_agent_logs.py --user jayson', 'cli-scan')}
-                    className="text-indigo-600 hover:text-indigo-800 font-bold ml-2 shrink-0 cursor-pointer"
-                  >
-                    {copiedId === 'cli-scan' ? 'Copied!' : 'Copy CLI'}
-                  </button>
-                </div>
-              </div>
-            )}
 
-            {ingestMode === 'upload' || !isLocalEnvironment ? (
-              <div className="space-y-3">
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  accept=".jsonl,.json,.txt"
-                  multiple
-                  className="hidden"
-                  onChange={(e) => {
-                    const files = Array.from(e.target.files || []);
+            <div className="space-y-3">
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept=".jsonl,.json,.txt"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  const files = Array.from(e.target.files || []);
+                  if (files.length > 0) setSelectedFiles((prev) => [...prev, ...files]);
+                }}
+              />
+
+              {selectedFiles.length === 0 ? (
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDragging(true);
+                  }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDragging(false);
+                    const files = Array.from(e.dataTransfer.files || []);
                     if (files.length > 0) setSelectedFiles((prev) => [...prev, ...files]);
                   }}
-                />
-
-                {selectedFiles.length === 0 ? (
-                  <div
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      setIsDragging(true);
-                    }}
-                    onDragLeave={() => setIsDragging(false)}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      setIsDragging(false);
-                      const files = Array.from(e.dataTransfer.files || []);
-                      if (files.length > 0) setSelectedFiles((prev) => [...prev, ...files]);
-                    }}
-                    onClick={() => fileInputRef.current?.click()}
-                    className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all ${
-                      isDragging
-                        ? 'border-indigo-500 bg-indigo-50/50'
-                        : 'border-slate-200 hover:border-indigo-400 hover:bg-slate-50/60 bg-slate-50/30'
-                    }`}
-                  >
-                    <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto mb-2.5">
-                      <Upload className="w-5 h-5 text-indigo-600" />
-                    </div>
-                    <div className="text-xs font-semibold text-slate-800">
-                      Click to browse or drag and drop log file(s)
-                    </div>
-                    <div className="text-[11px] text-slate-500 mt-1">
-                      Supports multi-file upload for Claude Code (<span className="font-mono text-indigo-600">.jsonl</span>), Antigravity (<span className="font-mono text-indigo-600">transcript.jsonl</span>), or Cursor (<span className="font-mono text-indigo-600">.json/.jsonl</span>)
-                    </div>
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all ${
+                    isDragging
+                      ? 'border-indigo-500 bg-indigo-50/50'
+                      : 'border-slate-200 hover:border-indigo-400 hover:bg-slate-50/60 bg-slate-50/30'
+                  }`}
+                >
+                  <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto mb-2.5">
+                    <Upload className="w-5 h-5 text-indigo-600" />
                   </div>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-3 shadow-2xs">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
-                          <FileText className="w-4 h-4" />
+                  <div className="text-xs font-semibold text-slate-800">
+                    Click to browse or drag and drop log file(s)
+                  </div>
+                  <div className="text-[11px] text-slate-500 mt-1">
+                    Supports multi-file upload for Claude Code (<span className="font-mono text-indigo-600">.jsonl</span>), Antigravity (<span className="font-mono text-indigo-600">transcript.jsonl</span>), or Cursor (<span className="font-mono text-indigo-600">.json/.jsonl</span>)
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-3 shadow-2xs">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+                        <FileText className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold text-slate-900 truncate font-mono">
+                          {selectedFiles.length === 1
+                            ? selectedFiles[0].name
+                            : `${selectedFiles.length} log files selected`}
                         </div>
-                        <div className="min-w-0">
-                          <div className="text-xs font-bold text-slate-900 truncate font-mono">
-                            {selectedFiles.length === 1
-                              ? selectedFiles[0].name
-                              : `${selectedFiles.length} log files selected`}
-                          </div>
-                          <div className="text-[10px] text-slate-500 font-mono">
-                            {(selectedFiles.reduce((acc, f) => acc + f.size, 0) / 1024).toFixed(1)} KB total · Ready to ingest
-                          </div>
+                        <div className="text-[10px] text-slate-500 font-mono">
+                          {(selectedFiles.reduce((acc, f) => acc + f.size, 0) / 1024).toFixed(1)} KB total · Ready to ingest
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedFiles([])}
-                        className="text-xs text-slate-400 hover:text-slate-600 font-medium px-2 py-1 rounded hover:bg-slate-200/50 cursor-pointer"
-                      >
-                        Clear
-                      </button>
                     </div>
-                    {selectedFiles.length > 1 && (
-                      <div className="max-h-24 overflow-y-auto space-y-1 pr-1 divide-y divide-slate-100 text-[11px] font-mono text-slate-600 border border-slate-100 rounded-lg p-2 bg-slate-50/40">
-                        {selectedFiles.map((f, i) => (
-                          <div key={i} className="flex items-center justify-between py-0.5">
-                            <span className="truncate max-w-[280px]">{f.name}</span>
-                            <span className="text-[10px] text-slate-400">{(f.size / 1024).toFixed(1)} KB</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedFiles([])}
+                      className="text-xs text-slate-400 hover:text-slate-600 font-medium px-2 py-1 rounded hover:bg-slate-200/50 cursor-pointer"
+                    >
+                      Clear
+                    </button>
                   </div>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <label className="text-[11px] font-mono font-bold text-slate-700">Server Local File Path</label>
-                <input
-                  type="text"
-                  placeholder="/Users/.../.claude/sessions/session.jsonl"
-                  value={ingestFilePath}
-                  onChange={(e) => setIngestFilePath(e.target.value)}
-                  className="w-full h-9 px-3 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono shadow-2xs"
-                />
-                <p className="text-[10px] text-slate-500">
-                  Direct host filesystem path. Useful when the OpenEval server runs locally on your workstation.
-                </p>
-              </div>
-            )}
+                  {selectedFiles.length > 1 && (
+                    <div className="max-h-24 overflow-y-auto space-y-1 pr-1 divide-y divide-slate-100 text-[11px] font-mono text-slate-600 border border-slate-100 rounded-lg p-2 bg-slate-50/40">
+                      {selectedFiles.map((f, i) => (
+                        <div key={i} className="flex items-center justify-between py-0.5">
+                          <span className="truncate max-w-[280px]">{f.name}</span>
+                          <span className="text-[10px] text-slate-400">{(f.size / 1024).toFixed(1)} KB</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
             {ingestStatus && (
               <div
@@ -1616,19 +1470,13 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
               <button
                 type="button"
                 onClick={handleIngest}
-                disabled={
-                  isIngesting ||
-                  isScanningLocal ||
-                  (ingestMode === 'upload' || !isLocalEnvironment ? selectedFiles.length === 0 : !ingestFilePath.trim())
-                }
+                disabled={isIngesting || selectedFiles.length === 0}
                 className="h-9 px-4 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-slate-900 hover:bg-black text-white shadow-xs disabled:opacity-50"
               >
                 {isIngesting
                   ? 'Ingesting...'
-                  : ingestMode === 'upload' || !isLocalEnvironment
-                  ? selectedFiles.length > 1
-                    ? `Ingest ${selectedFiles.length} Logs`
-                    : 'Ingest Log'
+                  : selectedFiles.length > 1
+                  ? `Ingest ${selectedFiles.length} Logs`
                   : 'Ingest Log'}
               </button>
             </div>

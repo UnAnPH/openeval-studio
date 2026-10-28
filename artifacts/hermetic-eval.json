@@ -12,14 +12,14 @@
     "no Docker (local pytest with /app remapped)",
     "not model Pass@k"
   ],
-  "timestamp": "2026-10-28T18:42:22.975965+00:00",
+  "timestamp": "2026-10-28T19:57:37.351168+00:00",
   "cases": [
     {
       "case": "nop",
       "oracle": false,
       "exit_code": 1,
       "passed": false,
-      "stdout_tail": "gqsaoao/app/regex.txt').exists\n/var/folders/vz/zty1zbmn1flfh0207x85n5040000gn/T/openeval-nop-agqsaoao/tests/test_outputs.py:22: AssertionError: Regex file /var/folders/vz/zty1zbmn1flfh0207x85n5040000gn/T/openeval-nop-agqsaoao/app/regex.txt does not exist\n=========================== short test summary info ============================\nFAILED ../../../../../../../var/folders/vz/zty1zbmn1flfh0207x85n5040000gn/T/openeval-nop-agqsaoao/tests/test_outputs.py::test_regex_matches_dates\n1 failed in 0.00s\n",
+      "stdout_tail": "nxplv76/app/regex.txt').exists\n/var/folders/vz/zty1zbmn1flfh0207x85n5040000gn/T/openeval-nop-3nxplv76/tests/test_outputs.py:22: AssertionError: Regex file /var/folders/vz/zty1zbmn1flfh0207x85n5040000gn/T/openeval-nop-3nxplv76/app/regex.txt does not exist\n=========================== short test summary info ============================\nFAILED ../../../../../../../var/folders/vz/zty1zbmn1flfh0207x85n5040000gn/T/openeval-nop-3nxplv76/tests/test_outputs.py::test_regex_matches_dates\n1 failed in 0.00s\n",
       "stderr_tail": ""
     },
     {
@@ -27,7 +27,7 @@
       "oracle": true,
       "exit_code": 0,
       "passed": true,
-      "stdout_tail": ".                                                                        [100%]\n1 passed in 0.00s\n",
+      "stdout_tail": ".                                                                        [100%]\n1 passed in 0.01s\n",
       "stderr_tail": ""
     }
   ],
