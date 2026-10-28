@@ -9,6 +9,7 @@ import {
   AlertTriangle,
   Code2,
   Download,
+  UploadCloud,
 } from 'lucide-react';
 
 interface HookSetupViewProps {
@@ -52,6 +53,9 @@ export const HookSetupView: React.FC<HookSetupViewProps> = ({
 
   const displayKey =
     localApiKey || apiKey || (_isDemo ? 'oe_live_demo_readonly_token' : '<rotate to issue a one-time key>');
+  const serverOrigin = typeof window !== 'undefined'
+    ? window.location.origin
+    : 'https://openeval.studio';
   const watcherUrl = typeof window !== 'undefined'
     ? `${window.location.origin}/api/v1/watcher/evaluate`
     : 'https://openeval.studio/api/v1/watcher/evaluate';
@@ -267,6 +271,67 @@ export const HookSetupView: React.FC<HookSetupViewProps> = ({
   -H "Authorization: Bearer ${displayKey}" \\
   -H "Content-Type: application/json" \\
   -d '{"tool_name": "bash", "tool_input": "echo hello"}'`}
+          </div>
+        </div>
+
+        {/* Historical Session Import Guide */}
+        <div className="p-5 rounded-xl bg-gradient-to-br from-indigo-50/50 via-white to-slate-50 border border-indigo-100 shadow-2xs space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <div className="font-semibold text-slate-900 text-sm flex items-center gap-2">
+                <UploadCloud className="w-4 h-4 text-indigo-600" />
+                <span>Importing Pre-Hook Historical Sessions</span>
+              </div>
+              <p className="text-xs text-slate-500">
+                Hooks intercept future agent actions in real time. To audit sessions created before installing the hook:
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+            {/* Method A: CLI */}
+            <div className="p-3.5 rounded-xl bg-white border border-slate-200/80 shadow-2xs space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <Terminal className="w-3.5 h-3.5 text-indigo-600" />
+                  Method 1: One-Line CLI Scanner
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    copyToClipboard(
+                      `curl -fsSL "${serverOrigin}/api/scripts/ingest_local_agent_logs.py" | python3 - --server "${serverOrigin}" --api-key "${displayKey}"`
+                    )
+                  }
+                  className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-700 cursor-pointer flex items-center gap-1"
+                >
+                  <Copy className="w-3 h-3" />
+                  <span>Copy</span>
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                Automatically scans your local directories for Cursor, Claude Code, and Antigravity logs and uploads them to your remote account over HTTPS:
+              </p>
+              <div className="rounded-lg bg-slate-900 p-2.5 font-mono text-[11px] text-emerald-400 overflow-x-auto whitespace-pre-wrap">
+                {`curl -fsSL "${serverOrigin}/api/scripts/ingest_local_agent_logs.py" | python3 - --server "${serverOrigin}" --api-key "${displayKey}"`}
+              </div>
+            </div>
+
+            {/* Method B: Web UI Drag & Drop */}
+            <div className="p-3.5 rounded-xl bg-white border border-slate-200/80 shadow-2xs space-y-2">
+              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <UploadCloud className="w-3.5 h-3.5 text-indigo-600" />
+                Method 2: Web UI Multi-File Dropzone
+              </span>
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                Go to the <strong>Sessions</strong> tab &rarr; click <strong>Ingest Agent Log</strong> &rarr; drag and drop your raw transcript files:
+              </p>
+              <ul className="text-[11px] font-mono text-slate-600 space-y-1 bg-slate-50 p-2 rounded-lg border border-slate-200">
+                <li>• Cursor: <span className="text-slate-800">~/.cursor/projects/*/</span></li>
+                <li>• Claude: <span className="text-slate-800">~/.claude/projects/*/</span></li>
+                <li>• Antigravity: <span className="text-slate-800">~/.gemini/antigravity/brain/*/</span></li>
+              </ul>
+            </div>
           </div>
         </div>
       </div>
