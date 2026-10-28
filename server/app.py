@@ -2214,7 +2214,6 @@ async def download_agent_script(filename: str) -> Response:
         "install_cursor_watcher_hook.sh",
         "cursor_watcher_gate.py",
         "claude_code_watcher_hook.py",
-        "ingest_local_agent_logs.py",
     }
     if filename not in allowed_scripts:
         raise HTTPException(status_code=404, detail="Script not found")
