@@ -278,6 +278,18 @@ resource "aws_instance" "openeval" {
   }
 }
 
+resource "aws_eip" "openeval" {
+  instance = aws_instance.openeval.id
+  domain   = "vpc"
+
+  tags = {
+    Name        = "${var.prefix}-eip"
+    Project     = "OpenEval-Studio"
+    Environment = "Production"
+    ManagedBy   = "Terraform"
+  }
+}
+
 # -------------------------------------------------------------------
 # 4. FINOPS: Budget Guardrail ($15.00 Threshold Alert)
 # -------------------------------------------------------------------

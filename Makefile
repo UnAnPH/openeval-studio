@@ -82,6 +82,10 @@ cloud-off: cloud-down
 cloud-down:
 	python3 scripts/cloud_switch.py off
 
+.PHONY: cloud-destroy
+cloud-destroy:
+	python3 scripts/cloud_switch.py destroy
+
 .PHONY: cloud-status
 cloud-status:
 	python3 scripts/cloud_switch.py status
