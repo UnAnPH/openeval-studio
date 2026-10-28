@@ -20,11 +20,11 @@ write_files:
     owner: root:root
     permissions: "0644"
     content: |
-      :80 {
+      openeval.studio, www.openeval.studio {
           reverse_proxy app:8000
       }
 
-      openeval.studio {
+      http://16.61.167.2 {
           reverse_proxy app:8000
       }
 
