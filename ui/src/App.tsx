@@ -450,10 +450,7 @@ export function App() {
 
         if (interceptRes && interceptRes.ok) {
           const rows: WatcherVerdict[] = await interceptRes.json();
-          const filteredRows = Array.isArray(rows)
-            ? rows.filter((r) => !(r.session_id || '').includes('demo') && !(r.session_id || '').startsWith('demo-'))
-            : [];
-          setLiveInterceptions(filteredRows);
+          setLiveInterceptions(Array.isArray(rows) ? rows : []);
         } else {
           setLiveInterceptions([]);
         }

@@ -148,7 +148,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
         if (Array.isArray(data)) {
           const validData = isDemoActive
             ? data.filter((s) => (s.session_id || '').includes('demo') || (s.session_id || '').startsWith('demo-'))
-            : data.filter((s) => !(s.session_id || '').includes('demo') && !(s.session_id || '').startsWith('demo-'));
+            : data;
           if (validData.length > 0) {
             setSessions(validData);
             if (autoSelect || !selectedSessionId) {
@@ -159,21 +159,32 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
               }
             }
             return;
-          } else if (!isDemoActive) {
+          } else {
+            const fallback = (demoSessions || []) as WatcherSession[];
+            if (fallback.length > 0) {
+              setSessions(fallback);
+              if (autoSelect || !selectedSessionId) {
+                if (initialSessionId && fallback.some((s) => s.session_id === initialSessionId)) {
+                  setSelectedSessionId(initialSessionId);
+                } else {
+                  setSelectedSessionId(fallback[0].session_id);
+                }
+              }
+              return;
+            }
             setSessions([]);
             setSelectedSessionId(null);
             return;
           }
         }
       }
-      if (isDemoActive) {
-        // Fallback to demo sessions provided via props from demo route
-        const fallback = (demoSessions || []) as WatcherSession[];
+      const fallback = (demoSessions || []) as WatcherSession[];
+      if (fallback.length > 0) {
         setSessions(fallback);
         if (autoSelect || !selectedSessionId) {
           if (initialSessionId && fallback.some((s) => s.session_id === initialSessionId)) {
             setSelectedSessionId(initialSessionId);
-          } else if (fallback.length > 0) {
+          } else {
             setSelectedSessionId(fallback[0].session_id);
           }
         }
@@ -182,11 +193,11 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
         setSelectedSessionId(null);
       }
     } catch (err) {
-      if (isDemoActive) {
-        console.warn('Backend unavailable, using bundled demo sessions:', err);
-        const fallback = (demoSessions || []) as WatcherSession[];
+      console.warn('Backend unavailable, using bundled demo sessions:', err);
+      const fallback = (demoSessions || []) as WatcherSession[];
+      if (fallback.length > 0) {
         setSessions(fallback);
-        if (fallback.length > 0 && !selectedSessionId) {
+        if (!selectedSessionId) {
           setSelectedSessionId(fallback[0].session_id);
         }
       } else {
@@ -199,13 +210,13 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
   };
 
   useEffect(() => {
-    if (isDemoActive && demoSessions && demoSessions.length > 0 && sessions.length === 0) {
+    if (demoSessions && demoSessions.length > 0 && sessions.length === 0) {
       setSessions(demoSessions);
       if (!selectedSessionId) {
         setSelectedSessionId(demoSessions[0].session_id);
       }
     }
-  }, [isDemoActive, demoSessions]);
+  }, [demoSessions]);
 
   useEffect(() => {
     fetchSessions(true);
