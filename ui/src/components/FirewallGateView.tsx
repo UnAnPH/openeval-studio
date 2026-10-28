@@ -335,7 +335,7 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
           </div>
 
           <div className="flex items-center gap-2.5 shrink-0">
-            {/* {totalBlockedCount > 0 && (
+            {totalBlockedCount > 0 && (
               <button
                 type="button"
                 onClick={handleResolveAll}
@@ -345,7 +345,7 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
               >
                 <span>{isResolving ? 'Resolving...' : 'Resolve All'}</span>
               </button>
-            )} */}
+            )}
             {onNavigateToSessions && (
               <button
                 type="button"

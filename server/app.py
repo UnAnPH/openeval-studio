@@ -1841,11 +1841,12 @@ class IngestAgentLogPayload(BaseModel):
 @app.post("/api/v1/agent-logs/ingest")
 async def ingest_agent_log(payload: IngestAgentLogPayload) -> dict[str, Any]:
     """Ingest Claude Code, Cursor, or Antigravity session logs into canonical Watcher sessions.
-    
+
     Supports both client-side file uploads (via `file_content` + `filename`) and local server files (via `file_path`).
     """
     import shutil
     import tempfile
+
     from server.agent_log_loader import UniversalAgentLogLoader
 
     temp_dir = None

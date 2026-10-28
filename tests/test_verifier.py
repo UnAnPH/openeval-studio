@@ -35,6 +35,7 @@ def mock_sandbox():
     sandbox._is_started = True
     sandbox.exec_command = AsyncMock()  # type: ignore[method-assign]
     sandbox.write_file = AsyncMock()  # type: ignore[method-assign]
+    sandbox.copy_directory = AsyncMock()  # type: ignore[method-assign]
     return sandbox
 
 
@@ -56,7 +57,7 @@ async def test_grade_container_passing(sample_task, mock_sandbox) -> None:
     assert score.exit_code == 0
     assert "1 passed" in score.test_output
     assert score.failure_reason is None
-    mock_sandbox.write_file.assert_called_once()  # Anti-cheat fresh staging
+    assert mock_sandbox.copy_directory.called or mock_sandbox.write_file.called
 
 
 @pytest.mark.asyncio
@@ -82,18 +83,20 @@ async def test_grade_container_failing(sample_task, mock_sandbox) -> None:
 @pytest.mark.asyncio
 async def test_full_benchmark_audit_valid_task(sample_task, mock_sandbox) -> None:
     """Verify that a valid task (Nop fails, Oracle passes) produces a valid audit report."""
-    call_count = 0
+    is_oracle_solved = False
 
     async def mock_exec(cmd: str, *args: Any, **kwargs: Any) -> ExecResult:
-        nonlocal call_count
-        call_count += 1
-        # Nop test run -> fail
-        if call_count == 1:
-            return ExecResult(exit_code=1, stdout="Failing initially", duration_ms=10.0)
-        # Oracle solve.sh execution
+        nonlocal is_oracle_solved
+        if "chmod" in cmd:
+            return ExecResult(exit_code=0, stdout="", duration_ms=1.0)
+        if "reward.txt" in cmd:
+            return ExecResult(exit_code=1, stdout="", duration_ms=1.0)
         if "/workspace/solution/solve.sh" in cmd:
+            is_oracle_solved = True
             return ExecResult(exit_code=0, stdout="Solved", duration_ms=5.0)
-        # Oracle test run -> pass
+        # Nop test run -> fail before oracle solve, pass after oracle solve
+        if not is_oracle_solved:
+            return ExecResult(exit_code=1, stdout="Failing initially", duration_ms=10.0)
         return ExecResult(exit_code=0, stdout="1 passed", duration_ms=10.0)
 
     mock_sandbox.exec_command.side_effect = mock_exec

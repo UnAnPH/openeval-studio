@@ -374,9 +374,9 @@ export function App() {
           const demoSess = Array.isArray(sessData)
             ? sessData.filter(
                 (s: any) =>
-                  (s.session_id || '').includes('demo') ||
-                  (s.session_id || '').startsWith('demo-') ||
-                  (s.session_id || '').startsWith('redteam-')
+                  s.agent_type !== 'red_team' &&
+                  ((s.session_id || '').includes('demo') ||
+                  (s.session_id || '').startsWith('demo-'))
               )
             : [];
           setDiscoveredSessions(demoSess.length > 0 ? demoSess : currentDemoSessions);

@@ -147,7 +147,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
         const data: WatcherSession[] = await res.json();
         if (Array.isArray(data)) {
           const validData = isDemoActive
-            ? data.filter((s) => (s.session_id || '').includes('demo') || (s.session_id || '').startsWith('demo-') || (s.session_id || '').startsWith('redteam-'))
+            ? data.filter((s) => (s.session_id || '').includes('demo') || (s.session_id || '').startsWith('demo-'))
             : data.filter((s) => !(s.session_id || '').includes('demo') && !(s.session_id || '').startsWith('demo-'));
           if (validData.length > 0) {
             setSessions(validData);
@@ -232,8 +232,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
       return sessions.filter(
         (s) =>
           (s.session_id || '').includes('demo') ||
-          (s.session_id || '').startsWith('demo-') ||
-          (s.session_id || '').startsWith('redteam-')
+          (s.session_id || '').startsWith('demo-')
       );
     }
     return sessions;
