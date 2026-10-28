@@ -200,7 +200,8 @@ async def test_live_runner_live_integration() -> None:
                 role="system", content="You are a terminal evaluation agent. Execute bash commands."
             ),
             ChatMessage(
-                role="user", content="Inspect the current directory with execute_bash(command='ls')."
+                role="user",
+                content="Inspect the current directory with execute_bash(command='ls').",
             ),
         ]
         res_action = await runner.generate(
@@ -229,9 +230,7 @@ async def test_react_agent_live_loop() -> None:
 
         async def mock_executor(action: AgentAction) -> str:
             if action.tool == "execute_bash":
-                return (
-                    "total 0\n-rw-r--r-- 1 root root 0 main.py\n-rw-r--r-- 1 root root 0 test_main.py"
-                )
+                return "total 0\n-rw-r--r-- 1 root root 0 main.py\n-rw-r--r-- 1 root root 0 test_main.py"
             return "Task finished."
 
         agent = ReActAgent(runner=runner, executor=mock_executor)
