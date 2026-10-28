@@ -18,9 +18,12 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -125,14 +128,119 @@ def discover_claude_transcripts() -> list[Path]:
     return sorted(unique, key=lambda p: p.stat().st_mtime, reverse=True)
 
 
+def ingest_via_remote_api(
+    server_url: str,
+    api_key: str | None,
+    agent: str,
+    limit: int,
+    dry_run: bool = False,
+    verbose: bool = False,
+) -> None:
+    """Upload discovered transcripts to remote OpenEval Studio via HTTP API."""
+    base_url = server_url.rstrip("/")
+    for suffix in ("/api/v1/watcher/evaluate", "/api/v1/watcher", "/api/v1"):
+        if base_url.endswith(suffix):
+            base_url = base_url[:-len(suffix)]
+            break
+
+    ingest_endpoint = f"{base_url}/api/v1/agent-logs/ingest"
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["X-OpenEval-Key"] = api_key
+
+    print("=" * 64)
+    print(" 🚀  OpenEval Studio — Remote Agent Log Ingest Utility")
+    print("=" * 64)
+    print(f" Target Studio:   {base_url}")
+    print(f" Ingest Endpoint: {ingest_endpoint}")
+    print(f" Auth Mode:       {'X-OpenEval-Key configured' if api_key else 'Session / Public'}")
+    print(f" Mode:            {'DRY-RUN (No writes)' if dry_run else 'REMOTE HTTP UPLOAD'}")
+    print("=" * 64)
+
+    # Check connectivity
+    try:
+        health_req = urllib.request.Request(f"{base_url}/api/health", headers=headers)
+        with urllib.request.urlopen(health_req, timeout=8) as resp:
+            pass
+    except Exception as e:
+        print(f"⚠️ Warning: Connection test to {base_url}/api/health returned: {e}")
+
+    total_ingested = 0
+    total_failed = 0
+
+    files_to_ingest: list[tuple[str, Path]] = []
+    if agent in ("all", "antigravity"):
+        ag_files = discover_antigravity_transcripts()
+        count = len(ag_files) if limit <= 0 else min(len(ag_files), limit)
+        for p in ag_files[:count]:
+            files_to_ingest.append(("antigravity", p))
+    if agent in ("all", "cursor"):
+        cur_files = discover_cursor_transcripts()
+        count = len(cur_files) if limit <= 0 else min(len(cur_files), limit)
+        for p in cur_files[:count]:
+            files_to_ingest.append(("cursor", p))
+    if agent in ("all", "claude_code"):
+        claude_files = discover_claude_transcripts()
+        count = len(claude_files) if limit <= 0 else min(len(claude_files), limit)
+        for p in claude_files[:count]:
+            files_to_ingest.append(("claude_code", p))
+
+    print(f"\nDiscovered {len(files_to_ingest)} local transcript(s) to upload.\n")
+
+    for idx, (agent_type, p) in enumerate(files_to_ingest, 1):
+        if dry_run:
+            print(f"  [{idx}/{len(files_to_ingest)}] [DRY-RUN] [{agent_type}] {p.name}")
+            continue
+
+        try:
+            content = p.read_text(encoding="utf-8", errors="replace")
+            payload = json.dumps({
+                "filename": p.name,
+                "file_content": content,
+                "agent_type": agent_type,
+            }).encode("utf-8")
+
+            req = urllib.request.Request(ingest_endpoint, data=payload, headers=headers, method="POST")
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read().decode())
+                sess = data.get("session", {})
+                sid = sess.get("session_id", p.name[:16])
+                title = sess.get("title") or sid
+                total_ingested += 1
+                if verbose or idx <= 5 or idx == len(files_to_ingest) or idx % 10 == 0:
+                    print(f"  [{idx}/{len(files_to_ingest)}] ✅ Ingested [{agent_type}] {sid} | {title[:45]}")
+        except Exception as e:
+            total_failed += 1
+            print(f"  [{idx}/{len(files_to_ingest)}] ❌ Failed [{agent_type}] {p.name}: {e}")
+
+    print("\n" + "=" * 64)
+    print(" 🎉  Remote Ingestion Complete!")
+    print("=" * 64)
+    print(f" Total Sessions Uploaded: {total_ingested}")
+    print(f" Total Upload Errors:     {total_failed}")
+    print(f" Target Studio:           {base_url}")
+    print("=" * 64)
+    print(f" Open {base_url}/#sessions to inspect your uploaded sessions!\n")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Ingest local Antigravity, Cursor, and Claude Code sessions into OpenEval Studio PostgreSQL."
+        description="Ingest local Antigravity, Cursor, and Claude Code sessions into OpenEval Studio."
+    )
+    parser.add_argument(
+        "--server",
+        "-s",
+        help="Remote OpenEval Studio URL (e.g. 'https://studio.example.com'). If set, uploads via HTTP API instead of direct DB. Can also use OPENEVAL_SERVER_URL or OPENEVAL_WATCHER_URL.",
+    )
+    parser.add_argument(
+        "--api-key",
+        "-k",
+        help="OpenEval API Key for remote authentication. Can also use OPENEVAL_API_KEY.",
     )
     parser.add_argument(
         "--user",
         "-u",
-        help="Target OpenEval Studio username (e.g. 'jayson'). Defaults to latest registered user.",
+        help="Target OpenEval Studio username (e.g. 'jayson'). Used for local DB connection mode.",
     )
     parser.add_argument(
         "--agent",
@@ -151,7 +259,7 @@ def main() -> None:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Scan and report transcripts without writing to the database.",
+        help="Scan and report transcripts without writing to the database or remote server.",
     )
     parser.add_argument(
         "--verbose",
@@ -162,7 +270,22 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    # 1. Resolve Target User
+    # If remote server specified or in env, use HTTP API ingest mode
+    server_url = args.server or os.getenv("OPENEVAL_SERVER_URL") or os.getenv("OPENEVAL_WATCHER_URL")
+    api_key = args.api_key or os.getenv("OPENEVAL_API_KEY")
+
+    if server_url and not server_url.startswith("postgres"):
+        ingest_via_remote_api(
+            server_url=server_url,
+            api_key=api_key,
+            agent=args.agent,
+            limit=args.limit,
+            dry_run=args.dry_run,
+            verbose=args.verbose,
+        )
+        return
+
+    # 1. Resolve Target User (Local DB Mode)
     user_id, username = resolve_target_user(args.user)
     print("=" * 64)
     print(" 🚀  OpenEval Studio — Local Agent Log Ingest Utility")
