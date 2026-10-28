@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { FindingRecord, RunRecord, TaskSummary } from '../types';
 
-interface DashboardOverviewProps {
+export interface DashboardOverviewProps {
   runs?: RunRecord[];
   tasks?: TaskSummary[];
   findings?: FindingRecord[];
@@ -17,7 +17,8 @@ interface DashboardOverviewProps {
   onNavigateToRuns?: () => void;
   onNavigateToFirewall?: () => void;
   isDemoSeed?: boolean;
-  demoSessions?: any[];
+  isDemo?: boolean;
+  demoSessions?: RawSession[] | any[];
 }
 
 interface RawSession {
@@ -45,15 +46,19 @@ interface RawSession {
   total_steps?: number;
 }
 
+
 export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   runs,
   findings: propFindings,
   onSelectIncident,
   isDemoSeed,
+  isDemo: propIsDemo,
   demoSessions = [],
 }) => {
   const [dateFilter, setDateFilter] = useState<'today' | 'this_week' | 'last_week' | 'this_month' | 'last_month'>('this_month');
-  const isDemo = Boolean(isDemoSeed || (typeof window !== 'undefined' && (window.location.pathname.startsWith('/demo') || window.location.hash.startsWith('#/demo'))));
+  const isDemo = Boolean(
+    propIsDemo ?? (isDemoSeed || (typeof window !== 'undefined' && (window.location.pathname.startsWith('/demo') || window.location.hash.startsWith('#/demo'))))
+  );
   const [watcherSessions, setWatcherSessions] = useState<RawSession[]>(() =>
     isDemo && demoSessions.length > 0 ? (demoSessions as RawSession[]) : []
   );
@@ -61,6 +66,8 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   useEffect(() => {
     if (isDemo && demoSessions && demoSessions.length > 0 && watcherSessions.length === 0) {
       setWatcherSessions(demoSessions as RawSession[]);
+    } else if (!isDemo && watcherSessions.some((s) => (s.session_id || s.id || '').includes('demo') || (s as any).org_id === 'demo')) {
+      setWatcherSessions((prev) => prev.filter((s) => !(s.session_id || s.id || '').includes('demo') && (s as any).org_id !== 'demo'));
     }
   }, [isDemo, demoSessions]);
 
@@ -73,16 +80,23 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           const data: RawSession[] = await res.json();
           if (isDemo && data.length === 0) {
             setWatcherSessions(demoSessions as RawSession[]);
-          } else {
+          } else if (isDemo) {
             setWatcherSessions(data);
+          } else {
+            // When NOT in demo mode, discard any demo sessions
+            const clean = data.filter((s) => !(s.session_id || s.id || '').includes('demo') && (s as any).org_id !== 'demo');
+            setWatcherSessions(clean);
           }
         } else if (isDemo) {
           setWatcherSessions(demoSessions as RawSession[]);
+        } else {
+          setWatcherSessions([]);
         }
       } catch (err) {
         if (isDemo) {
           setWatcherSessions(demoSessions as RawSession[]);
         } else {
+          setWatcherSessions([]);
           console.warn('Failed to fetch watcher sessions:', err);
         }
       }
@@ -109,6 +123,9 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     // 1. Monitored sessions from WatcherStore (normalize API fields for Overview)
     for (const ws of watcherSessions) {
       const id = ws.session_id || ws.id;
+      if (!isDemo && ((id || '').includes('demo') || (ws as any).org_id === 'demo')) {
+        continue;
+      }
       const observedAt = sessionObservedAt(ws);
       sessionMap.set(id, {
         ...ws,
@@ -128,6 +145,9 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     // 2. Monitored evaluation runs
     for (const r of runs || []) {
       const id = (r as any).session_id || r.run_id;
+      if (!isDemo && ((id || '').includes('demo') || (r as any).org_id === 'demo')) {
+        continue;
+      }
       if (!sessionMap.has(id)) {
         sessionMap.set(id, {
           id,
@@ -148,6 +168,9 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     // 3. Security findings
     for (const f of propFindings || []) {
       const id = f.session_id || f.id;
+      if (!isDemo && ((id || '').includes('demo') || (f as any).org_id === 'demo')) {
+        continue;
+      }
       if (sessionMap.has(id)) {
         const existing = sessionMap.get(id)!;
         sessionMap.set(id, {
@@ -175,7 +198,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     }
 
     return Array.from(sessionMap.values());
-  }, [watcherSessions, runs, propFindings]);
+  }, [watcherSessions, runs, propFindings, isDemo]);
 
   // Dynamic Date Ranges relative to today (new Date())
   const rangeConfig = useMemo(() => {
@@ -624,9 +647,13 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               <div className="w-7 h-7 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto">
                 <ShieldCheck className="w-4 h-4" />
               </div>
-              <p className="text-xs font-bold text-gray-800">No Critical Sessions Recorded</p>
+              <p className="text-xs font-bold text-gray-800">
+                {observedCount === 0 ? 'No Monitored Sessions Recorded Yet' : 'No Critical Sessions Recorded'}
+              </p>
               <p className="text-[11px] text-gray-500 max-w-md mx-auto">
-                All {observedCount} monitored sessions in this period executed without policy violations or blocked commands.
+                {observedCount === 0
+                  ? 'Connect your coding agents (Antigravity, Claude Code, Cursor) via the Watcher hook to observe live tool execution, enforce safety policies, and record agent transcripts.'
+                  : `All ${observedCount} monitored sessions in this period executed without policy violations or blocked commands.`}
               </p>
             </div>
 

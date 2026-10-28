@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
   AlertTriangle,
+  ArrowRight,
   Check,
   ChevronDown,
   ChevronUp,
@@ -148,7 +149,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
         if (Array.isArray(data)) {
           const validData = isDemoActive
             ? data.filter((s) => (s.session_id || '').includes('demo') || (s.session_id || '').startsWith('demo-'))
-            : data;
+            : data.filter((s) => !(s.session_id || '').includes('demo') && !(s.session_id || '').startsWith('demo-') && (s as any).org_id !== 'demo');
           if (validData.length > 0) {
             setSessions(validData);
             if (autoSelect || !selectedSessionId) {
@@ -160,17 +161,19 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
             }
             return;
           } else {
-            const fallback = (demoSessions || []) as WatcherSession[];
-            if (fallback.length > 0) {
-              setSessions(fallback);
-              if (autoSelect || !selectedSessionId) {
-                if (initialSessionId && fallback.some((s) => s.session_id === initialSessionId)) {
-                  setSelectedSessionId(initialSessionId);
-                } else {
-                  setSelectedSessionId(fallback[0].session_id);
+            if (isDemoActive) {
+              const fallback = (demoSessions || []) as WatcherSession[];
+              if (fallback.length > 0) {
+                setSessions(fallback);
+                if (autoSelect || !selectedSessionId) {
+                  if (initialSessionId && fallback.some((s) => s.session_id === initialSessionId)) {
+                    setSelectedSessionId(initialSessionId);
+                  } else {
+                    setSelectedSessionId(fallback[0].session_id);
+                  }
                 }
+                return;
               }
-              return;
             }
             setSessions([]);
             setSelectedSessionId(null);
@@ -178,45 +181,49 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
           }
         }
       }
-      const fallback = (demoSessions || []) as WatcherSession[];
-      if (fallback.length > 0) {
-        setSessions(fallback);
-        if (autoSelect || !selectedSessionId) {
-          if (initialSessionId && fallback.some((s) => s.session_id === initialSessionId)) {
-            setSelectedSessionId(initialSessionId);
-          } else {
+      if (isDemoActive) {
+        const fallback = (demoSessions || []) as WatcherSession[];
+        if (fallback.length > 0) {
+          setSessions(fallback);
+          if (autoSelect || !selectedSessionId) {
+            if (initialSessionId && fallback.some((s) => s.session_id === initialSessionId)) {
+              setSelectedSessionId(initialSessionId);
+            } else {
+              setSelectedSessionId(fallback[0].session_id);
+            }
+          }
+          return;
+        }
+      }
+      setSessions([]);
+      setSelectedSessionId(null);
+    } catch (err) {
+      if (isDemoActive) {
+        console.warn('Backend unavailable, using bundled demo sessions:', err);
+        const fallback = (demoSessions || []) as WatcherSession[];
+        if (fallback.length > 0) {
+          setSessions(fallback);
+          if (!selectedSessionId) {
             setSelectedSessionId(fallback[0].session_id);
           }
+          return;
         }
-      } else {
-        setSessions([]);
-        setSelectedSessionId(null);
       }
-    } catch (err) {
-      console.warn('Backend unavailable, using bundled demo sessions:', err);
-      const fallback = (demoSessions || []) as WatcherSession[];
-      if (fallback.length > 0) {
-        setSessions(fallback);
-        if (!selectedSessionId) {
-          setSelectedSessionId(fallback[0].session_id);
-        }
-      } else {
-        setSessions([]);
-        setSelectedSessionId(null);
-      }
+      setSessions([]);
+      setSelectedSessionId(null);
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    if (demoSessions && demoSessions.length > 0 && sessions.length === 0) {
+    if (isDemoActive && demoSessions && demoSessions.length > 0 && sessions.length === 0) {
       setSessions(demoSessions);
       if (!selectedSessionId) {
         setSelectedSessionId(demoSessions[0].session_id);
       }
     }
-  }, [demoSessions]);
+  }, [isDemoActive, demoSessions]);
 
   useEffect(() => {
     fetchSessions(true);
@@ -224,7 +231,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
       fetchSessions(false);
     }, 4000);
     return () => clearInterval(interval);
-  }, [initialSessionId]);
+  }, [initialSessionId, isDemoActive]);
 
   // Sync selectedSessionId with URL hash
   const handleSelectSession = (id: string) => {
@@ -891,13 +898,71 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
         {/* RIGHT PART: SESSION DETAILS, AUTOMATED ANALYSIS & TRANSCRIPT */}
         <div className="flex-1 flex flex-col overflow-y-auto space-y-5 pr-1 min-w-0">
           {!selectedSession ? (
-            <div className="flex flex-col items-center justify-center h-full text-center p-8 bg-white rounded-2xl border border-border-subtle shadow-sm">
-              <Folder className="w-10 h-10 text-slate-300 mb-3" />
-              <h3 className="text-sm font-bold text-slate-800">No Session Selected</h3>
-              <p className="text-xs text-slate-500 mt-1 max-w-sm">
-                Select a session from the list on the left to inspect automated analysis, policy gating, and full transcript.
-              </p>
-            </div>
+            sessions.length === 0 && !isDemoActive && !isLoading ? (
+              <div className="flex flex-col items-center justify-center h-full text-center p-10 bg-white rounded-2xl border border-border-subtle shadow-sm space-y-5">
+                <div className="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto shadow-xs border border-indigo-100">
+                  <ShieldCheck className="w-7 h-7" />
+                </div>
+                <div className="space-y-1.5 max-w-md">
+                  <h3 className="text-base font-bold text-slate-900 tracking-tight">No Monitored Sessions Recorded Yet</h3>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    You're logged in to your private workspace. Connect your local or cloud coding agents to start monitoring tool calls and guardrails in real time, or ingest existing agent logs.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                  <button
+                    onClick={() => setShowIngestModal(true)}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors cursor-pointer"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Ingest Agent Log</span>
+                  </button>
+                  <a
+                    href="#hooks"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl border border-slate-200 transition-colors cursor-pointer"
+                  >
+                    <Terminal className="w-3.5 h-3.5" />
+                    <span>Connect Watcher Hook</span>
+                  </a>
+                  <a
+                    href="#/demo"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-slate-800 text-xs font-medium rounded-xl border border-dashed border-slate-200 transition-colors"
+                  >
+                    <span>Explore Demo Surface</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+
+                <div className="pt-4 border-t border-slate-100 w-full max-w-lg text-left">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2 text-center">
+                    Supported Coding Agents
+                  </span>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="p-2.5 rounded-xl bg-slate-50/70 border border-slate-100 text-center space-y-1">
+                      <span className="text-xs font-bold text-slate-800 block">Antigravity</span>
+                      <span className="text-[10px] text-slate-400 block font-mono">Hook / Python</span>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-slate-50/70 border border-slate-100 text-center space-y-1">
+                      <span className="text-xs font-bold text-slate-800 block">Claude Code</span>
+                      <span className="text-[10px] text-slate-400 block font-mono">Pre-tool Hook</span>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-slate-50/70 border border-slate-100 text-center space-y-1">
+                      <span className="text-xs font-bold text-slate-800 block">Cursor</span>
+                      <span className="text-[10px] text-slate-400 block font-mono">Telemetry Hook</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full text-center p-8 bg-white rounded-2xl border border-border-subtle shadow-sm">
+                <Folder className="w-10 h-10 text-slate-300 mb-3" />
+                <h3 className="text-sm font-bold text-slate-800">No Session Selected</h3>
+                <p className="text-xs text-slate-500 mt-1 max-w-sm">
+                  Select a session from the list on the left to inspect automated analysis, policy gating, and full transcript.
+                </p>
+              </div>
+            )
           ) : (
             <>
               {/* CARD 1: TOP CARD - AUTOMATED ANALYSIS & SUMMARY */}

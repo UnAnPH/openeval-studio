@@ -493,6 +493,14 @@ export function App() {
   const handleLoginSuccess = (user: { user_id: number; username: string }) => {
     setCurrentUser(user);
     setShowAuthModal(false);
+    if (isDemoSurface()) {
+      window.location.hash = '#/';
+      setIsDemo(false);
+      setIsDemoSeed(false);
+      setDemoSessions([]);
+      setDemoRuns([]);
+      setDemoInterceptions([]);
+    }
     fetchInitialData();
   };
 
@@ -500,6 +508,14 @@ export function App() {
     setCurrentUser({ user_id: user.user_id, username: user.username });
     setLatestApiKey(user.api_key);
     setShowAuthModal(false);
+    if (isDemoSurface()) {
+      window.location.hash = '#hooks';
+      setIsDemo(false);
+      setIsDemoSeed(false);
+      setDemoSessions([]);
+      setDemoRuns([]);
+      setDemoInterceptions([]);
+    }
     setNavTab('hooks');
     setRoute('hooks');
     fetchInitialData();
@@ -1179,8 +1195,9 @@ export function App() {
                 onNavigateToTestCases={() => setRoute('benchmarks')}
                 onNavigateToRuns={() => setRoute('runs')}
                 onNavigateToFirewall={() => setRoute('control')}
-                isDemoSeed={isDemoSeed}
-                demoSessions={demoSessions}
+                isDemoSeed={isDemo}
+                isDemo={isDemo}
+                demoSessions={isDemo ? demoSessions : []}
               />
             )}
 
@@ -1188,9 +1205,9 @@ export function App() {
             {(navTab === 'sessions' || navTab === 'incident_detail' || navTab === 'transcripts') && (
               <SessionsView
                 initialSessionId={selectedSessionId}
-                isDemoSeed={isDemoSeed}
+                isDemoSeed={isDemo}
                 isDemo={isDemo}
-                demoSessions={demoSessions}
+                demoSessions={isDemo ? demoSessions : []}
                 onBack={() => {
                   if (window.history.length > 1) {
                     window.history.back();

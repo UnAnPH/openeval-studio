@@ -256,8 +256,13 @@ class WatcherStore:
         """
         uid = current_user_id.get()
         owner = self._session_owners.get(key)
+        is_demo_session = getattr(session, "org_id", "") == "demo" or (
+            bool(session.session_id) and "demo" in session.session_id
+        )
         if current_user_slug.get() == "demo":
-            return session.org_id == "demo" or owner == uid
+            return is_demo_session or owner == uid
+        if is_demo_session:
+            return False
         if owner is None:
             return True
         if uid is None:
@@ -478,9 +483,7 @@ class WatcherStore:
             cached = self._cached_session(session_id)
             if cached is not None and not is_dirty:
                 return normalize_session_status(cached)
-            if cached is not None and (
-                current_user_slug.get() == "demo" or getattr(cached, "org_id", "") == "demo"
-            ):
+            if cached is not None and current_user_slug.get() == "demo":
                 return normalize_session_status(cached)
 
         if is_dirty:
@@ -493,16 +496,16 @@ class WatcherStore:
                 {"id": session_id, "uid": user_id},
             ).fetchone()
 
-            if (not row or not row[0]) and session_id.startswith("eval-"):
-                # If not found for active user, check if this is an eval run across tenants
+            if (not row or not row[0]) and session_id.startswith("eval-") and current_user_slug.get() == "demo":
+                # If not found for active user, check if this is an eval run across tenants (demo only)
                 row = db.execute(
                     text("SELECT payload FROM sessions WHERE id = :id AND id LIKE 'eval-%'"),
                     {"id": session_id},
                 ).fetchone()
 
             if not row or not row[0]:
-                # Check disk file fallback for eval runs
-                if session_id.startswith("eval-"):
+                # Check disk file fallback for eval runs (demo surface only)
+                if current_user_slug.get() == "demo" and session_id.startswith("eval-"):
                     disk_file = self.storage_dir / f"{session_id}.json"
                     if disk_file.exists():
                         try:

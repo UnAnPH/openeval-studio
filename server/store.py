@@ -180,11 +180,21 @@ class RunStore:
         seen = {s.session_id for s in db_sessions}
         all_sessions = [self._reconcile_and_persist(s) for s in db_sessions]
 
-        # Fetch any eval runs across all tenants in DB
+        # Fetch eval runs for the active user in DB
+        from server.db import current_user_slug, get_current_user_id
+        is_demo_user = current_user_slug.get() == "demo"
+
         with SessionLocal() as db:
-            eval_rows = db.execute(
-                text("SELECT payload FROM sessions WHERE (agent_type = 'inspect_eval' OR id LIKE 'eval-%') ORDER BY created_at DESC LIMIT 100")
-            ).fetchall()
+            if is_demo_user:
+                eval_rows = db.execute(
+                    text("SELECT payload FROM sessions WHERE (agent_type = 'inspect_eval' OR id LIKE 'eval-%') ORDER BY created_at DESC LIMIT 100")
+                ).fetchall()
+            else:
+                user_id = get_current_user_id(db)
+                eval_rows = db.execute(
+                    text("SELECT payload FROM sessions WHERE user_id = :uid AND (agent_type = 'inspect_eval' OR id LIKE 'eval-%') ORDER BY created_at DESC LIMIT 100"),
+                    {"uid": user_id}
+                ).fetchall()
             for r in eval_rows:
                 if r[0]:
                     try:
@@ -196,14 +206,16 @@ class RunStore:
                     except Exception:
                         pass
 
-        # Include in-memory sessions
+        # Include in-memory sessions (demo runs only visible in demo mode)
         for s in self._runs.values():
+            if not is_demo_user and getattr(s, "org_id", "") == "demo":
+                continue
             if s.session_id not in seen:
                 all_sessions.append(self._reconcile_and_persist(s))
                 seen.add(s.session_id)
 
-        # Include disk .runs/watcher/eval-*.json
-        if self._watcher.storage_dir.exists():
+        # Include disk .runs/watcher/eval-*.json (demo surface only)
+        if is_demo_user and self._watcher.storage_dir.exists():
             for p in self._watcher.storage_dir.glob("eval-*.json"):
                 sid = p.stem
                 if sid not in seen and sid not in self._deleted_ids:
