@@ -83,10 +83,10 @@ export const BenchmarkDescription: React.FC<BenchmarkDescriptionProps> = ({
         <button
           type="button"
           onClick={toggleExpand}
-          className="text-[11px] font-semibold text-brand-purple hover:text-purple-900 mt-1 flex items-center gap-0.5 cursor-pointer"
+          className="text-xs font-semibold text-brand-purple hover:text-purple-900 mt-1 inline-flex items-center gap-0.5 cursor-pointer"
         >
           <span>{isExpanded ? 'Collapse' : 'Read more'}</span>
-          <Icon icon={isExpanded ? ChevronUp : ChevronDown} className="text-[10px]" />
+          <Icon icon={isExpanded ? ChevronUp : ChevronDown} className="text-xs" />
         </button>
       )}
     </div>
@@ -226,14 +226,14 @@ export const BenchmarksList: React.FC<BenchmarksListProps> = ({
       <div className="bg-white p-4 sm:p-5 rounded-2xl border border-border-subtle shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
         {/* Category Pills */}
         <div className="flex-1 min-w-0">
-          <div className="h-9 bg-slate-100 p-1 rounded-xl border border-slate-200/70 inline-flex items-center gap-1 overflow-x-auto max-w-full">
+          <div className="h-9 bg-slate-100 p-1 rounded-xl border border-slate-200/70 inline-flex items-center gap-1 overflow-x-auto overflow-y-hidden max-w-full no-scrollbar">
             <button
               type="button"
               onClick={() => setCategoryFilter('all')}
               className={`h-7 px-3 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer inline-flex items-center justify-center ${
                 categoryFilter === 'all'
-                  ? 'bg-white text-slate-900 shadow-2xs font-semibold'
-                  : 'text-slate-600 hover:text-slate-900 font-medium'
+                  ? 'bg-white text-slate-900 shadow-xs font-bold'
+                  : 'text-slate-500 hover:text-slate-900'
               }`}
             >
               All Categories ({tasks.length})
@@ -248,8 +248,8 @@ export const BenchmarksList: React.FC<BenchmarksListProps> = ({
                   onClick={() => setCategoryFilter(catKey)}
                   className={`h-7 px-3 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer inline-flex items-center justify-center ${
                     isActive
-                      ? 'bg-white text-slate-900 shadow-2xs font-semibold'
-                      : 'text-slate-600 hover:text-slate-900 font-medium'
+                      ? 'bg-white text-slate-900 shadow-xs font-bold'
+                      : 'text-slate-500 hover:text-slate-900'
                   }`}
                 >
                   {formatCatLabel(catKey)} ({count})
@@ -264,7 +264,7 @@ export const BenchmarksList: React.FC<BenchmarksListProps> = ({
           <select
             value={difficultyFilter}
             onChange={(e) => setDifficultyFilter(e.target.value)}
-            className="h-9 text-xs rounded-xl border border-slate-200 bg-white px-3 text-slate-700 font-medium focus:ring-1 focus:ring-brand-purple cursor-pointer shadow-2xs"
+            className="h-9 text-xs rounded-xl border border-slate-200 bg-white pl-3 pr-8 text-slate-700 font-semibold focus:outline-none focus:ring-1 focus:ring-brand-purple cursor-pointer shadow-2xs"
           >
             <option value="all">All Difficulties</option>
             <option value="medium">Medium</option>
@@ -370,7 +370,7 @@ export const BenchmarksList: React.FC<BenchmarksListProps> = ({
                     </span>
                   </div>
 
-                  {task.tags && task.tags.length > 0 && (
+                  {/* {task.tags && task.tags.length > 0 && (
                     <div className="flex items-center gap-1 flex-wrap pt-1">
                       {task.tags.map((tag) => (
                         <span key={tag} className="text-[10px] px-1.5 py-0.2 rounded bg-canvas text-text-muted border border-border-subtle">
@@ -378,7 +378,7 @@ export const BenchmarksList: React.FC<BenchmarksListProps> = ({
                         </span>
                       ))}
                     </div>
-                  )}
+                  )} */}
                 </div>
               </div>
 
@@ -399,7 +399,7 @@ export const BenchmarksList: React.FC<BenchmarksListProps> = ({
                     <button
                       type="button"
                       onClick={() => onSelectRun(latestRun.run_id)}
-                      className="h-9 px-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                      className="h-9 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                     >
                       Latest Run
                     </button>
@@ -408,7 +408,7 @@ export const BenchmarksList: React.FC<BenchmarksListProps> = ({
                   <button
                     type="button"
                     onClick={() => onLaunchTask(task.task_id)}
-                    className="h-9 px-3.5 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-semibold shadow-xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                    className="h-9 px-4 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-semibold shadow-xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                   >
                     <Icon icon={Play} className="text-[10px]" />
                     <span>Launch</span>
@@ -487,71 +487,34 @@ export const BenchmarksList: React.FC<BenchmarksListProps> = ({
             </div>
 
             {/* Modal Tab Bar */}
-            <div className="px-5 border-b border-border-subtle bg-white flex items-center gap-1 overflow-x-auto shrink-0 select-none">
-              <button
-                type="button"
-                onClick={() => setActiveTab('instructions')}
-                className={`py-3 px-3.5 text-xs font-bold border-b-2 flex items-center gap-1.5 whitespace-nowrap transition-all cursor-pointer ${
-                  activeTab === 'instructions'
-                    ? 'border-brand-purple text-brand-purple'
-                    : 'border-transparent text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                <Icon icon={FileText} className="text-sm" />
-                <span>Instructions (instruction.md)</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab('toml')}
-                className={`py-3 px-3.5 text-xs font-bold border-b-2 flex items-center gap-1.5 whitespace-nowrap transition-all cursor-pointer ${
-                  activeTab === 'toml'
-                    ? 'border-brand-purple text-brand-purple'
-                    : 'border-transparent text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                <Icon icon={Code2} className="text-sm" />
-                <span>Config (task.toml)</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab('dockerfile')}
-                className={`py-3 px-3.5 text-xs font-bold border-b-2 flex items-center gap-1.5 whitespace-nowrap transition-all cursor-pointer ${
-                  activeTab === 'dockerfile'
-                    ? 'border-brand-purple text-brand-purple'
-                    : 'border-transparent text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                <Icon icon={Server} className="text-sm" />
-                <span>Docker Environment (Dockerfile)</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab('seeds')}
-                className={`py-3 px-3.5 text-xs font-bold border-b-2 flex items-center gap-1.5 whitespace-nowrap transition-all cursor-pointer ${
-                  activeTab === 'seeds'
-                    ? 'border-brand-purple text-brand-purple'
-                    : 'border-transparent text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                <Icon icon={FolderTree} className="text-sm" />
-                <span>Seed Files ({taskDetail?.seed_files?.length || 0})</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab('verifier')}
-                className={`py-3 px-3.5 text-xs font-bold border-b-2 flex items-center gap-1.5 whitespace-nowrap transition-all cursor-pointer ${
-                  activeTab === 'verifier'
-                    ? 'border-brand-purple text-brand-purple'
-                    : 'border-transparent text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                <Icon icon={Shield} className="text-sm" />
-                <span>Verifier Tests (test_outputs.py)</span>
-              </button>
+            <div className="px-5 py-3 border-b border-border-subtle bg-white flex items-center overflow-x-auto shrink-0 select-none">
+              <div className="h-9 bg-slate-100 p-1 rounded-xl border border-slate-200/70 inline-flex items-center gap-1 overflow-x-auto overflow-y-hidden max-w-full no-scrollbar">
+                {[
+                  { id: 'instructions', label: 'Instructions (instruction.md)', icon: FileText },
+                  { id: 'toml', label: 'Config (task.toml)', icon: Code2 },
+                  { id: 'dockerfile', label: 'Docker Environment (Dockerfile)', icon: Server },
+                  { id: 'seeds', label: `Seed Files (${taskDetail?.seed_files?.length || 0})`, icon: FolderTree },
+                  { id: 'verifier', label: 'Verifier Tests (test_outputs.py)', icon: Shield },
+                ].map((tab) => {
+                  const isActive = activeTab === tab.id;
+                  const TabIcon = tab.icon;
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setActiveTab(tab.id as any)}
+                      className={`h-7 px-3 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 ${
+                        isActive
+                          ? 'bg-white text-slate-900 shadow-xs font-bold'
+                          : 'text-slate-500 hover:text-slate-900'
+                      }`}
+                    >
+                      <Icon icon={TabIcon} className="text-xs" />
+                      <span>{tab.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             {/* Modal Body / Tab Content */}
@@ -579,7 +542,7 @@ export const BenchmarksList: React.FC<BenchmarksListProps> = ({
                         <button
                           type="button"
                           onClick={() => handleCopyText('instr', taskDetail.instruction_text)}
-                          className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono flex items-center gap-1.5 cursor-pointer transition-colors"
+                          className="h-8 px-2.5 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono"
                         >
                           <Icon icon={copiedKey === 'instr' ? Check : Copy} className="text-xs text-brand-purple" />
                           <span>{copiedKey === 'instr' ? 'Copied Prompt' : 'Copy Prompt'}</span>
@@ -601,7 +564,7 @@ export const BenchmarksList: React.FC<BenchmarksListProps> = ({
                           <button
                             type="button"
                             onClick={() => handleCopyText('toml', taskDetail.task_toml || '')}
-                            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono flex items-center gap-1.5 cursor-pointer transition-colors"
+                            className="h-8 px-2.5 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono"
                           >
                             <Icon icon={copiedKey === 'toml' ? Check : Copy} className="text-xs text-brand-purple" />
                             <span>{copiedKey === 'toml' ? 'Copied' : 'Copy TOML'}</span>
@@ -624,7 +587,7 @@ export const BenchmarksList: React.FC<BenchmarksListProps> = ({
                           <button
                             type="button"
                             onClick={() => handleCopyText('docker', taskDetail.dockerfile || '')}
-                            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono flex items-center gap-1.5 cursor-pointer transition-colors"
+                            className="h-8 px-2.5 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono"
                           >
                             <Icon icon={copiedKey === 'docker' ? Check : Copy} className="text-xs text-brand-purple" />
                             <span>{copiedKey === 'docker' ? 'Copied' : 'Copy Dockerfile'}</span>
@@ -687,7 +650,7 @@ export const BenchmarksList: React.FC<BenchmarksListProps> = ({
                               <button
                                 type="button"
                                 onClick={() => handleCopyText('seed_content', selectedSeedFile.content)}
-                                className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono flex items-center gap-1 cursor-pointer"
+                                className="h-8 px-2.5 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono"
                               >
                                 <Icon icon={copiedKey === 'seed_content' ? Check : Copy} className="text-xs text-brand-purple" />
                                 <span>{copiedKey === 'seed_content' ? 'Copied' : 'Copy File'}</span>
@@ -718,7 +681,7 @@ export const BenchmarksList: React.FC<BenchmarksListProps> = ({
                           <button
                             type="button"
                             onClick={() => handleCopyText('verifier', taskDetail.verifier_code || '')}
-                            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono flex items-center gap-1.5 cursor-pointer transition-colors"
+                            className="h-8 px-2.5 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono"
                           >
                             <Icon icon={copiedKey === 'verifier' ? Check : Copy} className="text-xs text-brand-purple" />
                             <span>{copiedKey === 'verifier' ? 'Copied' : 'Copy Test Code'}</span>

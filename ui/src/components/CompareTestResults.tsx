@@ -2,13 +2,17 @@ import { Icon } from '../lib/icon';
 import {
   AlertTriangle,
   ArrowLeftRight,
+  Check,
   CheckCircle,
   Code,
   FileText,
+  GitFork,
+  Info,
   Search,
   Sparkles,
   Terminal,
   X,
+  Zap,
 } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
 import { AgentStep, RunRecord } from '../types';
@@ -49,6 +53,7 @@ interface RunPickerModalProps {
   title: string;
   accentColor: 'purple' | 'orange';
   selectedRunId: string;
+  preferredTaskId?: string;
   runs: RunRecord[];
   onSelect: (runId: string) => void;
   onClose: () => void;
@@ -59,6 +64,7 @@ const RunPickerModal: React.FC<RunPickerModalProps> = ({
   title,
   accentColor,
   selectedRunId,
+  preferredTaskId,
   runs,
   onSelect,
   onClose,
@@ -188,7 +194,7 @@ const RunPickerModal: React.FC<RunPickerModalProps> = ({
               <select
                 value={taskFilter}
                 onChange={(e) => setTaskFilter(e.target.value)}
-                className="h-9 bg-white border border-slate-200 rounded-xl px-2.5 text-xs text-slate-700 font-medium focus:outline-none focus:border-brand-primary shadow-2xs cursor-pointer"
+                className="h-9 bg-white border border-slate-200 rounded-xl pl-3 pr-8 text-xs text-slate-700 font-semibold focus:outline-none focus:border-brand-primary shadow-2xs cursor-pointer"
               >
                 <option value="all">All Tasks ({uniqueTasks.length})</option>
                 {uniqueTasks.map((taskId) => (
@@ -198,11 +204,27 @@ const RunPickerModal: React.FC<RunPickerModalProps> = ({
                 ))}
               </select>
 
+              {preferredTaskId && uniqueTasks.includes(preferredTaskId) && (
+                <button
+                  type="button"
+                  onClick={() => setTaskFilter(taskFilter === preferredTaskId ? 'all' : preferredTaskId)}
+                  className={`h-9 px-3 rounded-xl border text-xs font-semibold inline-flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs ${
+                    taskFilter === preferredTaskId
+                      ? 'bg-indigo-600 text-white border-indigo-600 font-bold'
+                      : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
+                  }`}
+                  title={`Filter to runs for task "${preferredTaskId}"`}
+                >
+                  <Icon icon={Sparkles} className="text-xs" />
+                  <span>Only {preferredTaskId}</span>
+                </button>
+              )}
+
               {/* Model Filter */}
               <select
                 value={modelFilter}
                 onChange={(e) => setModelFilter(e.target.value)}
-                className="h-9 bg-white border border-slate-200 rounded-xl px-2.5 text-xs text-slate-700 font-medium focus:outline-none focus:border-brand-primary shadow-2xs cursor-pointer"
+                className="h-9 bg-white border border-slate-200 rounded-xl pl-3 pr-8 text-xs text-slate-700 font-semibold focus:outline-none focus:border-brand-primary shadow-2xs cursor-pointer"
               >
                 <option value="all">All Models ({uniqueModels.length})</option>
                 {uniqueModels.map((m) => (
@@ -218,7 +240,7 @@ const RunPickerModal: React.FC<RunPickerModalProps> = ({
                   type="button"
                   onClick={() => setStatusFilter('all')}
                   className={`h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center transition-all cursor-pointer ${
-                    statusFilter === 'all' ? 'bg-white text-slate-900 shadow-2xs font-semibold' : 'text-slate-600 hover:text-slate-900'
+                    statusFilter === 'all' ? 'bg-white text-slate-900 shadow-xs font-bold' : 'text-slate-500 hover:text-slate-900'
                   }`}
                 >
                   All
@@ -227,7 +249,7 @@ const RunPickerModal: React.FC<RunPickerModalProps> = ({
                   type="button"
                   onClick={() => setStatusFilter('passed')}
                   className={`h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center transition-all cursor-pointer ${
-                    statusFilter === 'passed' ? 'bg-white text-slate-900 shadow-2xs font-semibold' : 'text-slate-600 hover:text-slate-900'
+                    statusFilter === 'passed' ? 'bg-white text-slate-900 shadow-xs font-bold' : 'text-slate-500 hover:text-slate-900'
                   }`}
                 >
                   Passed
@@ -236,7 +258,7 @@ const RunPickerModal: React.FC<RunPickerModalProps> = ({
                   type="button"
                   onClick={() => setStatusFilter('failed')}
                   className={`h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center transition-all cursor-pointer ${
-                    statusFilter === 'failed' ? 'bg-white text-slate-900 shadow-2xs font-semibold' : 'text-slate-600 hover:text-slate-900'
+                    statusFilter === 'failed' ? 'bg-white text-slate-900 shadow-xs font-bold' : 'text-slate-500 hover:text-slate-900'
                   }`}
                 >
                   Failed
@@ -245,12 +267,12 @@ const RunPickerModal: React.FC<RunPickerModalProps> = ({
             </div>
 
             {/* Sort Dropdown */}
-            <div className="flex items-center gap-1.5 text-[11px] text-text-muted font-mono">
+            <div className="flex items-center gap-1.5 text-xs text-text-muted font-mono">
               <span>Sort:</span>
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as any)}
-                className="bg-canvas border border-border-subtle rounded-lg px-2 py-1 text-[11px] text-text-primary font-medium focus:outline-none"
+                className="h-8 bg-canvas border border-border-subtle rounded-lg pl-2.5 pr-7 text-xs text-text-primary font-semibold focus:outline-none cursor-pointer"
               >
                 <option value="newest">Newest First</option>
                 <option value="oldest">Oldest First</option>
@@ -482,32 +504,20 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
         ? 'Both Passed'
         : 'Both Failed'
       : runA.passed
-      ? 'Fail ➔ Pass (Improvement)'
-      : 'Pass ➔ Fail (Regression)';
+      ? 'Fail ➔ Pass'
+      : 'Pass ➔ Fail';
 
-  // 2. Synchronized Steps & Divergence Detection
+  // 2. Synchronized Steps & Strategic Divergence Tracking
   const maxSteps = Math.max(runA.steps?.length || 0, runB.steps?.length || 0);
   const stepPairs: { stepA?: AgentStep; stepB?: AgentStep; turn: number }[] = [];
 
-  let divergenceTurn: number | null = null;
+  // Strategic divergence turn is determined by the AI Semantic Trajectory Judge rather than naive syntax diffs
+  const strategicForkTurn = semanticVerdict?.true_divergence_turn ?? null;
 
   for (let i = 0; i < maxSteps; i++) {
     const stepA = runA.steps?.[i];
     const stepB = runB.steps?.[i];
     const turn = i + 1;
-
-    if (divergenceTurn === null) {
-      if (!stepA || !stepB) {
-        divergenceTurn = turn;
-      } else if (
-        stepA.action?.tool !== stepB.action?.tool ||
-        stepA.action?.command !== stepB.action?.command ||
-        stepA.action?.path !== stepB.action?.path
-      ) {
-        divergenceTurn = turn;
-      }
-    }
-
     stepPairs.push({ stepA, stepB, turn });
   }
 
@@ -676,8 +686,8 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
               onClick={() => setActiveTab('timeline')}
               className={`h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center transition-all cursor-pointer ${
                 activeTab === 'timeline'
-                  ? 'bg-white text-slate-900 shadow-2xs font-semibold'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white text-slate-900 shadow-xs font-bold'
+                  : 'text-slate-500 hover:text-slate-900'
               }`}
             >
               Trajectory
@@ -687,8 +697,8 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
               onClick={() => setActiveTab('diff')}
               className={`h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center transition-all cursor-pointer ${
                 activeTab === 'diff'
-                  ? 'bg-white text-slate-900 shadow-2xs font-semibold'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white text-slate-900 shadow-xs font-bold'
+                  : 'text-slate-500 hover:text-slate-900'
               }`}
             >
               Code Diffs ({filesA.length + filesB.length})
@@ -746,8 +756,8 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
           <div className="flex items-center gap-2">
             <div className="h-9 flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 text-xs font-mono text-slate-700 min-w-0 overflow-hidden shadow-2xs">
               <span className="text-slate-400 select-none text-[11px] shrink-0">Selected:</span>
-              <span className="font-bold text-slate-900" title={runA.run_id}>{formatRunIdTail(runA.run_id, 36)}</span>
-              <span className="text-slate-500 truncate text-[11px] min-w-0">({runA.model})</span>
+              <span className="font-bold text-slate-900" title={runA.run_id}>{formatRunIdTail(runA.run_id, 48)}</span>
+              {/* <span className="text-slate-500 truncate text-[11px] min-w-0">({runA.model})</span> */}
             </div>
             <button
               type="button"
@@ -807,8 +817,8 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
           <div className="flex items-center gap-2">
             <div className="h-9 flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 text-xs font-mono text-slate-700 min-w-0 overflow-hidden shadow-2xs">
               <span className="text-slate-400 select-none text-[11px] shrink-0">Selected:</span>
-              <span className="font-bold text-slate-900" title={runB.run_id}>{formatRunIdTail(runB.run_id, 36)}</span>
-              <span className="text-slate-500 truncate text-[11px] min-w-0">({runB.model})</span>
+              <span className="font-bold text-slate-900" title={runB.run_id}>{formatRunIdTail(runB.run_id, 48)}</span>
+              {/* <span className="text-slate-500 truncate text-[11px] min-w-0">({runB.model})</span> */}
             </div>
             <button
               type="button"
@@ -864,150 +874,253 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
         </div>
       </div>
 
-      {/* 4. AI Semantic Trajectory Analysis (LLM Judge) */}
-      <div className="bg-white p-5 rounded-2xl border border-border-subtle shadow-sm space-y-3.5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-subtle pb-3">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-purple-50 text-brand-purple flex items-center justify-center flex-shrink-0">
-              <Icon icon={Sparkles} className="text-lg" />
+      {/* 4. Unified AI Semantic Comparison Report */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden transition-all">
+        {/* Header Bar */}
+        <div className="px-5 py-4 border-b border-slate-200/80 bg-slate-50/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-purple-100 text-brand-purple flex items-center justify-center shrink-0 shadow-2xs">
+              <Icon icon={Sparkles} className="text-base text-indigo-600" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-text-primary">
-                  AI Semantic Trajectory Judge
+                <h3 className="text-sm font-bold text-slate-900">
+                  AI Semantic Comparison Report
                 </h3>
+                {semanticVerdict && (
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-200/70 text-slate-600 font-semibold">
+                    Synthesized
+                  </span>
+                )}
               </div>
-              <p className="text-xs text-text-secondary">
-                Evaluates functional equivalence, filters cosmetic syntax noise, and identifies true strategic divergence
+              <p className="text-xs text-slate-500">
+                Functional equivalence synthesis, workflow shifts, and root cause divergence analysis
               </p>
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={handleRunSemanticCompare}
-            disabled={isLoadingSemantic}
-            className="h-9 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer disabled:opacity-50 shrink-0"
-          >
-            <span>{isLoadingSemantic ? 'Evaluating Trajectory Delta...' : 'Run AI Semantic Comparison'}</span>
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleRunSemanticCompare}
+              disabled={isLoadingSemantic}
+              className="h-9 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer disabled:opacity-50 shrink-0"
+            >
+              <Icon icon={Sparkles} className="text-xs" />
+              <span>{isLoadingSemantic ? 'Evaluating Trajectory Delta...' : semanticVerdict ? 'Re-run Comparison' : 'Run AI Semantic Comparison'}</span>
+            </button>
+          </div>
         </div>
 
         {semanticError && (
-          <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl flex items-center gap-2">
-            <Icon icon={AlertTriangle} className="text-base flex-shrink-0" />
+          <div className="m-4 p-3.5 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl flex items-center gap-2.5">
+            <Icon icon={AlertTriangle} className="text-base text-rose-600 shrink-0" />
             <span>{semanticError}</span>
           </div>
         )}
 
         {semanticVerdict ? (
-          <div className="space-y-3 animate-fadeIn">
-            {/* High level verdict badge + similarity bar */}
-            <div className="p-3.5 bg-canvas/60 rounded-xl border border-border-subtle flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-2 flex-wrap">
+          <div className="divide-y divide-slate-100 animate-fadeIn">
+            {/* 1. Unified Verdict & Outcome Status Bar */}
+            <div className="p-4 sm:px-5 bg-gradient-to-r from-slate-50 via-white to-slate-50/50 flex flex-col lg:flex-row lg:items-center justify-between gap-3.5 border-b border-slate-200/70">
+              {/* Divergence Verdict & Score */}
+              <div className="flex items-center gap-3 flex-wrap">
                 <span
-                  className={`text-[11px] font-mono font-bold uppercase px-3 py-1 rounded-full ${
-                    semanticVerdict.nature_of_divergence === 'identical_strategy' ||
-                    semanticVerdict.nature_of_divergence === 'cosmetic_variation'
+                  className={`text-xs font-mono font-bold uppercase px-3 py-1 rounded-full shadow-2xs flex items-center gap-1.5 ${
+                    semanticVerdict.task_id?.includes(' vs ')
+                      ? 'bg-rose-100 text-rose-900 border border-rose-300'
+                      : semanticVerdict.nature_of_divergence === 'identical_strategy' ||
+                        semanticVerdict.nature_of_divergence === 'cosmetic_variation'
                       ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                       : semanticVerdict.nature_of_divergence === 'opposite_strategies'
                       ? 'bg-rose-100 text-rose-900 border border-rose-300'
                       : 'bg-amber-100 text-amber-900 border border-amber-300'
                   }`}
                 >
-                  {semanticVerdict.nature_of_divergence === 'identical_strategy'
-                    ? '🟢 Identical Strategy'
-                    : semanticVerdict.nature_of_divergence === 'cosmetic_variation'
-                    ? '🟢 Cosmetic Variation (Functionally Equivalent)'
-                    : semanticVerdict.nature_of_divergence === 'opposite_strategies'
-                    ? '🔴 Opposite Strategies (Direct Conflict)'
-                    : '🟠 Substantive Strategic Divergence'}
+                  <span>
+                    {semanticVerdict.task_id?.includes(' vs ')
+                      ? '⚠️ Cross-Task Mismatch'
+                      : semanticVerdict.nature_of_divergence === 'identical_strategy'
+                      ? '🟢 Identical Strategy'
+                      : semanticVerdict.nature_of_divergence === 'cosmetic_variation'
+                      ? '🟢 Cosmetic Variation'
+                      : semanticVerdict.nature_of_divergence === 'opposite_strategies'
+                      ? '🔴 Opposite Strategies'
+                      : '🟠 Substantive Strategic Divergence'}
+                  </span>
                 </span>
 
-                <span className="text-xs font-mono text-text-secondary">
-                  Equivalence Score: <strong className="text-text-primary">{Math.round(semanticVerdict.semantic_similarity_score * 100)}%</strong>
-                </span>
-              </div>
-
-              <div className="text-xs font-mono text-text-muted">
-                {semanticVerdict.true_divergence_turn !== null ? (
-                  <span className="text-amber-800 font-bold">
-                    ⚡ Strategic Fork at Turn #{semanticVerdict.true_divergence_turn}
-                  </span>
-                ) : (
-                  <span className="text-emerald-700 font-bold">
-                    ✓ No Strategic Fork (Cosmetic Only)
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Verdict Summary */}
-            <div className="p-3.5 bg-white rounded-xl border border-border-subtle text-xs text-text-primary leading-relaxed space-y-1.5 shadow-2xs">
-              <div className="font-bold text-text-secondary font-mono text-[11px] uppercase">
-                Executive Synthesis
-              </div>
-              <p>{semanticVerdict.verdict_summary}</p>
-            </div>
-
-            {/* Key Differences List */}
-            {semanticVerdict.key_strategic_differences?.length > 0 && (
-              <div className="p-3.5 bg-white rounded-xl border border-border-subtle text-xs space-y-2 shadow-2xs">
-                <div className="font-bold text-text-secondary font-mono text-[11px] uppercase">
-                  Key Strategic Differentials & Workflow Shifts
+                {/* Equivalence Progress Pill */}
+                <div className="flex items-center gap-2 px-3 py-1 bg-white border border-slate-200 rounded-full shadow-2xs text-xs font-mono text-slate-600">
+                  <span>Equivalence Score:</span>
+                  <strong className="text-slate-900 font-bold">
+                    {Math.round(semanticVerdict.semantic_similarity_score * 100)}%
+                  </strong>
+                  <div className="w-12 h-1.5 bg-slate-100 rounded-full overflow-hidden shrink-0">
+                    <div
+                      className={`h-full rounded-full ${
+                        semanticVerdict.semantic_similarity_score >= 0.8
+                          ? 'bg-emerald-500'
+                          : semanticVerdict.semantic_similarity_score >= 0.4
+                          ? 'bg-amber-500'
+                          : 'bg-rose-500'
+                      }`}
+                      style={{ width: `${Math.round(semanticVerdict.semantic_similarity_score * 100)}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+
+                {/* Strategic Fork */}
+                <div className="text-xs font-mono">
+                  {semanticVerdict.true_divergence_turn !== null ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 text-amber-900 border border-amber-200 font-bold">
+                      <Icon icon={Zap} className="text-xs text-amber-600" />
+                      Strategic Fork at Turn #{semanticVerdict.true_divergence_turn}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold">
+                      <Icon icon={Check} className="text-xs text-emerald-600" />
+                      No Strategic Fork (Cosmetic Only)
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Outcome Context Summary (Result of Candidate vs Baseline) */}
+              <div className="flex items-center gap-2 flex-wrap text-xs font-mono">
+                <span className="text-[11px] uppercase tracking-wider text-slate-400 font-bold">Result Context:</span>
+                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-white border border-slate-200 rounded-lg shadow-2xs">
+                  <span className="w-2 h-2 rounded-full bg-brand-purple shrink-0" />
+                  <span className="text-slate-600 font-medium truncate max-w-[120px]" title={runA.model}>
+                    {runA.model}
+                  </span>
+                  <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded uppercase ${
+                    runA.passed ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                  }`}>
+                    {runA.passed ? 'Pass' : 'Fail'}
+                  </span>
+                </div>
+
+                <span className="text-slate-300 font-bold">vs</span>
+
+                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-white border border-slate-200 rounded-lg shadow-2xs">
+                  <span className="w-2 h-2 rounded-full bg-accent-orange shrink-0" />
+                  <span className="text-slate-600 font-medium truncate max-w-[120px]" title={runB.model}>
+                    {runB.model}
+                  </span>
+                  <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded uppercase ${
+                    runB.passed ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                  }`}>
+                    {runB.passed ? 'Pass' : 'Fail'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* 2. Executive Synthesis */}
+            <div className="p-5 bg-white space-y-2">
+              <div className="flex items-center gap-2 text-[11px] font-mono font-bold uppercase tracking-wider text-slate-500">
+                <Icon icon={FileText} className="text-xs text-indigo-500" />
+                <span>Executive Synthesis</span>
+              </div>
+              <p className="text-sm text-slate-800 leading-relaxed font-normal bg-slate-50/70 p-3.5 rounded-xl border border-slate-200/60">
+                {semanticVerdict.verdict_summary}
+              </p>
+            </div>
+
+            {/* 3. Key Strategic Differentials & Workflow Shifts */}
+            {semanticVerdict.key_strategic_differences?.length > 0 && (
+              <div className="p-5 bg-slate-50/30 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-[11px] font-mono font-bold uppercase tracking-wider text-slate-500">
+                    <Icon icon={GitFork} className="text-xs text-amber-500" />
+                    <span>Key Strategic Differentials & Workflow Shifts</span>
+                    <span className="px-1.5 py-0.2 rounded-full bg-slate-200 text-slate-700 text-[10px]">
+                      {semanticVerdict.key_strategic_differences.length}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                   {semanticVerdict.key_strategic_differences.map((diff, idx) => (
                     <div
                       key={idx}
-                      className="p-2.5 rounded-lg bg-canvas text-text-secondary border border-border-subtle/80 flex items-start gap-2"
+                      className="p-3 rounded-xl bg-white text-slate-700 border border-slate-200/80 shadow-2xs flex items-start gap-2.5 hover:border-slate-300 transition-colors"
                     >
-                      <span className="text-brand-purple font-bold font-mono text-[11px] flex-shrink-0">
+                      <span className="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-100 font-bold font-mono text-[11px] shrink-0">
                         #{idx + 1}
                       </span>
-                      <span className="leading-tight">{diff}</span>
+                      <span className="text-xs leading-relaxed text-slate-700 flex-1">{diff}</span>
                     </div>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Attribution Reasoning */}
-            <div className="p-3 rounded-xl bg-purple-50/60 border border-brand-purple/20 text-xs text-purple-950 font-sans flex items-start gap-2">
-              <span className="font-bold font-mono text-[11px] uppercase text-brand-purple flex-shrink-0">
-                Attribution:
-              </span>
-              <span>{semanticVerdict.attribution_reasoning}</span>
+            {/* 4. Attribution & Root Cause */}
+            <div className="p-4 px-5 bg-purple-50/50 border-t border-purple-100 flex items-start gap-3 text-xs text-purple-950">
+              <div className="w-6 h-6 rounded-lg bg-purple-100 text-indigo-700 flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
+                <Icon icon={Info} className="text-xs" />
+              </div>
+              <div className="space-y-0.5 flex-1">
+                <span className="font-mono font-bold text-[11px] uppercase tracking-wider text-brand-purple block">
+                  Attribution & Root Cause
+                </span>
+                <p className="text-xs text-slate-700 leading-relaxed">
+                  {semanticVerdict.attribution_reasoning}
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : isLoadingSemantic ? (
+          <div className="p-8 text-center space-y-3 animate-pulse">
+            <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto">
+              <Icon icon={Sparkles} className="text-xl animate-spin" />
+            </div>
+            <div className="space-y-1">
+              <div className="text-sm font-bold text-slate-800">Synthesizing Trajectories with AI Judge...</div>
+              <div className="text-xs text-slate-500 max-w-md mx-auto">
+                Comparing step-by-step tool choices, filtering cosmetic syntax noise, and identifying true strategic divergence.
+              </div>
             </div>
           </div>
         ) : (
-          !isLoadingSemantic
+          <div className="p-6 text-center space-y-2 bg-slate-50/40">
+            <div className="text-xs text-slate-500 max-w-lg mx-auto leading-relaxed">
+              Click <strong className="text-slate-800 font-semibold">Run AI Semantic Comparison</strong> above to evaluate functional equivalence, identify the strategic fork turn, and generate an executive divergence synthesis between <span className="font-mono font-semibold text-brand-purple">{runA.model}</span> and <span className="font-mono font-semibold text-accent-orange">{runB.model}</span>.
+            </div>
+          </div>
         )}
       </div>
-
-      {/* 5. Divergence Notification Banner
-      {divergenceTurn !== null && (
-        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-900 flex items-center justify-between text-xs shadow-sm">
-          <div className="flex items-center gap-2.5">
-            <Icon icon={AlertTriangle} className="text-accent-orange text-lg flex-shrink-0" />
-            <span>
-              <strong>Execution Divergence Detected at Turn #{divergenceTurn}:</strong> Reasoning, tool selection, or parameters diverged between Model A (<code>{runA.model}</code>) and Model B (<code>{runB.model}</code>).
-            </span>
-          </div>
-        </div>
-      )} */}
 
       {/* 5. TAB 1: SYNCHRONIZED TIMELINE */}
       {activeTab === 'timeline' && (
         <div className="space-y-4">
           {stepPairs.map(({ stepA, stepB, turn }) => {
-            const isDiverged = divergenceTurn !== null && turn >= divergenceTurn;
+            const isStrategicFork = strategicForkTurn === turn;
+            const isPostFork = strategicForkTurn !== null && turn >= strategicForkTurn;
+
+            // Contextual turn alignment indicator
+            let alignmentLabel = '';
+            if (!stepA || !stepB) {
+              alignmentLabel = !stepA
+                ? `${runB.model} active · ${runA.model} finished`
+                : `${runA.model} active · ${runB.model} finished`;
+            } else if (stepA.action?.tool === stepB.action?.tool) {
+              alignmentLabel = `Both invoked ${stepA.action?.tool || 'tool'}`;
+            } else {
+              alignmentLabel = `Tool shift: ${stepA.action?.tool || 'none'} vs ${stepB.action?.tool || 'none'}`;
+            }
 
             return (
               <div
                 key={turn}
                 className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition-all ${
-                  turn === divergenceTurn ? 'border-amber-400 ring-2 ring-amber-400/20' : 'border-border-subtle'
+                  isStrategicFork
+                    ? 'border-indigo-400 ring-2 ring-indigo-400/20'
+                    : isPostFork
+                    ? 'border-slate-300'
+                    : 'border-border-subtle'
                 }`}
               >
                 {/* Turn Header */}
@@ -1016,14 +1129,15 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
                     <span className="font-bold text-brand-purple bg-surface-subtle px-2 py-0.5 rounded">
                       Turn #{turn}
                     </span>
-                    {turn === divergenceTurn && (
-                      <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 font-bold text-[10px] uppercase">
-                        ⚡ Point of Divergence
+                    {isStrategicFork && (
+                      <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-900 border border-indigo-200 font-bold text-[10px] uppercase flex items-center gap-1">
+                        <Icon icon={Sparkles} className="text-xs text-indigo-600" />
+                        Strategic Fork (AI Judge)
                       </span>
                     )}
                   </div>
                   <span className="text-[11px] text-text-muted">
-                    {isDiverged ? 'Divergent Trajectory' : 'Synchronous Action'}
+                    {alignmentLabel}
                   </span>
                 </div>
 
@@ -1142,6 +1256,7 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
         title={pickerTarget === 'candidate' ? 'Select Candidate Run (Run A)' : 'Select Baseline Run (Run B)'}
         accentColor={pickerTarget === 'candidate' ? 'purple' : 'orange'}
         selectedRunId={pickerTarget === 'candidate' ? runAId : runBId}
+        preferredTaskId={pickerTarget === 'baseline' ? runA?.task_id : undefined}
         runs={runs}
         onSelect={(id) => {
           if (pickerTarget === 'candidate') setRunAId(id);

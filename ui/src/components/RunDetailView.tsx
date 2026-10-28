@@ -85,7 +85,7 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
         <button
           type="button"
           onClick={onBack}
-          className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-black transition-colors"
+          className="h-9 px-4 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-semibold shadow-xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
         >
           Back to Runs
         </button>
@@ -276,7 +276,7 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
     <div className="flex-1 min-h-0 flex flex-col h-full bg-[#f8fafc] text-slate-900 font-sans p-6 space-y-5 overflow-y-auto">
       {/* 1. Card Header */}
       <div className="bg-white p-4 sm:p-5 rounded-2xl border border-border-subtle shadow-sm flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           <button
             type="button"
             onClick={onBack}
@@ -289,7 +289,7 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
             {run.task_id}
           </h1>
           <span
-            className={`text-[10px] uppercase font-mono px-2.5 py-0.5 rounded-full font-bold border inline-flex items-center gap-1 ${
+            className={`h-9 px-3 rounded-xl text-xs font-semibold uppercase font-mono border inline-flex items-center gap-1.5 ${
               isPassed
                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                 : isFailed
@@ -300,25 +300,23 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
             {isPassed ? 'PASSED' : isFailed ? 'FAILED' : run.status}
           </span>
           {run.agent_type === 'red_team' && (
-            <span className="text-[10px] uppercase font-mono px-2.5 py-0.5 rounded-full font-bold border inline-flex items-center gap-1 bg-rose-50 text-rose-700 border-rose-200">
+            <span className="h-9 px-3 rounded-xl text-xs font-semibold uppercase font-mono border inline-flex items-center gap-1.5 bg-rose-50 text-rose-700 border-rose-200">
               Red Team Probe
             </span>
           )}
-          <div className="flex items-center gap-1 text-xs font-mono text-slate-400">
-            <button
-              type="button"
-              onClick={handleCopyId}
-              className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-700 cursor-pointer transition-colors"
-              title="Copy Run ID"
-            >
-              <Copy className="w-3 h-3" />
-              <span>{copied ? 'Copied!' : run.run_id.slice(0, 10)}</span>
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={handleCopyId}
+            className="h-9 px-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-mono font-semibold text-slate-600 shadow-2xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+            title="Copy Run ID"
+          >
+            <Copy className="w-3.5 h-3.5 text-slate-500" />
+            <span>{copied ? 'Copied!' : run.run_id.slice(0, 10)}</span>
+          </button>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           {onCompareWith && (
             <button
               type="button"
@@ -480,7 +478,7 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
       </div>
 
       {/* 3. Navigation Tabs (Un-squishable, shrink-0, sticky for easy tab switching while scrolling) */}
-      <div className="h-9 bg-slate-100 p-1 rounded-xl border border-slate-200/70 inline-flex items-center gap-1 overflow-x-auto shrink-0 sticky top-0 z-20 max-w-full">
+      <div className="h-9 bg-slate-100 p-1 rounded-xl border border-slate-200/70 inline-flex items-center gap-1 overflow-x-auto overflow-y-hidden no-scrollbar shrink-0 sticky top-0 z-20 max-w-full">
         {[
           { id: 'trajectory', label: run.agent_type === 'red_team' ? `Probe Transcript (${steps.length} Turns)` : `Trajectory Trace (${steps.length} Turns)`, icon: Terminal },
           { id: 'judges', label: `Safety & Alignment Audits (${run.audit_verdicts?.length || 0})`, icon: ShieldCheck },
@@ -497,8 +495,8 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
               onClick={() => setActiveTab(tab.id as any)}
               className={`h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 whitespace-nowrap transition-all cursor-pointer shrink-0 ${
                 isActive
-                  ? 'bg-white text-slate-900 shadow-2xs font-semibold'
-                  : 'text-slate-600 hover:text-slate-900 font-medium'
+                  ? 'bg-white text-slate-900 shadow-xs font-bold'
+                  : 'text-slate-500 hover:text-slate-900'
               }`}
             >
               <Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-slate-900' : 'text-slate-500'}`} />
@@ -658,10 +656,10 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
                               <button
                                 type="button"
                                 onClick={() => copyBlock(selectedProbeArgs.attacker_prompt || selectedStep.thought || '', 'attacker')}
-                                className="flex items-center gap-1 text-[11px] font-mono text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded transition-colors cursor-pointer"
+                                className="h-8 px-2.5 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-700 font-mono"
                                 title="Copy attacker prompt"
                               >
-                                {copiedBlockId === 'attacker' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                                {copiedBlockId === 'attacker' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
                                 <span>{copiedBlockId === 'attacker' ? 'Copied' : 'Copy'}</span>
                               </button>
                             </div>
@@ -680,10 +678,10 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
                               <button
                                 type="button"
                                 onClick={() => copyBlock(selectedProbeArgs.target_response || selectedStep.observation || '', 'target')}
-                                className="flex items-center gap-1 text-[11px] font-mono text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded transition-colors cursor-pointer"
+                                className="h-8 px-2.5 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-700 font-mono"
                                 title="Copy target response"
                               >
-                                {copiedBlockId === 'target' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                                {copiedBlockId === 'target' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
                                 <span>{copiedBlockId === 'target' ? 'Copied' : 'Copy'}</span>
                               </button>
                             </div>
@@ -743,10 +741,10 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
                                 <button
                                   type="button"
                                   onClick={() => copyBlock(selectedStep.action.command || '', 'cmd')}
-                                  className="flex items-center gap-1 text-[11px] font-mono text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded transition-colors cursor-pointer"
+                                  className="h-8 px-2.5 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-700 font-mono"
                                   title="Copy command"
                                 >
-                                  {copiedBlockId === 'cmd' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                                  {copiedBlockId === 'cmd' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
                                   <span>{copiedBlockId === 'cmd' ? 'Copied' : 'Copy'}</span>
                                 </button>
                               </div>
@@ -769,10 +767,10 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
                                   <button
                                     type="button"
                                     onClick={() => copyBlock(selectedStep.action.content || '', 'file-content')}
-                                    className="flex items-center gap-1 text-[11px] font-mono text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded transition-colors cursor-pointer"
+                                    className="h-8 px-2.5 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-700 font-mono"
                                     title="Copy file content"
                                   >
-                                    {copiedBlockId === 'file-content' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                                    {copiedBlockId === 'file-content' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
                                     <span>{copiedBlockId === 'file-content' ? 'Copied' : 'Copy'}</span>
                                   </button>
                                 )}
@@ -809,10 +807,10 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
                                 <button
                                   type="button"
                                   onClick={() => copyBlock(selectedStep.observation || '', 'obs')}
-                                  className="flex items-center gap-1 text-[11px] font-mono text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded transition-colors cursor-pointer"
+                                  className="h-8 px-2.5 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-700 font-mono"
                                   title="Copy stdout / stderr"
                                 >
-                                  {copiedBlockId === 'obs' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                                  {copiedBlockId === 'obs' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
                                   <span>{copiedBlockId === 'obs' ? 'Copied' : 'Copy'}</span>
                                 </button>
                               </div>
@@ -999,7 +997,7 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
               <h3 className="text-sm font-bold text-slate-900 font-mono">Safety Audit Report (Markdown)</h3>
               <p className="text-xs text-slate-500 mt-0.5">Exportable compliance artifact for red-teaming and safety review</p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
               <button
                 type="button"
                 onClick={() => setActiveTab('judges')}
@@ -1011,7 +1009,7 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
               <button
                 type="button"
                 onClick={handleDownloadReport}
-                className="h-9 px-3.5 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-semibold shadow-xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                className="h-9 px-4 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-semibold shadow-xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
               >
                 <Download className="w-3.5 h-3.5" />
                 <span>Download Report (.md)</span>
@@ -1085,7 +1083,7 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
               <button
                 type="button"
                 onClick={() => setShowDeleteModal(false)}
-                className="h-9 px-4 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 shadow-2xs"
+                className="h-9 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-2xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
               >
                 Cancel
               </button>
@@ -1096,7 +1094,7 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
                   setShowDeleteModal(false);
                   onBack();
                 }}
-                className="h-9 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                className="h-9 px-3.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
               >
                 Delete Run
               </button>

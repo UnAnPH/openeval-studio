@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
+from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 
 from engine.llm_runner import (
@@ -120,3 +121,113 @@ async def test_openai_endpoint_generation() -> None:
         )
         assert response.content == "OpenAI answer"
         assert response.usage.total_tokens == 12
+
+
+@pytest.mark.asyncio
+async def test_opencode_endpoint_generation_and_prefix_stripping() -> None:
+    """Verify OpenCode provider routes requests, strips 'opencode/' prefix, and tracks usage."""
+    captured_payloads = []
+
+    mock_response_data = {
+        "choices": [
+            {
+                "message": {"role": "assistant", "content": "OpenCode GLM answer"},
+                "finish_reason": "stop",
+            }
+        ],
+        "usage": {"prompt_tokens": 18, "completion_tokens": 9, "total_tokens": 27},
+    }
+
+    def mock_handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content.decode("utf-8"))
+        captured_payloads.append(body)
+        return httpx.Response(200, json=mock_response_data)
+
+    transport = httpx.MockTransport(mock_handler)
+    base_url = "https://opencode.ai/inference/openai/v1"
+    async with httpx.AsyncClient(transport=transport, base_url=base_url) as client:
+        runner = AsyncLLMRunner(
+            api_key="oc_sk_test_key_12345678",
+            provider="opencode",
+            base_url=base_url,
+            client=client,
+        )
+        assert runner.provider == "opencode"
+        assert runner.opencode_client is not None
+
+        messages = [ChatMessage(role="user", content="Analyze task")]
+
+        # Calling with prefixed model name opencode/glm-5.3-flash-free
+        response = await runner.generate(
+            messages,
+            config=LLMConfig(model="opencode/glm-5.3-flash-free", provider="opencode"),
+        )
+
+        assert response.content == "OpenCode GLM answer"
+        assert response.usage.prompt_tokens == 18
+        assert response.usage.completion_tokens == 9
+        assert response.usage.total_tokens == 27
+
+        # Verify that opencode/ prefix was stripped before hitting the API
+        assert len(captured_payloads) == 1
+        assert captured_payloads[0]["model"] == "glm-5.3-flash-free"
+
+
+@pytest.mark.asyncio
+async def test_opencode_auto_detection_and_schema_parsing() -> None:
+    """Verify OpenCode model auto-detection from default runner and response_schema JSON validation."""
+    captured_payloads = []
+
+    tool_payload = {"tool": "execute_bash", "argument": "ls -la"}
+    mock_response_data = {
+        "choices": [
+            {
+                "message": {"role": "assistant", "content": json.dumps(tool_payload)},
+                "finish_reason": "stop",
+            }
+        ],
+        "usage": {"prompt_tokens": 25, "completion_tokens": 12, "total_tokens": 37},
+    }
+
+    def mock_handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content.decode("utf-8"))
+        captured_payloads.append(body)
+        return httpx.Response(200, json=mock_response_data)
+
+    transport = httpx.MockTransport(mock_handler)
+    base_url = "https://opencode.ai/inference/openai/v1"
+    async with httpx.AsyncClient(transport=transport, base_url=base_url) as client:
+        # Default runner initializes with provider="google"
+        mock_genai_client = MagicMock()
+        runner = AsyncLLMRunner(
+            api_key="mock-key",
+            provider="google",
+            genai_client=mock_genai_client,
+        )
+        # Inject test http client for opencode
+        runner.opencode_client = runner.opencode_client or AsyncOpenAI(
+            api_key="oc_sk_mock_test",
+            base_url=base_url,
+            http_client=client,
+        )
+
+        messages = [ChatMessage(role="user", content="List directory contents")]
+
+        # Invoking with opencode free model ID should auto-detect opencode provider
+        response = await runner.generate(
+            messages,
+            config=LLMConfig(model="opencode/big-pickle"),
+            response_schema=ToolCallSchema,
+        )
+
+        assert response.parsed_json is not None
+        assert response.parsed_json["tool"] == "execute_bash"
+        assert response.parsed_json["argument"] == "ls -la"
+
+        assert len(captured_payloads) == 1
+        assert captured_payloads[0]["model"] == "big-pickle"
+        # Verify schema instructions were injected
+        system_msgs = [m for m in captured_payloads[0]["messages"] if m["role"] == "system"]
+        assert len(system_msgs) > 0
+        assert "ToolCallSchema" in system_msgs[0]["content"] or "schema" in system_msgs[0]["content"]
+

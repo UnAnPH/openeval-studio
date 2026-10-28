@@ -362,7 +362,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   return (
     <div className="flex-1 min-h-0 flex flex-col h-full bg-[#fcfcfd] text-[#1e2029] font-sans p-6 space-y-6 overflow-y-auto">
       {/* 1. Header Card Block */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 sm:p-5 rounded-2xl border border-border-subtle shadow-sm shrink-0">
+      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-border-subtle shadow-sm flex items-center justify-between shrink-0 flex-wrap gap-4">
         <div>
           <h1 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
             Overview
@@ -371,7 +371,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         </div>
 
         {/* Date Selector Tabs */}
-        <div className="h-9 flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/60 text-xs overflow-x-auto">
+        <div className="h-9 bg-slate-100 p-1 rounded-xl border border-slate-200/70 inline-flex items-center gap-1 overflow-x-auto overflow-y-hidden no-scrollbar shrink-0">
           {[
             { id: 'today', label: 'Today' },
             { id: 'this_week', label: 'This week' },
@@ -382,10 +382,10 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             <button
               key={tab.id}
               onClick={() => setDateFilter(tab.id as any)}
-              className={`h-7 px-3 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap inline-flex items-center justify-center ${
+              className={`h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center transition-all cursor-pointer whitespace-nowrap ${
                 dateFilter === tab.id
                   ? 'bg-white text-slate-900 shadow-xs font-bold'
-                  : 'text-slate-600 hover:text-slate-900 font-medium'
+                  : 'text-slate-500 hover:text-slate-900'
               }`}
             >
               {tab.label}
@@ -610,7 +610,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 </div>
 
                 <div className="shrink-0 pt-0.5">
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-600 border border-rose-200">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-rose-50 text-rose-600 border border-rose-200">
                     <span className="w-1.5 h-1.5 rounded-full bg-rose-600" />
                     <span>Critical</span>
                   </span>

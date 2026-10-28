@@ -3,6 +3,7 @@
 Redacts raw credentials and API secrets from text payloads, logs, database records,
 and model prompts into typed replacement tokens:
 - [REDACTED:OPENAI_API_KEY]
+- [REDACTED:OPENCODE_API_KEY]
 - [REDACTED:ANTHROPIC_API_KEY]
 - [REDACTED:AWS_ACCESS_KEY]
 - [REDACTED:GITHUB_TOKEN]
@@ -22,7 +23,12 @@ _PRIVATE_KEY_RE = re.compile(
     re.MULTILINE,
 )
 
-# 2. Anthropic API keys (must be evaluated before generic sk- to prevent collision)
+# 2. OpenCode API keys (starts with oc_sk_)
+_OPENCODE_KEY_RE = re.compile(
+    r"\boc_sk_[a-zA-Z0-9_-]+\b"
+)
+
+# 3. Anthropic API keys (must be evaluated before generic sk- to prevent collision)
 _ANTHROPIC_KEY_RE = re.compile(
     r"\bsk-ant-[a-zA-Z0-9_-]{20,}\b"
 )
@@ -65,6 +71,7 @@ def redact_text(text: str) -> str:
 
     # Apply in strict specificity order
     redacted = _PRIVATE_KEY_RE.sub("[REDACTED:PRIVATE_KEY]", text)
+    redacted = _OPENCODE_KEY_RE.sub("[REDACTED:OPENCODE_API_KEY]", redacted)
     redacted = _ANTHROPIC_KEY_RE.sub("[REDACTED:ANTHROPIC_API_KEY]", redacted)
     redacted = _OPENAI_KEY_RE.sub("[REDACTED:OPENAI_API_KEY]", redacted)
     redacted = _GITHUB_TOKEN_RE.sub("[REDACTED:GITHUB_TOKEN]", redacted)
@@ -107,6 +114,8 @@ def redact_payload(obj: T) -> T:
                     result[k] = "[REDACTED:AWS_ACCESS_KEY]"
                 elif "GITHUB_TOKEN" in k_upper or "GH_TOKEN" in k_upper or "GITHUB_PAT" in k_upper:
                     result[k] = "[REDACTED:GITHUB_TOKEN]"
+                elif "OPENCODE_API_KEY" in k_upper:
+                    result[k] = "[REDACTED:OPENCODE_API_KEY]"
                 elif "OPENAI_API_KEY" in k_upper:
                     result[k] = "[REDACTED:OPENAI_API_KEY]"
                 elif "ANTHROPIC_API_KEY" in k_upper:

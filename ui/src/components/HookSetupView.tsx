@@ -117,13 +117,13 @@ export const HookSetupView: React.FC<HookSetupViewProps> = ({
               Copy this key now. For your security, raw API keys are never stored on the server and cannot be retrieved again.
             </p>
             <div className="mt-2 flex items-center gap-2">
-              <code className="px-3 py-1.5 rounded-lg bg-white border border-purple-300 font-mono text-xs text-purple-950 font-bold select-all">
+              <code className="h-8 px-3 rounded-lg bg-white border border-purple-300 font-mono text-xs text-purple-950 font-bold select-all inline-flex items-center">
                 {localApiKey}
               </code>
               <button
                 type="button"
                 onClick={() => copyToClipboard(localApiKey, true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-medium transition-colors shadow-xs"
+                className="h-8 px-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-colors shadow-xs cursor-pointer"
               >
                 {copiedKey ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                 <span>{copiedKey ? 'Copied!' : 'Copy Key'}</span>
@@ -134,26 +134,22 @@ export const HookSetupView: React.FC<HookSetupViewProps> = ({
       )}
 
       {/* Header Info */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-border-subtle shadow-sm flex items-center justify-between shrink-0">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
-            <Terminal className="w-6 h-6 text-indigo-600" />
+          <h1 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
             Agent Hook Setup
           </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Connect local IDE agents to OpenEval Studio to intercept destructive commands and track safety reviews.
-          </p>
         </div>
 
         {username && (
-          <div className="flex items-center gap-3">
-            <div className="px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-200 text-xs font-mono text-slate-700">
+          <div className="flex items-center gap-2.5">
+            <div className="h-9 px-3 rounded-xl bg-slate-100 border border-slate-200 text-xs font-mono text-slate-700 inline-flex items-center gap-1.5">
               User: <span className="font-semibold text-indigo-700">@{username}</span>
             </div>
             <button
               type="button"
               onClick={() => setShowRotateConfirm(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-medium transition-colors shadow-xs"
+              className="h-9 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-2xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
             >
               <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
               <span>Rotate Key</span>
@@ -164,41 +160,41 @@ export const HookSetupView: React.FC<HookSetupViewProps> = ({
 
       {/* IDE Switcher Tabs */}
       <div className="space-y-4">
-        <div className="flex items-center gap-2 border-b border-slate-200">
+        <div className="h-9 bg-slate-100 p-1 rounded-xl border border-slate-200/70 inline-flex items-center gap-1">
           <button
             type="button"
             onClick={() => setActiveAgent('cursor')}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
+            className={`h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
               activeAgent === 'cursor'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
+                ? 'bg-white text-slate-900 shadow-xs font-bold'
+                : 'text-slate-500 hover:text-slate-900'
             }`}
           >
-            <Code2 className="w-4 h-4" />
+            <Code2 className="w-3.5 h-3.5" />
             <span>Cursor</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveAgent('claude')}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
+            className={`h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
               activeAgent === 'claude'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
+                ? 'bg-white text-slate-900 shadow-xs font-bold'
+                : 'text-slate-500 hover:text-slate-900'
             }`}
           >
-            <Terminal className="w-4 h-4" />
+            <Terminal className="w-3.5 h-3.5" />
             <span>Claude Code</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveAgent('antigravity')}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
+            className={`h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
               activeAgent === 'antigravity'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
+                ? 'bg-white text-slate-900 shadow-xs font-bold'
+                : 'text-slate-500 hover:text-slate-900'
             }`}
           >
-            <ShieldCheck className="w-4 h-4" />
+            <ShieldCheck className="w-3.5 h-3.5" />
             <span>Google Antigravity</span>
           </button>
         </div>
@@ -215,7 +211,7 @@ export const HookSetupView: React.FC<HookSetupViewProps> = ({
               <a
                 href={`/api/scripts/${getScriptFilename()}`}
                 download={getScriptFilename()}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-mono transition-colors shadow-xs"
+                className="h-8 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-colors shadow-xs"
               >
                 <Download className="w-3.5 h-3.5" />
                 <span>Download Script</span>
@@ -223,7 +219,7 @@ export const HookSetupView: React.FC<HookSetupViewProps> = ({
               <button
                 type="button"
                 onClick={() => copyToClipboard(getCommands(), false)}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono transition-colors"
+                className="h-8 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer font-mono"
               >
                 {copiedScript ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                 <span>{copiedScript ? 'Copied' : 'Copy'}</span>
@@ -286,12 +282,12 @@ export const HookSetupView: React.FC<HookSetupViewProps> = ({
             <p className="text-xs text-slate-600 leading-relaxed">
               Rotating your API key will immediately invalidate your active key. Any running hooks using the old key will receive 401 Unauthorized until updated.
             </p>
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="flex items-center justify-end gap-2.5 pt-2">
               <button
                 type="button"
                 onClick={() => setShowRotateConfirm(false)}
                 disabled={isRotating}
-                className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 text-xs font-medium"
+                className="h-9 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
               >
                 Cancel
               </button>
@@ -299,7 +295,7 @@ export const HookSetupView: React.FC<HookSetupViewProps> = ({
                 type="button"
                 onClick={handleRotate}
                 disabled={isRotating}
-                className="px-4 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold shadow-xs"
+                className="h-9 px-3.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
               >
                 {isRotating ? 'Rotating...' : 'Yes, Rotate Key'}
               </button>

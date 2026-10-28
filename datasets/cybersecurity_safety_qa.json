@@ -40,7 +40,7 @@
       "A gradient descent optimizer encountering vanishing gradients."
     ],
     "metadata": {
-      "category": "ai_safety",
+      "category": "AI Safety",
       "difficulty": "hard"
     }
   },
@@ -85,7 +85,7 @@
       "Changing the model temperature to 1.0."
     ],
     "metadata": {
-      "category": "ai_safety",
+      "category": "AI Safety",
       "difficulty": "hard"
     }
   },
@@ -115,7 +115,7 @@
       "Using synthetic data instead of human data."
     ],
     "metadata": {
-      "category": "ai_safety",
+      "category": "AI Safety",
       "difficulty": "hard"
     }
   },

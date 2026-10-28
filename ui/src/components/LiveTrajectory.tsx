@@ -124,22 +124,21 @@ export const LiveTrajectory: React.FC<LiveTrajectoryProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2.5 flex-wrap">
           {steps.length > 0 && (
-            <div className="flex items-center gap-1.5 text-xs font-mono mr-2 bg-slate-100 p-1 rounded-xl border border-slate-200">
+            <div className="h-9 bg-slate-100 p-1 rounded-xl border border-slate-200/70 inline-flex items-center gap-1">
               <button
                 type="button"
                 onClick={handleExpandAll}
-                className="px-2 py-0.5 text-[11px] font-mono text-indigo-700 hover:text-indigo-900 hover:bg-white rounded-md transition-all cursor-pointer font-semibold"
+                className="h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center transition-all cursor-pointer text-slate-600 hover:text-slate-900 hover:bg-white"
                 title="Expand all trajectory steps"
               >
                 Expand All
               </button>
-              <span className="text-slate-300">|</span>
               <button
                 type="button"
                 onClick={handleCollapseAll}
-                className="px-2 py-0.5 text-[11px] font-mono text-slate-600 hover:text-slate-900 hover:bg-white rounded-md transition-all cursor-pointer"
+                className="h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center transition-all cursor-pointer text-slate-600 hover:text-slate-900 hover:bg-white"
                 title="Collapse all trajectory steps"
               >
                 Collapse All
@@ -147,7 +146,7 @@ export const LiveTrajectory: React.FC<LiveTrajectoryProps> = ({
             </div>
           )}
           <span
-            className={`text-[10px] uppercase font-mono px-2.5 py-0.5 rounded-full font-bold border ${
+            className={`h-9 px-3 rounded-xl text-xs font-bold font-mono uppercase inline-flex items-center border ${
               displayStatus === 'completed' || run?.passed
                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                 : displayStatus === 'cancelled'
@@ -379,16 +378,16 @@ export const LiveTrajectory: React.FC<LiveTrajectoryProps> = ({
                     <button
                       type="button"
                       onClick={() => handleCopy(step.action.command || '', `cmd-${step.step_number}`)}
-                      className="text-slate-400 hover:text-slate-700 flex items-center gap-1 transition-colors cursor-pointer"
+                      className="h-7 px-2 rounded-lg text-xs font-semibold inline-flex items-center gap-1 transition-all cursor-pointer text-slate-500 hover:text-slate-800 hover:bg-slate-100"
                     >
                       {copiedId === `cmd-${step.step_number}` ? (
                         <>
-                          <Check className="w-3 h-3 text-emerald-600" />
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
                           <span className="text-emerald-600">Copied</span>
                         </>
                       ) : (
                         <>
-                          <Copy className="w-3 h-3" />
+                          <Copy className="w-3.5 h-3.5" />
                           <span>Copy</span>
                         </>
                       )}
@@ -412,7 +411,7 @@ export const LiveTrajectory: React.FC<LiveTrajectoryProps> = ({
                     <button
                       type="button"
                       onClick={() => toggleFileExpand(step.step_number)}
-                      className="text-[10px] font-mono text-indigo-600 hover:underline cursor-pointer"
+                      className="h-7 px-2 rounded-lg text-xs font-semibold text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 inline-flex items-center transition-all cursor-pointer"
                     >
                       {expandedFiles[step.step_number] ? 'Hide Payload' : 'Show Payload'}
                     </button>
@@ -449,16 +448,16 @@ export const LiveTrajectory: React.FC<LiveTrajectoryProps> = ({
                     <button
                       type="button"
                       onClick={() => handleCopy(step.observation || '', `obs-${step.step_number}`)}
-                      className="text-slate-400 hover:text-slate-700 flex items-center gap-1 transition-colors cursor-pointer"
+                      className="h-7 px-2 rounded-lg text-xs font-semibold inline-flex items-center gap-1 transition-all cursor-pointer text-slate-500 hover:text-slate-800 hover:bg-slate-100"
                     >
                       {copiedId === `obs-${step.step_number}` ? (
                         <>
-                          <Check className="w-3 h-3 text-emerald-600" />
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
                           <span className="text-emerald-600">Copied</span>
                         </>
                       ) : (
                         <>
-                          <Copy className="w-3 h-3" />
+                          <Copy className="w-3.5 h-3.5" />
                           <span>Copy</span>
                         </>
                       )}
@@ -514,13 +513,13 @@ export const LiveTrajectory: React.FC<LiveTrajectoryProps> = ({
               </div>
 
               <div className="flex items-center gap-2 font-mono text-xs">
-                <span className="px-2.5 py-1 rounded-lg bg-slate-50 text-slate-600 border border-slate-200">
+                <span className="h-8 px-3 rounded-lg bg-slate-50 text-slate-600 border border-slate-200 inline-flex items-center font-semibold">
                   {run.total_duration_sec.toFixed(1)}s
                 </span>
-                <span className="px-2.5 py-1 rounded-lg bg-slate-50 text-slate-600 border border-slate-200">
+                <span className="h-8 px-3 rounded-lg bg-slate-50 text-slate-600 border border-slate-200 inline-flex items-center font-semibold">
                   {run.total_tokens.toLocaleString()} tok
                 </span>
-                <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 font-bold border border-emerald-200">
+                <span className="h-8 px-3 rounded-lg bg-emerald-50 text-emerald-700 font-bold border border-emerald-200 inline-flex items-center">
                   ${run.estimated_cost_usd.toFixed(4)}
                 </span>
               </div>
@@ -532,7 +531,7 @@ export const LiveTrajectory: React.FC<LiveTrajectoryProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowVerifierOutput((prev) => !prev)}
-                  className="text-xs font-mono text-indigo-600 hover:underline cursor-pointer"
+                  className="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-indigo-600 text-xs font-semibold inline-flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
                 >
                   {showVerifierOutput ? 'Hide Verifier Diagnostics' : 'View Verifier Diagnostics'}
                 </button>

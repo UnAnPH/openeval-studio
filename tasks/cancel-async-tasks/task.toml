@@ -23,6 +23,7 @@ timeout_sec = 900.0
 
 [agent]
 timeout_sec = 900.0
+max_steps = 15
 
 [environment]
 build_timeout_sec = 600.0

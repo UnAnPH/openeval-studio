@@ -1,7 +1,7 @@
 export interface ModelSpec {
   id: string;
   name: string;
-  provider: 'google' | 'openai' | 'anthropic' | 'custom' | 'ollama' | 'vllm';
+  provider: 'google' | 'openai' | 'anthropic' | 'custom' | 'ollama' | 'vllm' | 'opencode';
   tier: 'flagship' | 'balanced' | 'fast' | 'preview' | 'specialized';
   description: string;
   context_window: number;
@@ -262,7 +262,7 @@ export interface WatcherSession {
   agent_type: 'antigravity' | 'claude_code' | 'cursor' | 'inspect_eval' | 're_act_agent' | 'custom';
   model: string;
   provider: string;
-  status: 'pending' | 'active' | 'working' | 'running' | 'completed' | 'error' | 'cancelled' | 'parked';
+  status: 'pending' | 'active' | 'working' | 'running' | 'completed' | 'error' | 'cancelled' | 'parked' | 'blocked';
   working_dir?: string | null;
   current_activity?: string | null;
   trajectory: {

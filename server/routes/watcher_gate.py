@@ -411,12 +411,17 @@ async def evaluate_action_watcher_gateway(
         activity = verdict.decision
         if cfg.mode == "observe" and mapped_decision != "allow":
             activity = f"shadow:{mapped_decision}"
+        new_status = (
+            "blocked"
+            if mapped_decision in ("deny", "reject", "block", "escalate")
+            else "working"
+        )
         await asyncio.to_thread(
             store.update_session,
             session_id,
             {
                 "current_activity": f"{req.tool_name} → {activity}",
-                "status": "working",
+                "status": new_status,
             },
         )
         global_watcher_engine.record_interception(verdict)

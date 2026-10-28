@@ -453,6 +453,15 @@ class UniversalAgentLogLoader:
             tool_results=[],
             reviews=reviews,
         )
+        blocked_revs = [r for r in reviews if r.decision in ("block", "deny") or r.score >= 8]
+        if blocked_revs:
+            final_status: SessionStatus = "blocked"
+        elif status in ("working", "active", "running"):
+            age_sec = time.time() - mtime
+            final_status = "working" if age_sec <= 120 else "closed"
+        else:
+            final_status = status
+
         session = Session(
             session_id=f"cursor-{session_id[:12]}",
             title=title,
@@ -462,7 +471,7 @@ class UniversalAgentLogLoader:
             agent_type="cursor",
             model="cursor-agent",
             provider="cursor",
-            status=status,
+            status=final_status,
             trajectory=trajectory,
             created_at=datetime.fromtimestamp(mtime, UTC).isoformat(),
             updated_at=datetime.fromtimestamp(mtime, UTC).isoformat(),
@@ -755,6 +764,14 @@ class UniversalAgentLogLoader:
 
         blocked_revs = [r for r in reviews if r.decision in ("block", "deny") or r.score >= 8]
         if blocked_revs:
+            final_status: SessionStatus = "blocked"
+        elif status in ("working", "active", "running"):
+            age_sec = time.time() - mtime
+            final_status = "working" if age_sec <= 120 else "closed"
+        else:
+            final_status = status
+
+        if blocked_revs:
             flagged_names = ", ".join([r.rule_name or r.tool_name for r in blocked_revs[:3]])
             verdict_narrative = (
                 f"Watcher Aegis Sentinel intercepted and contained {len(blocked_revs)} critical policy violation(s) "
@@ -763,7 +780,7 @@ class UniversalAgentLogLoader:
         else:
             verdict_narrative = (
                 f"Watcher Aegis Sentinel audited all {len(tool_calls)} tool invocations against active deterministic security policies and threshold rules. "
-                f"Zero safety violations or unapproved destructive operations were detected. Monitored session status: '{status}'."
+                f"Zero safety violations or unapproved destructive operations were detected. Monitored session status: '{final_status}'."
             )
 
         full_narrative_summary = (
@@ -781,7 +798,7 @@ class UniversalAgentLogLoader:
             agent_type="antigravity",
             model="gemini-3.7-flash",
             provider="google",
-            status=status,
+            status=final_status,
             working_dir=detected_working_dir or str(Path.cwd()),
             current_activity=latest_activity,
             trajectory=trajectory,
@@ -829,12 +846,12 @@ class UniversalAgentLogLoader:
                 ),
                 reverse=True,
             )
-            for idx, d in enumerate(conv_dirs):
+            for d in conv_dirs:
                 t_path = d / ".system_generated" / "logs" / "transcript.jsonl"
                 try:
                     mtime = t_path.stat().st_mtime
                     age_sec = now - mtime
-                    is_active = (age_sec < 45 * 60) or (idx == 0 and age_sec < 90 * 60)
+                    is_active = age_sec <= 120
                     session_status: SessionStatus = "working" if is_active else "completed"
                 except Exception:
                     session_status = "completed"
@@ -870,10 +887,10 @@ class UniversalAgentLogLoader:
                     continue
                 cursor_files.append(p)
         cursor_files = sorted(cursor_files, key=lambda p: p.stat().st_mtime, reverse=True)[:40]
-        for idx, jsonl_file in enumerate(cursor_files):
+        for jsonl_file in cursor_files:
             try:
                 age_sec = now - jsonl_file.stat().st_mtime
-                is_active = (age_sec < 45 * 60) or (idx == 0 and age_sec < 90 * 60)
+                is_active = age_sec <= 120
                 st: SessionStatus = "working" if is_active else "completed"
             except Exception:
                 st = "completed"

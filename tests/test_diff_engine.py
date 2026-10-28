@@ -1,5 +1,7 @@
 """Unit Tests for Trajectory Diff Engine."""
 
+import pytest
+
 from engine.diff_engine import TrajectoryDiffEngine
 from engine.react_agent import AgentAction, AgentStep
 from schemas.watcher_models import Session
@@ -145,3 +147,35 @@ def test_trajectory_diff_engine_divergence_detection() -> None:
     diff_dict = diff.to_dict()
     assert diff_dict["divergence_step"] == 2
     assert len(diff_dict["step_diffs"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_semantic_compare_cross_task_mismatch_guardrail() -> None:
+    """Verify that comparing two runs from entirely different tasks returns 0.0 equivalence and opposite_strategies."""
+    run_cancel = Session(
+        run_id="run_cancel_01",
+        task_id="cancel-async-tasks",
+        model="opencode/big-pickle",
+        provider="opencode",
+        status="completed",
+        passed=False,
+        steps=[],
+    )
+    run_align = Session(
+        run_id="run_align_01",
+        task_id="alignment-faking",
+        model="opencode/big-pickle",
+        provider="opencode",
+        status="completed",
+        passed=True,
+        steps=[],
+    )
+
+    verdict = await TrajectoryDiffEngine.semantic_compare_runs(run_cancel, run_align)
+    assert verdict.nature_of_divergence == "opposite_strategies"
+    assert verdict.semantic_similarity_score == 0.0
+    assert verdict.true_divergence_turn == 1
+    assert "Task Mismatch" in verdict.verdict_summary
+    assert "cancel-async-tasks" in verdict.verdict_summary
+    assert "alignment-faking" in verdict.verdict_summary
+

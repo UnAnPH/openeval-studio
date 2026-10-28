@@ -65,3 +65,61 @@ def test_llm_circuit_opens_after_repeated_failures() -> None:
     assert gw._llm_circuit_open is True
     # Further calls skip the network once the circuit is open
     assert gw._llm_grade("sys", "user") is None
+
+
+def test_deep_review_uses_live_canonical_grader() -> None:
+    from engine.graders_suite import reset_live_canonical_grader, update_live_canonical_grader
+
+    captured_sys_prompts: list[str] = []
+
+    def mock_requester(req: object, timeout: float = 1.0) -> object:
+        import json
+        from unittest.mock import MagicMock
+
+        # Extract system prompt from body
+        data = getattr(req, "data", b"")
+        payload = json.loads(data.decode("utf-8"))
+        sys_instruction = payload.get("systemInstruction", {}).get("parts", [{}])[0].get("text", "")
+        captured_sys_prompts.append(sys_instruction)
+
+        mock_resp = MagicMock()
+        resp_data = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {
+                                "text": "<decision_score>6</decision_score><decision_context>Live deep review</decision_context>"
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+        mock_resp.read.return_value = json.dumps(resp_data).encode("utf-8")
+        mock_resp.__enter__.return_value = mock_resp
+        return mock_resp
+
+    gw = PolicyGateway(use_llm=True, api_key="test-key", requester=mock_requester)
+
+    # Update live PolicyGatewayDeepGrader
+    custom_role = "ROLE_TEST_LIVE: Dual-Tier Deep Evaluator"
+    update_live_canonical_grader("PolicyGatewayDeepGrader", {"c2_role": custom_role})
+
+    res = gw._deep_review(
+        tool_name="bash",
+        tool_input="cat /etc/passwd",
+        base_score=7,
+    )
+    assert res is not None
+    assert captured_sys_prompts and custom_role in captured_sys_prompts[-1]
+
+    # Reset live grader and verify
+    reset_live_canonical_grader("PolicyGatewayDeepGrader")
+    gw._deep_review(
+        tool_name="bash",
+        tool_input="cat /etc/passwd",
+        base_score=7,
+    )
+    assert captured_sys_prompts and custom_role not in captured_sys_prompts[-1]
+

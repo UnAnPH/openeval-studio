@@ -63,6 +63,12 @@ def test_dim1_secret_classes_redaction():
         == "[REDACTED:ANTHROPIC_API_KEY]"
     )
 
+    # 1b. OpenCode API key
+    assert (
+        redact_text("oc_sk_abcdefghijklmnopqrstuvwxyz1234567890")
+        == "[REDACTED:OPENCODE_API_KEY]"
+    )
+
     # 2. OpenAI API key
     assert (
         redact_text("sk-proj-abcdefghijklmnopqrstuvwxyz1234567890")

@@ -144,14 +144,14 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({
           </div>
 
           {/* Status Selection Pill Buttons */}
-          <div className={`grid grid-cols-3 gap-1 bg-surface-subtle p-1 rounded-xl border border-border-subtle text-xs ${compact ? 'w-full' : 'w-full sm:w-auto flex-shrink-0'}`}>
+          <div className={`h-9 bg-slate-100 p-1 rounded-xl border border-slate-200/70 inline-flex items-center gap-1 text-xs ${compact ? 'w-full justify-stretch' : 'w-full sm:w-auto shrink-0'}`}>
             <button
               type="button"
               onClick={() => setStatus('APPROVED_SAFE')}
-              className={`px-2 py-1.5 rounded-lg font-bold text-[11px] transition-all text-center cursor-pointer ${
+              className={`h-7 px-3 rounded-lg text-xs font-semibold transition-all inline-flex items-center justify-center cursor-pointer ${compact ? 'flex-1' : ''} ${
                 status === 'APPROVED_SAFE'
-                  ? 'bg-emerald-600 text-white shadow-2xs'
-                  : 'text-text-secondary hover:text-emerald-700'
+                  ? 'bg-emerald-600 text-white shadow-xs font-bold'
+                  : 'text-slate-500 hover:text-emerald-700'
               }`}
             >
               ✓ Approved
@@ -159,10 +159,10 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({
             <button
               type="button"
               onClick={() => setStatus('REQUIRES_REVIEW')}
-              className={`px-2 py-1.5 rounded-lg font-bold text-[11px] transition-all text-center cursor-pointer ${
+              className={`h-7 px-3 rounded-lg text-xs font-semibold transition-all inline-flex items-center justify-center cursor-pointer ${compact ? 'flex-1' : ''} ${
                 status === 'REQUIRES_REVIEW'
-                  ? 'bg-amber-500 text-white shadow-2xs'
-                  : 'text-text-secondary hover:text-amber-700'
+                  ? 'bg-amber-500 text-white shadow-xs font-bold'
+                  : 'text-slate-500 hover:text-amber-700'
               }`}
             >
               ⚠ Review
@@ -170,10 +170,10 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({
             <button
               type="button"
               onClick={() => setStatus('FLAGGED_RISKY')}
-              className={`px-2 py-1.5 rounded-lg font-bold text-[11px] transition-all text-center cursor-pointer ${
+              className={`h-7 px-3 rounded-lg text-xs font-semibold transition-all inline-flex items-center justify-center cursor-pointer ${compact ? 'flex-1' : ''} ${
                 status === 'FLAGGED_RISKY'
-                  ? 'bg-rose-600 text-white shadow-2xs'
-                  : 'text-text-secondary hover:text-rose-700'
+                  ? 'bg-rose-600 text-white shadow-xs font-bold'
+                  : 'text-slate-500 hover:text-rose-700'
               }`}
             >
               ✕ Flagged
@@ -244,7 +244,7 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({
             type="button"
             onClick={handleSave}
             disabled={isSaving}
-            className={`px-4 py-2 rounded-xl bg-dark-base text-white text-xs font-bold hover:bg-black transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm disabled:opacity-50 ${compact ? 'w-full' : ''}`}
+            className={`h-9 px-4 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-semibold shadow-xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50 ${compact ? 'w-full' : ''}`}
           >
             <Icon icon={Save} className="text-xs" />
             <span>{isSaving ? 'Saving...' : 'Save & Submit Sign-Off'}</span>
@@ -359,14 +359,14 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({
                     </div>
 
                     {onOverrideMetric && (
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1.5">
                         <button
                           type="button"
                           onClick={() => onOverrideMetric(verdict.metric_name, true)}
-                          className={`px-2.5 py-0.5 rounded text-[10px] font-bold cursor-pointer transition-colors ${
+                          className={`h-7 px-2.5 rounded-lg text-xs font-semibold inline-flex items-center justify-center cursor-pointer transition-colors ${
                             effectivePassed
-                              ? 'bg-emerald-600 text-white'
-                              : 'bg-white text-text-secondary hover:bg-surface-subtle border border-border-subtle'
+                              ? 'bg-emerald-600 text-white shadow-2xs font-bold'
+                              : 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-200'
                           }`}
                         >
                           Pass
@@ -374,10 +374,10 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({
                         <button
                           type="button"
                           onClick={() => onOverrideMetric(verdict.metric_name, false)}
-                          className={`px-2.5 py-0.5 rounded text-[10px] font-bold cursor-pointer transition-colors ${
+                          className={`h-7 px-2.5 rounded-lg text-xs font-semibold inline-flex items-center justify-center cursor-pointer transition-colors ${
                             !effectivePassed
-                              ? 'bg-rose-600 text-white'
-                              : 'bg-white text-text-secondary hover:bg-surface-subtle border border-border-subtle'
+                              ? 'bg-rose-600 text-white shadow-2xs font-bold'
+                              : 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-200'
                           }`}
                         >
                           Fail
@@ -476,10 +476,10 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({
                         <button
                           type="button"
                           onClick={() => onOverrideMetric(verdict.metric_name, true)}
-                          className={`px-2.5 py-1 rounded text-[10px] font-bold cursor-pointer ${
+                          className={`h-7 px-2.5 rounded-lg text-xs font-semibold inline-flex items-center justify-center cursor-pointer transition-colors ${
                             effectivePassed
-                              ? 'bg-emerald-600 text-white shadow-2xs'
-                              : 'bg-canvas text-text-secondary hover:bg-surface-subtle border border-border-subtle'
+                              ? 'bg-emerald-600 text-white shadow-2xs font-bold'
+                              : 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-200'
                           }`}
                         >
                           Mark Pass
@@ -487,10 +487,10 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({
                         <button
                           type="button"
                           onClick={() => onOverrideMetric(verdict.metric_name, false)}
-                          className={`px-2.5 py-1 rounded text-[10px] font-bold cursor-pointer ${
+                          className={`h-7 px-2.5 rounded-lg text-xs font-semibold inline-flex items-center justify-center cursor-pointer transition-colors ${
                             !effectivePassed
-                              ? 'bg-rose-600 text-white shadow-2xs'
-                              : 'bg-canvas text-text-secondary hover:bg-surface-subtle border border-border-subtle'
+                              ? 'bg-rose-600 text-white shadow-2xs font-bold'
+                              : 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-200'
                           }`}
                         >
                           Mark Fail

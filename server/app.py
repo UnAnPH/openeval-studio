@@ -1291,7 +1291,7 @@ TASKS_DIR = PROJECT_ROOT / "tasks"
 @app.get("/api/models", response_model=list[ModelSpec])
 async def list_models(provider: str | None = Query(default=None)) -> list[ModelSpec]:
     """Retrieve catalog of supported evaluation models and token pricing."""
-    if provider in ("google", "openai"):
+    if provider in ("google", "openai", "opencode", "anthropic", "custom", "ollama", "vllm"):
         return get_available_models(provider=provider)  # type: ignore[arg-type]
     return get_available_models()
 
@@ -1832,46 +1832,76 @@ async def search_fragments(payload: SearchFragmentsPayload) -> list[dict[str, An
 
 
 class IngestAgentLogPayload(BaseModel):
-    file_path: str
+    file_path: str | None = None
+    file_content: str | None = None
+    filename: str | None = None
     agent_type: Literal["claude_code", "cursor", "antigravity", "auto"] = "auto"
 
 
 @app.post("/api/v1/agent-logs/ingest")
 async def ingest_agent_log(payload: IngestAgentLogPayload) -> dict[str, Any]:
-    """Ingest Claude Code, Cursor, or Antigravity session logs into canonical Watcher sessions."""
+    """Ingest Claude Code, Cursor, or Antigravity session logs into canonical Watcher sessions.
+    
+    Supports both client-side file uploads (via `file_content` + `filename`) and local server files (via `file_path`).
+    """
+    import shutil
+    import tempfile
     from server.agent_log_loader import UniversalAgentLogLoader
 
-    path = Path(payload.file_path)
-    if not path.exists():
-        raise HTTPException(
-            status_code=404, detail=f"Log path '{payload.file_path}' does not exist"
-        )
-
-    session = None
-    suffix = path.suffix.lower()
-    agent = payload.agent_type
-    is_antigravity = (
-        agent == "antigravity" or "antigravity" in path.parts or ".gemini" in path.parts
-    )
-    is_cursor_transcript = "agent-transcripts" in path.parts or agent == "cursor"
-
-    if is_antigravity:
-        session = UniversalAgentLogLoader.ingest_antigravity_transcript(path)
-    elif is_cursor_transcript and suffix == ".jsonl":
-        session = UniversalAgentLogLoader.ingest_cursor_agent_transcript_jsonl(path)
-    elif agent == "cursor" or suffix == ".json":
-        session = UniversalAgentLogLoader.ingest_cursor_session_json(path)
-    elif agent == "claude_code" or suffix == ".jsonl":
-        session = UniversalAgentLogLoader.ingest_claude_code_jsonl(path)
+    temp_dir = None
+    if payload.file_content is not None:
+        filename = payload.filename or "uploaded_agent_session.jsonl"
+        safe_filename = Path(filename).name
+        temp_dir = Path(tempfile.mkdtemp(prefix="openeval_ingest_"))
+        path = temp_dir / safe_filename
+        path.write_text(payload.file_content, encoding="utf-8")
+    elif payload.file_path:
+        path = Path(payload.file_path)
+        if not path.exists():
+            raise HTTPException(
+                status_code=404, detail=f"Log path '{payload.file_path}' does not exist"
+            )
     else:
-        session = UniversalAgentLogLoader.ingest_claude_code_jsonl(path)
-
-    if not session:
         raise HTTPException(
-            status_code=400, detail="Failed to parse agent log into canonical session"
+            status_code=400, detail="Must provide either 'file_content' (file upload) or 'file_path'"
         )
 
-    return {"status": "ingested", "session": session.model_dump()}
+    try:
+        session = None
+        suffix = path.suffix.lower()
+        agent = payload.agent_type
+        is_antigravity = (
+            agent == "antigravity"
+            or "antigravity" in path.parts
+            or ".gemini" in path.parts
+            or "antigravity" in path.name.lower()
+        )
+        is_cursor_transcript = (
+            "agent-transcripts" in path.parts
+            or agent == "cursor"
+            or "transcript" in path.name.lower()
+        )
+
+        if is_antigravity:
+            session = UniversalAgentLogLoader.ingest_antigravity_transcript(path)
+        elif is_cursor_transcript and suffix == ".jsonl":
+            session = UniversalAgentLogLoader.ingest_cursor_agent_transcript_jsonl(path)
+        elif agent == "cursor" or suffix == ".json":
+            session = UniversalAgentLogLoader.ingest_cursor_session_json(path)
+        elif agent == "claude_code" or suffix == ".jsonl":
+            session = UniversalAgentLogLoader.ingest_claude_code_jsonl(path)
+        else:
+            session = UniversalAgentLogLoader.ingest_claude_code_jsonl(path)
+
+        if not session:
+            raise HTTPException(
+                status_code=400, detail="Failed to parse agent log into canonical session format"
+            )
+
+        return {"status": "ingested", "session": session.model_dump()}
+    finally:
+        if temp_dir and temp_dir.exists():
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 @app.post("/api/v1/sessions/{session_id}/annotate")
@@ -1911,14 +1941,16 @@ async def get_watcher_analytics_overview() -> dict[str, Any]:
 
 
 class GraderBacktestRequest(BaseModel):
-    grader_name: str = "CredentialsGrader"
+    grader_name: str = "SituationalAwarenessGrader"
+    preset_mode: str = "canonical"
     custom_prompt_template: str | None = None
+    custom_overrides: dict[str, str] | None = None
     ensemble_models: list[str] | None = None
 
 
 @app.get("/api/v1/watcher/graders/definitions")
 async def list_grader_definitions() -> list[dict[str, Any]]:
-    """Retrieve the 5 Canonical Graders with 15-part prompt definitions for the active user."""
+    """Retrieve the 11 Canonical Graders with 15-part prompt definitions for the active user."""
     from server.watcher_store import get_watcher_store
 
     store = get_watcher_store()
@@ -1964,7 +1996,9 @@ async def run_grader_backtest(req: GraderBacktestRequest) -> dict[str, Any]:
     workbench = GraderWorkbench()
     report = await workbench.run_backtest(
         grader_name=req.grader_name,
+        preset_mode=req.preset_mode,
         custom_prompt_template=req.custom_prompt_template,
+        custom_overrides=req.custom_overrides,
         ensemble_models=req.ensemble_models,
     )
     return report.model_dump()
@@ -1973,7 +2007,9 @@ async def run_grader_backtest(req: GraderBacktestRequest) -> dict[str, Any]:
 class GraderAuditSessionRequest(BaseModel):
     session_id: str
     grader_name: str
+    preset_mode: str = "canonical"
     custom_prompt_template: str | None = None
+    custom_overrides: dict[str, str] | None = None
     model: str = "gemini-3.1-flash-lite"
 
 
@@ -2022,8 +2058,18 @@ async def audit_session_with_grader(req: GraderAuditSessionRequest) -> dict[str,
     cfg = LLMConfig(model=req.model, temperature=0.0, timeout_sec=5.0)
 
     if grader:
+        if req.preset_mode == "compressed":
+            grader = grader.to_compressed()
+        if req.custom_overrides:
+            grader = grader.model_copy(update=req.custom_overrides)
+        if req.custom_prompt_template:
+            grader = grader.model_copy(update={"full_prompt_override": req.custom_prompt_template})
+        elif req.custom_overrides and "full_prompt_override" in req.custom_overrides:
+            grader = grader.model_copy(update={"full_prompt_override": req.custom_overrides["full_prompt_override"]})
         try:
-            verdict = await grader.evaluate(trajectory_text, runner, config=cfg)
+            verdict = await grader.evaluate(
+                trajectory_text, runner, config=cfg, preset_mode=req.preset_mode
+            )
         except Exception:
             # Deterministic policy fallback if LLM is unreachable
             revs = session.trajectory.reviews if session.trajectory else []

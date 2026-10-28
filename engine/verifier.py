@@ -73,17 +73,17 @@ class VerifierRunner:
         start_time = time.perf_counter()
 
         if stage_fresh_tests:
-            # Anti-cheat: overwrite /workspace/tests/test_outputs.py with ground-truth copy
-            if task.test_outputs_path.exists():
-                test_content = task.test_outputs_path.read_text(encoding="utf-8")
-                await sandbox.write_file("/workspace/tests/test_outputs.py", test_content)
-
-            test_sh_path = task.task_dir / "tests" / "test.sh"
-            if test_sh_path.exists():
-                await sandbox.write_file(
-                    "/workspace/tests/test.sh", test_sh_path.read_text(encoding="utf-8")
+            # Anti-cheat & task test staging: copy full ground-truth test tree to /tests and /workspace/tests
+            tests_dir = task.task_dir / "tests"
+            if tests_dir.exists():
+                try:
+                    await sandbox.copy_directory(tests_dir, "/tests")
+                    await sandbox.copy_directory(tests_dir, "/workspace/tests")
+                except Exception as exc:
+                    logger.warning("Failed copying test directory into container: %s", exc)
+                await sandbox.exec_command(
+                    "chmod +x /workspace/tests/*.sh /tests/*.sh 2>/dev/null || true", user="root"
                 )
-                await sandbox.exec_command("chmod +x /workspace/tests/test.sh", user="root")
 
         timeout = task.verifier.timeout_sec
         test_sh_path = task.task_dir / "tests" / "test.sh"

@@ -2,7 +2,7 @@
   "session_id": "d8fb2be2",
   "title": null,
   "run_id": "eval-regex-log-gemini-flash-lite",
-  "org_id": "default_org",
+  "org_id": "demo",
   "project_name": "regex-log",
   "task_id": "regex-log",
   "agent_type": "inspect_eval",

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
   AlertTriangle,
@@ -8,6 +8,7 @@ import {
   Clock,
   Code2,
   Copy,
+  FileText,
   Folder,
   RefreshCw,
   Search,
@@ -37,6 +38,59 @@ interface FragmentMatch {
   combined_score?: number;
 }
 
+// Session is blocked if marked blocked or if any review denied/blocked (accept deny|block|reject vocab) or score ≥ 8, unless operator-allowed.
+export const sessionIsBlocked = (s: WatcherSession): boolean =>
+  s.status === 'blocked' ||
+  (s.trajectory?.reviews || []).some(
+    (r) =>
+      (r.decision === 'block' || r.decision === 'deny' || r.decision === 'reject' || (r.score || 0) >= 8) &&
+      r.human_override !== 'allow' &&
+      r.resolution_status !== 'human_approved'
+  ) ||
+  Boolean((s as any).blocked_count && (s as any).blocked_count > 0);
+
+// A session is LIVE if and ONLY if:
+// 1. Not in demo mode (in demo mode, LIVE is always 0)
+// 2. Not blocked (a blocked session is NEVER classified as live/working)
+// 3. Status is working/active/running
+// 4. Session is fresh (active within the last 15 minutes)
+export const sessionIsLive = (s: WatcherSession, isDemoActive: boolean = false): boolean => {
+  if (isDemoActive) return false;
+  if (sessionIsBlocked(s)) return false;
+  if (s.status !== 'working' && s.status !== 'active' && s.status !== 'running') return false;
+
+  // Staleness check: if last event timestamp is > 15 minutes ago, it's stale (closed)
+  let lastTime = 0;
+  if (s.updated_at) {
+    const t = new Date(s.updated_at).getTime();
+    if (!isNaN(t)) lastTime = Math.max(lastTime, t);
+  }
+  if (s.created_at) {
+    const t = new Date(s.created_at).getTime();
+    if (!isNaN(t)) lastTime = Math.max(lastTime, t);
+  }
+  const msgs = s.trajectory?.messages || [];
+  if (msgs.length > 0 && msgs[msgs.length - 1].timestamp) {
+    const mTs = msgs[msgs.length - 1].timestamp!;
+    const t = mTs > 1e11 ? mTs : mTs * 1000;
+    if (!isNaN(t)) lastTime = Math.max(lastTime, t);
+  }
+  const tcs = s.trajectory?.tool_calls || [];
+  if (tcs.length > 0 && tcs[tcs.length - 1].timestamp) {
+    const cTs = tcs[tcs.length - 1].timestamp!;
+    const t = cTs > 1e11 ? cTs : cTs * 1000;
+    if (!isNaN(t)) lastTime = Math.max(lastTime, t);
+  }
+
+  if (lastTime > 0 && Date.now() - lastTime > 15 * 60 * 1000) {
+    return false;
+  }
+  return true;
+};
+
+export const sessionIsClosed = (s: WatcherSession, isDemoActive: boolean = false): boolean =>
+  !sessionIsBlocked(s) && !sessionIsLive(s, isDemoActive);
+
 interface SessionsViewProps {
   initialSessionId?: string | null;
   isDemoSeed?: boolean;
@@ -51,7 +105,9 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
   isDemo: propIsDemo,
   demoSessions = [],
 }) => {
-  const isDemo = propIsDemo ?? (isDemoSeed || (typeof window !== 'undefined' && (window.location.pathname.startsWith('/demo') || window.location.hash.startsWith('#/demo'))));
+  const isDemoActive = Boolean(
+    propIsDemo ?? (isDemoSeed || (typeof window !== 'undefined' && (window.location.pathname.startsWith('/demo') || window.location.hash.startsWith('#/demo'))))
+  );
   const [sessions, setSessions] = useState<WatcherSession[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(initialSessionId || null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -67,10 +123,14 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
 
   // Log Ingest Modal state
   const [showIngestModal, setShowIngestModal] = useState<boolean>(false);
+  const [ingestMode, setIngestMode] = useState<'upload' | 'path'>('upload');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState<boolean>(false);
   const [ingestFilePath, setIngestFilePath] = useState<string>('');
   const [isIngesting, setIsIngesting] = useState<boolean>(false);
   const [ingestStatus, setIngestStatus] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -86,8 +146,8 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
       if (res && res.ok) {
         const data: WatcherSession[] = await res.json();
         if (Array.isArray(data)) {
-          const validData = isDemo
-            ? data
+          const validData = isDemoActive
+            ? data.filter((s) => (s.session_id || '').includes('demo') || (s.session_id || '').startsWith('demo-') || (s.session_id || '').startsWith('redteam-'))
             : data.filter((s) => !(s.session_id || '').includes('demo') && !(s.session_id || '').startsWith('demo-'));
           if (validData.length > 0) {
             setSessions(validData);
@@ -99,14 +159,14 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
               }
             }
             return;
-          } else if (!isDemo) {
+          } else if (!isDemoActive) {
             setSessions([]);
             setSelectedSessionId(null);
             return;
           }
         }
       }
-      if (isDemo) {
+      if (isDemoActive) {
         // Fallback to demo sessions provided via props from demo route
         const fallback = (demoSessions || []) as WatcherSession[];
         setSessions(fallback);
@@ -122,7 +182,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
         setSelectedSessionId(null);
       }
     } catch (err) {
-      if (isDemo) {
+      if (isDemoActive) {
         console.warn('Backend unavailable, using bundled demo sessions:', err);
         const fallback = (demoSessions || []) as WatcherSession[];
         setSessions(fallback);
@@ -139,13 +199,13 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
   };
 
   useEffect(() => {
-    if (isDemo && demoSessions && demoSessions.length > 0 && sessions.length === 0) {
+    if (isDemoActive && demoSessions && demoSessions.length > 0 && sessions.length === 0) {
       setSessions(demoSessions);
       if (!selectedSessionId) {
         setSelectedSessionId(demoSessions[0].session_id);
       }
     }
-  }, [isDemo, demoSessions]);
+  }, [isDemoActive, demoSessions]);
 
   useEffect(() => {
     fetchSessions(true);
@@ -168,55 +228,51 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
 
   // Ensure demo mode only ever shows demo sessions (defense in depth)
   const displaySessions = useMemo(() => {
-    if (isDemoSeed) {
+    if (isDemoActive) {
       return sessions.filter(
-        (s) => s.session_id.includes('demo') || s.session_id.startsWith('demo-')
+        (s) =>
+          (s.session_id || '').includes('demo') ||
+          (s.session_id || '').startsWith('demo-') ||
+          (s.session_id || '').startsWith('redteam-')
       );
     }
     return sessions;
-  }, [sessions, isDemoSeed]);
+  }, [sessions, isDemoActive]);
 
   const selectedSession = useMemo(
     () => displaySessions.find((s) => s.session_id === selectedSessionId) || null,
     [displaySessions, selectedSessionId]
   );
 
-  // Session is blocked if any review denied/blocked (accept deny|block|reject vocab) or score ≥ 8, unless operator-allowed.
-  const sessionIsBlocked = (s: WatcherSession) =>
-    (s.trajectory?.reviews || []).some(
-      (r) =>
-        (r.decision === 'block' || r.decision === 'deny' || r.decision === 'reject' || (r.score || 0) >= 8) &&
-        r.human_override !== 'allow' &&
-        r.resolution_status !== 'human_approved'
-    );
+  // Status predicates bound to current demo mode
+  const isBlocked = (s: WatcherSession) => sessionIsBlocked(s);
+  const isLive = (s: WatcherSession) => sessionIsLive(s, isDemoActive);
+  const isClosed = (s: WatcherSession) => sessionIsClosed(s, isDemoActive);
 
-  const sessionIsLive = (s: WatcherSession) =>
-    s.status === 'working' || s.status === 'active' || s.status === 'running';
-
-  // Buckets for filter pills: ALL / LIVE / BLOCKED / CLOSED
+  // Buckets for filter pills: ALL / LIVE / BLOCKED / CLOSED (strictly mutually exclusive)
   const totalCount = displaySessions.length;
   const liveCount = useMemo(
-    () => displaySessions.filter((s) => sessionIsLive(s)).length,
-    [displaySessions]
+    () => displaySessions.filter((s) => isLive(s)).length,
+    [displaySessions, isDemoActive]
   );
   const blockedCount = useMemo(
-    () => displaySessions.filter((s) => sessionIsBlocked(s)).length,
+    () => displaySessions.filter((s) => isBlocked(s)).length,
     [displaySessions]
   );
   const closedCount = useMemo(
-    () => displaySessions.filter((s) => !sessionIsBlocked(s) && !sessionIsLive(s)).length,
-    [displaySessions]
+    () => displaySessions.filter((s) => isClosed(s)).length,
+    [displaySessions, isDemoActive]
   );
 
   // Filter sessions list by query & status (All, Live, Blocked, or Closed)
   const filteredSessions = useMemo(() => {
     let list = displaySessions;
     if (statusFilter === 'live') {
-      list = list.filter((s) => sessionIsLive(s));
+      list = list.filter((s) => isLive(s));
     } else if (statusFilter === 'blocked') {
-      list = list.filter((s) => sessionIsBlocked(s));
+      list = list.filter((s) => isBlocked(s));
     } else if (statusFilter === 'closed') {
-      list = list.filter((s) => !sessionIsBlocked(s) && !sessionIsLive(s));
+      list = list.filter((s) => isClosed(s));
     }
 
     if (!sessionFilter.trim()) return list;
@@ -229,7 +285,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
         (s.agent_type && s.agent_type.toLowerCase().includes(q)) ||
         (s.model && s.model.toLowerCase().includes(q))
     );
-  }, [sessions, sessionFilter, statusFilter]);
+  }, [displaySessions, sessionFilter, statusFilter, isDemoActive]);
 
   // Auto-sync selectedSessionId if current selection is not visible in filtered list
   useEffect(() => {
@@ -300,22 +356,43 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
 
   // Handle Agent Log Ingest
   const handleIngest = async () => {
-    if (!ingestFilePath.trim()) return;
     setIsIngesting(true);
     setIngestStatus(null);
     try {
+      let body: any = {};
+      if (ingestMode === 'upload') {
+        if (!selectedFile) return;
+        const content = await selectedFile.text();
+        body = {
+          filename: selectedFile.name,
+          file_content: content,
+          agent_type: 'auto',
+        };
+      } else {
+        if (!ingestFilePath.trim()) return;
+        body = {
+          file_path: ingestFilePath.trim(),
+          agent_type: 'auto',
+        };
+      }
+
       const res = await fetch('/api/v1/agent-logs/ingest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ file_path: ingestFilePath }),
+        body: JSON.stringify(body),
       });
+
       if (res.ok) {
         setIngestStatus('Successfully ingested agent log!');
+        setSelectedFile(null);
         setIngestFilePath('');
         fetchSessions(true);
-        setTimeout(() => setShowIngestModal(false), 1200);
+        setTimeout(() => {
+          setShowIngestModal(false);
+          setIngestStatus(null);
+        }, 1200);
       } else {
-        const err = await res.json();
+        const err = await res.json().catch(() => ({}));
         setIngestStatus(`Error: ${err.detail || 'Ingestion failed'}`);
       }
     } catch {
@@ -585,7 +662,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
           </h1>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           <button
             type="button"
             onClick={() => setShowIngestModal(true)}
@@ -609,10 +686,10 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
             <button
               type="button"
               onClick={handleClearSessions}
-              className="h-9 px-3.5 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-rose-600 hover:bg-rose-700 text-white shadow-xs"
+              className="h-9 px-3.5 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-white hover:bg-rose-50 border border-slate-200 hover:border-rose-300 text-rose-700 shadow-2xs"
               title="Clear all sessions"
             >
-              <Trash2 className="w-4 h-4" />
+              <Trash2 className="w-4 h-4 text-rose-600" />
               <span>Clear Sessions</span>
             </button>
           )}
@@ -748,8 +825,8 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
                 const isSelected = s.session_id === selectedSessionId;
                 const sMsgCount = s.trajectory?.messages?.length || 0;
                 const sToolCount = s.trajectory?.tool_calls?.length || 0;
-                const sHasBlocked = sessionIsBlocked(s);
-                const isWorking = s.status === 'working';
+                const isBlockedSession = isBlocked(s);
+                const isLiveSession = isLive(s);
 
                 return (
                   <div
@@ -765,15 +842,19 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
                       {renderAgentBadge(s.agent_type)}
                       <span
                         className={`inline-flex items-center gap-1 text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full ${
-                          sHasBlocked
+                          isBlockedSession
                             ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                            : isWorking
+                            : isLiveSession
                             ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                             : 'bg-slate-100 text-slate-600'
                         }`}
                       >
-                        {isWorking && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />}
-                        {sHasBlocked ? 'Blocked' : isWorking ? 'working' : s.status === 'completed' ? 'closed' : s.status || 'closed'}
+                        {isBlockedSession ? (
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                        ) : isLiveSession ? (
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        ) : null}
+                        {isBlockedSession ? 'Blocked' : isLiveSession ? 'working' : 'closed'}
                       </span>
                     </div>
 
@@ -840,15 +921,27 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
                       {toolCallsCount} tools
                     </span>
                     <span
-                      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                        hasViolations
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                        selectedSession && isBlocked(selectedSession)
                           ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                          : selectedSession.status === 'working'
+                          : selectedSession && isLive(selectedSession)
                           ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                           : 'bg-slate-100 text-slate-700'
                       }`}
                     >
-                      {hasViolations ? 'Policy Intercept' : selectedSession.status === 'working' ? 'Live Working' : 'Closed'}
+                      {selectedSession && isBlocked(selectedSession) ? (
+                        <>
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                          <span>Policy Intercept (Blocked)</span>
+                        </>
+                      ) : selectedSession && isLive(selectedSession) ? (
+                        <>
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          <span>Live Working</span>
+                        </>
+                      ) : (
+                        <span>Closed</span>
+                      )}
                     </span>
                   </div>
                 </div>
@@ -1167,41 +1260,150 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
 
       {/* Ingest Agent Log Modal */}
       {showIngestModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl border border-border-subtle shadow-xl max-w-md w-full p-6 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl border border-border-subtle shadow-xl max-w-lg w-full p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-slate-900">Ingest Monitored Agent Log</h3>
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-purple-50 text-brand-purple flex items-center justify-center shrink-0">
+                  <Upload className="w-4 h-4 text-indigo-600" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Ingest Monitored Agent Log</h3>
+                  <p className="text-[11px] text-slate-500">Claude Code, Cursor, or Antigravity sessions</p>
+                </div>
+              </div>
               <button
                 type="button"
-                onClick={() => setShowIngestModal(false)}
-                className="h-9 w-9 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 hover:text-slate-700 shadow-2xs inline-flex items-center justify-center transition-all cursor-pointer"
+                onClick={() => {
+                  setShowIngestModal(false);
+                  setIngestStatus(null);
+                }}
+                className="h-8 w-8 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 hover:text-slate-700 shadow-2xs inline-flex items-center justify-center transition-all cursor-pointer"
                 title="Close"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <p className="text-xs text-slate-600">
-              Provide an absolute file path to a Claude Code (<code className="font-mono text-indigo-600">.jsonl</code>) or Antigravity (<code className="font-mono text-indigo-600">.jsonl</code>) log to ingest into OpenEval.
-            </p>
-
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-mono font-bold text-slate-700">Log File Path</label>
-              <input
-                type="text"
-                placeholder="/Users/.../.claude/sessions/session.jsonl"
-                value={ingestFilePath}
-                onChange={(e) => setIngestFilePath(e.target.value)}
-                className="w-full h-9 px-3 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono shadow-2xs"
-              />
+            {/* Mode Segmented Controls */}
+            <div className="h-9 bg-slate-100 p-1 rounded-xl border border-slate-200/70 inline-flex items-center gap-1 w-full">
+              <button
+                type="button"
+                onClick={() => setIngestMode('upload')}
+                className={`h-7 flex-1 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                  ingestMode === 'upload'
+                    ? 'bg-white text-slate-900 shadow-xs font-bold'
+                    : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>Upload File (Cloud-Safe)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIngestMode('path')}
+                className={`h-7 flex-1 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                  ingestMode === 'path'
+                    ? 'bg-white text-slate-900 shadow-xs font-bold'
+                    : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                <Terminal className="w-3.5 h-3.5" />
+                <span>Server Path (CLI)</span>
+              </button>
             </div>
+
+            {ingestMode === 'upload' ? (
+              <div className="space-y-3">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  accept=".jsonl,.json,.txt"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) setSelectedFile(file);
+                  }}
+                />
+
+                {!selectedFile ? (
+                  <div
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setIsDragging(true);
+                    }}
+                    onDragLeave={() => setIsDragging(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsDragging(false);
+                      const file = e.dataTransfer.files?.[0];
+                      if (file) setSelectedFile(file);
+                    }}
+                    onClick={() => fileInputRef.current?.click()}
+                    className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all ${
+                      isDragging
+                        ? 'border-indigo-500 bg-indigo-50/50'
+                        : 'border-slate-200 hover:border-indigo-400 hover:bg-slate-50/60 bg-slate-50/30'
+                    }`}
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto mb-2.5">
+                      <Upload className="w-5 h-5 text-indigo-600" />
+                    </div>
+                    <div className="text-xs font-semibold text-slate-800">
+                      Click to browse or drag and drop log file
+                    </div>
+                    <div className="text-[11px] text-slate-500 mt-1">
+                      Supports Claude Code (<span className="font-mono text-indigo-600">.jsonl</span>), Antigravity (<span className="font-mono text-indigo-600">transcript.jsonl</span>), or Cursor (<span className="font-mono text-indigo-600">.json</span>)
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-3 shadow-2xs">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+                        <FileText className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold text-slate-900 truncate font-mono">
+                          {selectedFile.name}
+                        </div>
+                        <div className="text-[10px] text-slate-500 font-mono">
+                          {(selectedFile.size / 1024).toFixed(1)} KB · Ready to ingest
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedFile(null)}
+                      className="h-7 w-7 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-500 flex items-center justify-center shrink-0 cursor-pointer"
+                      title="Remove file"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <label className="text-[11px] font-mono font-bold text-slate-700">Server Local File Path</label>
+                <input
+                  type="text"
+                  placeholder="/Users/.../.claude/sessions/session.jsonl"
+                  value={ingestFilePath}
+                  onChange={(e) => setIngestFilePath(e.target.value)}
+                  className="w-full h-9 px-3 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono shadow-2xs"
+                />
+                <p className="text-[10px] text-slate-500">
+                  Useful for local CLI testing where the API server runs directly on your machine.
+                </p>
+              </div>
+            )}
 
             {ingestStatus && (
               <div
-                className={`p-2.5 rounded-lg text-xs font-mono ${
+                className={`p-2.5 rounded-xl text-xs font-mono border ${
                   ingestStatus.startsWith('Error')
-                    ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                    : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                    ? 'bg-rose-50 text-rose-700 border-rose-200'
+                    : 'bg-emerald-50 text-emerald-700 border-emerald-200'
                 }`}
               >
                 {ingestStatus}
@@ -1211,15 +1413,18 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
             <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
               <button
                 type="button"
-                onClick={() => setShowIngestModal(false)}
-                className="h-9 px-4 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 shadow-2xs"
+                onClick={() => {
+                  setShowIngestModal(false);
+                  setIngestStatus(null);
+                }}
+                className="h-9 px-3.5 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 shadow-2xs"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleIngest}
-                disabled={isIngesting || !ingestFilePath.trim()}
+                disabled={isIngesting || (ingestMode === 'upload' ? !selectedFile : !ingestFilePath.trim())}
                 className="h-9 px-4 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-slate-900 hover:bg-black text-white shadow-xs disabled:opacity-50"
               >
                 {isIngesting ? 'Ingesting...' : 'Ingest Log'}

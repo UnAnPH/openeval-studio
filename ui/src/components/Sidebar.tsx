@@ -176,7 +176,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             type="button"
             onClick={toggleCollapsed}
-            className="w-7 h-7 rounded-lg bg-[#1C182E] hover:bg-[#282342] text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer border border-[#2B2644]"
+            className="w-8 h-8 rounded-lg bg-[#1C182E] hover:bg-[#282342] text-slate-400 hover:text-white inline-flex items-center justify-center transition-colors cursor-pointer border border-[#2B2644]"
             title={collapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
           >
             <Icon icon={collapsed ? ChevronRight : ChevronLeft} className="text-xs" />
@@ -204,11 +204,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     type="button"
                     onClick={() => onTabChange(item.id)}
                     title={collapsed ? `${section.label}: ${item.label}` : item.label}
-                    className={`w-full flex items-center ${
-                      collapsed ? 'justify-center p-2.5' : 'justify-between px-3.5 py-2.5'
-                    } rounded-xl text-xs font-medium transition-all cursor-pointer relative group ${
+                    className={`w-full h-9 inline-flex items-center ${
+                      collapsed ? 'justify-center px-0' : 'justify-between px-3.5'
+                    } rounded-xl text-xs font-semibold transition-all cursor-pointer relative group ${
                       item.isActive
-                        ? 'bg-[#2E2682] text-white font-bold shadow-sm'
+                        ? 'bg-[#2E2682] text-white shadow-xs'
                         : 'text-slate-400 hover:text-slate-200 hover:bg-[#1C182E]'
                     }`}
                   >
@@ -260,7 +260,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <button
                 type="button"
                 onClick={onLogout}
-                className="text-[11px] text-purple-400 hover:text-purple-300 hover:underline cursor-pointer"
+                className="h-6 px-2 rounded-lg text-xs font-semibold text-purple-400 hover:text-purple-300 hover:bg-[#1C182E] transition-all cursor-pointer inline-flex items-center"
               >
                 Sign out
               </button>

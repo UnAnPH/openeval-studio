@@ -255,10 +255,10 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
             <button
               type="button"
               onClick={() => handleModeChange('enforce')}
-              className={`h-7 px-3 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all inline-flex items-center justify-center ${
+              className={`h-7 px-3 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all inline-flex items-center justify-center cursor-pointer ${
                 config.mode === 'enforce'
-                  ? 'bg-rose-600 text-white shadow-xs'
-                  : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/50'
+                  ? 'bg-rose-600 text-white shadow-xs font-bold'
+                  : 'text-slate-500 hover:text-slate-900'
               }`}
             >
               Enforce
@@ -266,10 +266,10 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
             <button
               type="button"
               onClick={() => handleModeChange('observe')}
-              className={`h-7 px-3 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all inline-flex items-center justify-center ${
+              className={`h-7 px-3 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all inline-flex items-center justify-center cursor-pointer ${
                 config.mode === 'observe'
-                  ? 'bg-brand-purple text-white shadow-xs'
-                  : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/50'
+                  ? 'bg-brand-purple text-white shadow-xs font-bold'
+                  : 'text-slate-500 hover:text-slate-900'
               }`}
             >
               Observe
@@ -277,10 +277,10 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
             <button
               type="button"
               onClick={() => handleModeChange('paused')}
-              className={`h-7 px-3 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all inline-flex items-center justify-center ${
+              className={`h-7 px-3 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all inline-flex items-center justify-center cursor-pointer ${
                 config.mode === 'paused'
-                  ? 'bg-slate-700 text-white shadow-xs'
-                  : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/50'
+                  ? 'bg-slate-700 text-white shadow-xs font-bold'
+                  : 'text-slate-500 hover:text-slate-900'
               }`}
             >
               Paused
@@ -299,8 +299,8 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
               onClick={() => setFilter('all')}
               className={`h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                 streamFilter === 'all'
-                  ? 'bg-white text-slate-900 shadow-2xs font-semibold'
-                  : 'text-slate-600 hover:text-slate-900 font-medium'
+                  ? 'bg-white text-slate-900 shadow-xs font-bold'
+                  : 'text-slate-500 hover:text-slate-900'
               }`}
             >
               <span>All</span>
@@ -311,10 +311,10 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
               onClick={() => setFilter('blocked')}
               className={`h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                 streamFilter === 'blocked'
-                  ? 'bg-rose-600 text-white shadow-xs font-semibold'
+                  ? 'bg-rose-600 text-white shadow-xs font-bold'
                   : totalBlockedCount > 0
-                  ? 'text-rose-600 hover:text-rose-700 font-semibold'
-                  : 'text-slate-600 hover:text-slate-900 font-medium'
+                  ? 'text-rose-600 hover:text-rose-700'
+                  : 'text-slate-500 hover:text-slate-900'
               }`}
             >
               <span>Blocked</span>
@@ -325,8 +325,8 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
               onClick={() => setFilter('closed')}
               className={`h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                 streamFilter === 'closed'
-                  ? 'bg-white text-slate-900 shadow-2xs font-semibold'
-                  : 'text-slate-600 hover:text-slate-900 font-medium'
+                  ? 'bg-white text-slate-900 shadow-xs font-bold'
+                  : 'text-slate-500 hover:text-slate-900'
               }`}
             >
               <span>Closed</span>
@@ -334,18 +334,18 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
             </button>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            {totalBlockedCount > 0 && (
+          <div className="flex items-center gap-2.5 shrink-0">
+            {/* {totalBlockedCount > 0 && (
               <button
                 type="button"
                 onClick={handleResolveAll}
                 disabled={isResolving}
-                className="h-9 px-3.5 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-slate-900 hover:bg-black text-white shadow-xs disabled:opacity-50"
+                className="h-9 px-4 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-slate-900 hover:bg-black text-white shadow-xs disabled:opacity-50"
                 title="Mark all blocked incidents as operator-allowed"
               >
                 <span>{isResolving ? 'Resolving...' : 'Resolve All'}</span>
               </button>
-            )}
+            )} */}
             {onNavigateToSessions && (
               <button
                 type="button"
@@ -403,13 +403,13 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
                       <div className="flex items-center gap-3 min-w-0 flex-1 mr-3">
                         <button
                           type="button"
-                          className="text-text-muted hover:text-text-primary transition-colors flex-shrink-0"
+                          className="w-8 h-8 rounded-lg text-text-muted hover:text-text-primary hover:bg-slate-100 transition-colors inline-flex items-center justify-center flex-shrink-0 cursor-pointer"
                           title={isExpanded ? 'Collapse' : 'Expand full command'}
                         >
                           <Icon icon={isExpanded ? ChevronUp : ChevronDown} className="text-sm" />
                         </button>
 
-                        <div className="flex items-center gap-1.5 font-mono text-[11px] text-text-muted flex-shrink-0 bg-canvas px-2.5 py-1 rounded-md border border-border-subtle">
+                        <div className="flex items-center gap-1.5 font-mono text-[11px] text-text-muted flex-shrink-0 bg-canvas px-2.5 py-1 rounded-lg border border-border-subtle">
                           <Icon icon={Clock} className="text-xs text-text-muted" />
                           <span className="font-semibold text-text-primary">{timeInfo.time}</span>
                           <span className="text-[10px] text-text-muted">({timeInfo.relative})</span>
@@ -464,7 +464,7 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
                             <button
                               type="button"
                               onClick={(e) => handleCopyText(v.full_command || v.action_preview, `cmd-${vIdx}`, e)}
-                              className="px-2.5 py-0.5 rounded bg-white hover:bg-canvas text-text-primary border border-border-subtle flex items-center gap-1 text-[10px] font-mono cursor-pointer transition-all shadow-2xs"
+                              className="h-8 px-2.5 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 inline-flex items-center justify-center gap-1.5 text-xs font-semibold cursor-pointer transition-all shadow-2xs"
                             >
                               <Icon
                                 icon={copiedKey === `cmd-${vIdx}` ? Check : Copy}
@@ -488,7 +488,7 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
                               <button
                                 type="button"
                                 onClick={(e) => handleCopyText(v.tool_result || '', `res-${vIdx}`, e)}
-                                className="px-2.5 py-0.5 rounded bg-white hover:bg-canvas text-text-primary border border-border-subtle flex items-center gap-1 text-[10px] font-mono cursor-pointer transition-all shadow-2xs"
+                                className="h-8 px-2.5 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 inline-flex items-center justify-center gap-1.5 text-xs font-semibold cursor-pointer transition-all shadow-2xs"
                               >
                                 <Icon
                                   icon={copiedKey === `res-${vIdx}` ? Check : Copy}

@@ -19,7 +19,7 @@ from engine.llm_runner import AsyncLLMRunner, LLMConfig
 from engine.react_agent import ReActAgent
 from engine.verifier import VerifierRunner
 from sandbox.docker_runner import create_sandbox_for_task
-from schemas.models import get_default_model, get_model_spec
+from schemas.models import get_default_model, get_model_spec, resolve_model_provider
 from schemas.task_spec import TaskSpec, load_task_spec
 
 logger = logging.getLogger("openeval.engine.sweep")
@@ -168,17 +168,14 @@ class BenchmarkSweeper:
         current_run = 0
 
         for model_id in models:
-            is_openai = (
-                model_id.startswith("gpt-")
-                or model_id.startswith("o1")
-                or model_id.startswith("o3")
-            )
-            provider = "openai" if is_openai else "google"
+            provider = resolve_model_provider(model_id)
 
             key = api_key
             if not key:
                 if provider == "google":
                     key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+                elif provider == "opencode":
+                    key = os.getenv("OPENCODE_API_KEY")
                 else:
                     key = os.getenv("OPENAI_API_KEY")
 

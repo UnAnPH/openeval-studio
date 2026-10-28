@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertCircle, Loader2, Play } from 'lucide-react';
+import { AlertCircle, Info, Loader2, Play } from 'lucide-react';
 
 import { Sidebar } from './components/Sidebar';
 import { LiveTrajectory } from './components/LiveTrajectory';
@@ -371,7 +371,15 @@ export function App() {
 
         if (sessionsRes && sessionsRes.ok) {
           const sessData = await sessionsRes.json();
-          setDiscoveredSessions(Array.isArray(sessData) && sessData.length > 0 ? sessData : currentDemoSessions);
+          const demoSess = Array.isArray(sessData)
+            ? sessData.filter(
+                (s: any) =>
+                  (s.session_id || '').includes('demo') ||
+                  (s.session_id || '').startsWith('demo-') ||
+                  (s.session_id || '').startsWith('redteam-')
+              )
+            : [];
+          setDiscoveredSessions(demoSess.length > 0 ? demoSess : currentDemoSessions);
         } else {
           setDiscoveredSessions(currentDemoSessions);
         }
@@ -386,7 +394,12 @@ export function App() {
                   return rev ? { ...r, ...rev } : r;
                 })
             : [];
-          setRunsHistory(activeOnly.length > 0 ? activeOnly : currentDemoRuns);
+          const seenRunIds = new Set(activeOnly.map((r) => r.run_id));
+          const combinedDemoRuns = [
+            ...activeOnly,
+            ...currentDemoRuns.filter((r) => !seenRunIds.has(r.run_id)),
+          ];
+          setRunsHistory(combinedDemoRuns.length > 0 ? combinedDemoRuns : currentDemoRuns);
         } else {
           setRunsHistory(currentDemoRuns);
         }
@@ -1003,7 +1016,7 @@ export function App() {
       setActiveRunId(null);
       setActiveRun(null);
       setLiveSteps([]);
-      setRunStatus('idle');
+      setRunStatus('');
     }
     if (selectedDetailRunId === runId) {
       setSelectedDetailRunId(null);
@@ -1034,7 +1047,7 @@ export function App() {
     setActiveRun(null);
     setSelectedDetailRunId(null);
     setLiveSteps([]);
-    setRunStatus('idle');
+    setRunStatus('');
 
     try {
       await fetch('/api/eval/runs/clear', { method: 'POST' }).catch(() => null);
@@ -1065,11 +1078,12 @@ export function App() {
 
   // Grouped models by provider
   const googleModels = models.filter((m) => m.provider === 'google');
+  const opencodeModels = models.filter((m) => m.provider === 'opencode');
   const localModels = models.filter((m) => m.provider === 'ollama' || m.provider === 'vllm');
   const anthropicModels = models.filter((m) => m.provider === 'anthropic');
   const openaiModels = models.filter((m) => m.provider === 'openai');
   const otherModels = models.filter(
-    (m) => !['google', 'ollama', 'vllm', 'anthropic', 'openai'].includes(m.provider)
+    (m) => !['google', 'opencode', 'ollama', 'vllm', 'anthropic', 'openai'].includes(m.provider)
   );
 
   return (
@@ -1132,7 +1146,7 @@ export function App() {
               </div>
               <a
                 href="/"
-                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-white/10 hover:bg-white/20 text-white transition-colors border border-white/20 hover:border-white/40 text-xs font-semibold"
+                className="inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors border border-white/20 hover:border-white/40 text-xs font-semibold cursor-pointer"
               >
                 <span>Live Studio (/)</span>
                 <span aria-hidden="true">&rarr;</span>
@@ -1300,20 +1314,22 @@ export function App() {
             {navTab === 'studio' && (
               <div className="flex flex-col h-full bg-[#fcfcfd] text-[#1e2029] font-sans p-6 space-y-6 overflow-y-auto">
                 {/* 1. Card Block Header */}
-                <div className="bg-white p-4 sm:p-5 rounded-2xl border border-border-subtle shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="flex items-center gap-4 flex-wrap">
-                    <h1 className="text-base font-bold text-[#111827] tracking-tight">Launch Evaluation</h1>
+                <div className="bg-white p-4 sm:p-5 rounded-2xl border border-border-subtle shadow-sm flex items-center justify-between shrink-0 flex-wrap gap-4">
+                  <div>
+                    <h1 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
+                      Launch Evaluation
+                    </h1>
+                  </div>
 
-                    <div className="h-4 w-px bg-slate-200 hidden sm:block" />
-
+                  <div className="flex items-center gap-2.5 flex-wrap">
                     {/* Task Dropdown */}
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
                       <span className="text-xs font-mono text-slate-500 font-medium">Task:</span>
                       <select
                         value={selectedTaskId}
                         onChange={(e) => setSelectedTaskId(e.target.value)}
                         disabled={isStreaming}
-                        className="bg-[#f9fafb] border border-[#e5e7eb] rounded-xl px-3 py-1.5 text-xs text-[#111827] font-medium focus:outline-none focus:border-indigo-500 cursor-pointer max-w-xs"
+                        className="h-9 bg-white border border-slate-200 rounded-xl pl-3 pr-8 text-xs text-slate-700 font-semibold focus:outline-none focus:border-indigo-500 cursor-pointer max-w-xs shadow-2xs"
                       >
                         <optgroup label="AI Safety Benchmarks (Inspect AI)">
                           {tasks.filter((t) => t.task_id.startsWith('inspect_evals/')).map((t) => (
@@ -1333,17 +1349,27 @@ export function App() {
                     </div>
 
                     {/* Model Dropdown */}
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
                       <span className="text-xs font-mono text-slate-500 font-medium">Model:</span>
                       <select
                         value={selectedModelId}
                         onChange={(e) => setSelectedModelId(e.target.value)}
                         disabled={isStreaming}
-                        className="bg-[#f9fafb] border border-[#e5e7eb] rounded-xl px-3 py-1.5 text-xs text-[#111827] font-medium focus:outline-none focus:border-indigo-500 cursor-pointer"
+                        className="h-9 bg-white border border-slate-200 rounded-xl pl-3 pr-8 text-xs text-slate-700 font-semibold focus:outline-none focus:border-indigo-500 cursor-pointer shadow-2xs"
                       >
                         {googleModels.length > 0 && (
                           <optgroup label={"Google Gemini" /* & Gemma */}>
                             {googleModels.map((m) => (
+                              <option key={m.id} value={m.id} className="bg-white text-text-primary">
+                                {m.name}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+
+                        {opencodeModels.length > 0 && (
+                          <optgroup label="OpenCode (Free Models)">
+                            {opencodeModels.map((m) => (
                               <option key={m.id} value={m.id} className="bg-white text-text-primary">
                                 {m.name}
                               </option>
@@ -1392,31 +1418,38 @@ export function App() {
                         )}
                       </select>
                     </div>
-                  </div>
 
-                  <div className="flex items-center gap-2.5">
-                    {/* Chaos Mode Switch */}
-                    <button
-                      type="button"
-                      onClick={() => setChaosMode(!chaosMode)}
-                      disabled={isStreaming}
-                      className={`h-9 px-3.5 rounded-xl border text-xs font-mono font-semibold inline-flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer ${
-                        chaosMode
-                          ? 'bg-amber-50 text-amber-800 border-amber-300'
-                          : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                      }`}
-                    >
-                      {chaosMode ? '🐒 Chaos: ON' : '🐒 Chaos: OFF'}
-                    </button>
+                    {/* Chaos Mode Switch with Info Tooltip */}
+                    <div className="relative group inline-flex items-center">
+                      <button
+                        type="button"
+                        onClick={() => setChaosMode(!chaosMode)}
+                        disabled={isStreaming}
+                        title="Injects POSIX transient faults (EX_TEMPFAIL 75), lock contention, and decoy verifiers into the Docker sandbox to benchmark agent fault recovery."
+                        className={`h-9 px-3.5 rounded-xl border text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer ${
+                          chaosMode
+                            ? 'bg-amber-50 text-amber-800 border-amber-300'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span>{chaosMode ? '🐒 Chaos: ON' : '🐒 Chaos: OFF'}</span>
+                        <Info className="w-3.5 h-3.5 text-slate-400 group-hover:text-amber-700 transition-colors shrink-0" />
+                      </button>
+
+                      {/* Tooltip Card */}
+                      <div className="absolute top-full right-0 mt-1.5 hidden group-hover:block w-80 p-2.5 bg-slate-900/95 text-slate-200 text-xs leading-relaxed rounded-xl shadow-xl border border-slate-700/80 backdrop-blur-md z-50 pointer-events-none animate-fadeIn font-normal font-sans">
+                        Injects POSIX transient faults (EX_TEMPFAIL 75), lock contention, and decoy verifiers into the Docker sandbox to benchmark agent fault recovery.
+                      </div>
+                    </div>
 
                     {/* Primary Action Button */}
                     {isStreaming ? (
                       <button
                         type="button"
                         onClick={handleStopEval}
-                        className="h-9 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-xs inline-flex items-center gap-1.5 transition-all cursor-pointer"
+                        className="h-9 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                       >
-                        <Loader2 className="w-3 h-3 text-white animate-spin" />
+                        <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />
                         <span>Stop Run</span>
                       </button>
                     ) : (
@@ -1425,7 +1458,7 @@ export function App() {
                           <button
                             type="button"
                             onClick={() => handleSelectPastRun(activeRunId)}
-                            className="h-9 px-3.5 rounded-xl bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold shadow-2xs inline-flex items-center gap-1.5 transition-all cursor-pointer"
+                            className="h-9 px-3.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold shadow-2xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                           >
                             <span>Inspect Run &rarr;</span>
                           </button>
@@ -1437,9 +1470,9 @@ export function App() {
                               setLiveSteps([]);
                               setActiveRun(null);
                               setActiveRunId(null);
-                              setRunStatus('idle');
+                              setRunStatus('');
                             }}
-                            className="h-9 px-3.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs inline-flex items-center gap-1.5 transition-all cursor-pointer"
+                            className="h-9 px-3.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold shadow-2xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                           >
                             <span>Clear</span>
                           </button>
@@ -1448,7 +1481,7 @@ export function App() {
                           type="button"
                           onClick={() => handleLaunchEval()}
                           disabled={!selectedTaskId || !serverConnected}
-                          className="h-9 px-4 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-semibold shadow-xs inline-flex items-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer"
+                          className="h-9 px-4 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-semibold shadow-xs inline-flex items-center justify-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer"
                         >
                           <Play className="w-3.5 h-3.5 fill-current" />
                           <span>Launch Evaluation</span>
@@ -1477,40 +1510,42 @@ export function App() {
                   <div className="lg:col-span-4 space-y-4">
                     <div className="bg-white rounded-2xl border border-border-subtle shadow-sm overflow-hidden flex flex-col h-[680px]">
                       {/* Sub-Tabs */}
-                      <div className="p-2 bg-canvas/60 border-b border-border-subtle flex items-center justify-between gap-1 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => setStudioInspectorTab('scorecard')}
-                          className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-medium transition-all text-center ${
-                            studioInspectorTab === 'scorecard'
-                              ? 'bg-white text-brand-primary font-bold shadow-sm'
-                              : 'text-text-secondary hover:text-text-primary'
-                          }`}
-                        >
-                          Scorecard
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setStudioInspectorTab('safety')}
-                          className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-medium transition-all text-center ${
-                            studioInspectorTab === 'safety'
-                              ? 'bg-white text-brand-primary font-bold shadow-sm'
-                              : 'text-text-secondary hover:text-text-primary'
-                          }`}
-                        >
-                          Safety Audits
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setStudioInspectorTab('task_info')}
-                          className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-medium transition-all text-center ${
-                            studioInspectorTab === 'task_info'
-                              ? 'bg-white text-brand-primary font-bold shadow-sm'
-                              : 'text-text-secondary hover:text-text-primary'
-                          }`}
-                        >
-                          Task Details
-                        </button>
+                      <div className="p-2 border-b border-border-subtle shrink-0">
+                        <div className="h-9 bg-slate-100 p-1 rounded-xl border border-slate-200/70 inline-flex items-center gap-1 w-full">
+                          <button
+                            type="button"
+                            onClick={() => setStudioInspectorTab('scorecard')}
+                            className={`flex-1 h-7 rounded-lg text-xs font-semibold inline-flex items-center justify-center transition-all cursor-pointer ${
+                              studioInspectorTab === 'scorecard'
+                                ? 'bg-white text-slate-900 shadow-xs font-bold'
+                                : 'text-slate-500 hover:text-slate-900'
+                            }`}
+                          >
+                            Scorecard
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setStudioInspectorTab('safety')}
+                            className={`flex-1 h-7 rounded-lg text-xs font-semibold inline-flex items-center justify-center transition-all cursor-pointer ${
+                              studioInspectorTab === 'safety'
+                                ? 'bg-white text-slate-900 shadow-xs font-bold'
+                                : 'text-slate-500 hover:text-slate-900'
+                            }`}
+                          >
+                            Safety Audits
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setStudioInspectorTab('task_info')}
+                            className={`flex-1 h-7 rounded-lg text-xs font-semibold inline-flex items-center justify-center transition-all cursor-pointer ${
+                              studioInspectorTab === 'task_info'
+                                ? 'bg-white text-slate-900 shadow-xs font-bold'
+                                : 'text-slate-500 hover:text-slate-900'
+                            }`}
+                          >
+                            Task Details
+                          </button>
+                        </div>
                       </div>
 
                       {/* Content Area */}

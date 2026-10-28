@@ -21,12 +21,14 @@ export interface SessionPickerModalProps {
 }
 
 export const sessionIsBlocked = (s: WatcherSession): boolean =>
+  s.status === 'blocked' ||
   (s.trajectory?.reviews || []).some(
     (r) =>
       (r.decision === 'block' || r.decision === 'deny' || r.decision === 'reject' || (r.score || 0) >= 8) &&
       r.human_override !== 'allow' &&
       r.resolution_status !== 'human_approved'
-  );
+  ) ||
+  Boolean((s as any).blocked_count && (s as any).blocked_count > 0);
 
 export const SessionPickerModal: React.FC<SessionPickerModalProps> = ({
   isOpen,
@@ -169,7 +171,7 @@ export const SessionPickerModal: React.FC<SessionPickerModalProps> = ({
               <select
                 value={agentFilter}
                 onChange={(e) => setAgentFilter(e.target.value)}
-                className="h-9 bg-white border border-slate-200 rounded-xl px-3 text-xs text-slate-700 font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-2xs cursor-pointer"
+                className="h-9 bg-white border border-slate-200 rounded-xl pl-3 pr-8 text-xs text-slate-700 font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-2xs cursor-pointer"
               >
                 <option value="all">All Agents ({uniqueAgents.length})</option>
                 {uniqueAgents.map((agent) => (
@@ -183,7 +185,7 @@ export const SessionPickerModal: React.FC<SessionPickerModalProps> = ({
               <select
                 value={modelFilter}
                 onChange={(e) => setModelFilter(e.target.value)}
-                className="h-9 bg-white border border-slate-200 rounded-xl px-3 text-xs text-slate-700 font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-2xs cursor-pointer"
+                className="h-9 bg-white border border-slate-200 rounded-xl pl-3 pr-8 text-xs text-slate-700 font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-2xs cursor-pointer"
               >
                 <option value="all">All Models ({uniqueModels.length})</option>
                 {uniqueModels.map((m) => (
@@ -200,8 +202,8 @@ export const SessionPickerModal: React.FC<SessionPickerModalProps> = ({
                   onClick={() => setStatusFilter('all')}
                   className={`h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center transition-all cursor-pointer ${
                     statusFilter === 'all'
-                      ? 'bg-white text-slate-900 shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
+                      ? 'bg-white text-slate-900 shadow-xs font-bold'
+                      : 'text-slate-500 hover:text-slate-900'
                   }`}
                 >
                   All
@@ -211,8 +213,8 @@ export const SessionPickerModal: React.FC<SessionPickerModalProps> = ({
                   onClick={() => setStatusFilter('blocked')}
                   className={`h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center transition-all cursor-pointer ${
                     statusFilter === 'blocked'
-                      ? 'bg-rose-600 text-white shadow-xs'
-                      : 'text-slate-600 hover:text-rose-600'
+                      ? 'bg-rose-600 text-white shadow-xs font-bold'
+                      : 'text-slate-500 hover:text-rose-600'
                   }`}
                 >
                   Blocked
@@ -222,8 +224,8 @@ export const SessionPickerModal: React.FC<SessionPickerModalProps> = ({
                   onClick={() => setStatusFilter('closed')}
                   className={`h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center transition-all cursor-pointer ${
                     statusFilter === 'closed'
-                      ? 'bg-slate-900 text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
+                      ? 'bg-slate-900 text-white shadow-xs font-bold'
+                      : 'text-slate-500 hover:text-slate-900'
                   }`}
                 >
                   Closed
@@ -237,7 +239,7 @@ export const SessionPickerModal: React.FC<SessionPickerModalProps> = ({
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as any)}
-                className="h-9 bg-white border border-slate-200 rounded-xl px-3 text-xs text-slate-700 font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-2xs cursor-pointer"
+                className="h-9 bg-white border border-slate-200 rounded-xl pl-3 pr-8 text-xs text-slate-700 font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-2xs cursor-pointer"
               >
                 <option value="newest">Newest First</option>
                 <option value="oldest">Oldest First</option>
@@ -261,7 +263,7 @@ export const SessionPickerModal: React.FC<SessionPickerModalProps> = ({
             filteredSessions.map((s) => {
               const isSelected = s.session_id === selectedSessionId;
               const isBlocked = sessionIsBlocked(s);
-              const isActive = s.status === 'working' || s.status === 'active' || s.status === 'running';
+              const isActive = !isBlocked && (s.status === 'working' || s.status === 'active' || s.status === 'running');
               const msgsCount = s.trajectory?.messages?.length || 0;
               const toolsCount = s.trajectory?.tool_calls?.length || 0;
               const dateStr = s.created_at
@@ -403,7 +405,7 @@ export const SessionPickerModal: React.FC<SessionPickerModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="h-9 px-5 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-slate-900 hover:bg-black text-white shadow-xs"
+            className="h-9 px-4 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-slate-900 hover:bg-black text-white shadow-xs"
           >
             Done
           </button>

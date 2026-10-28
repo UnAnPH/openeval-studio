@@ -166,12 +166,26 @@ def refresh_demo_timeline(
                 )
                 ws._trajectories[cache_key] = session.trajectory
                 ws._reviews[cache_key] = session.trajectory.reviews
+            if session.steps:
+                for s_idx, step in enumerate(session.steps):
+                    step_ts = target_dt.timestamp() + s_idx * 3.0
+                    if isinstance(step, dict):
+                        step["timestamp"] = step_ts
+                    elif hasattr(step, "timestamp"):
+                        step.timestamp = step_ts
 
     for idx, run in enumerate(rs._runs.values()):
-        if run.org_id == "demo" or (run.session_id and not run.session_id.startswith("eval-")):
+        if run.org_id == "demo" or (run.session_id and run.session_id.startswith("eval-")):
             target_dt = timeline[idx % len(timeline)]
             run.created_at = target_dt.isoformat()
             run.updated_at = (target_dt + timedelta(minutes=5)).isoformat()
+            if hasattr(run, "steps") and run.steps:
+                for s_idx, step in enumerate(run.steps):
+                    step_ts = target_dt.timestamp() + s_idx * 3.0
+                    if isinstance(step, dict):
+                        step["timestamp"] = step_ts
+                    elif hasattr(step, "timestamp"):
+                        step.timestamp = step_ts
 
     non_demo_verdicts = [
         v
@@ -320,9 +334,17 @@ def seed_demo_data(
             try:
                 data = json.loads(f.read_text(encoding="utf-8"))
                 session = Session.model_validate(data)
+                session.org_id = "demo"
                 target_dt = timeline[idx % len(timeline)]
                 session.created_at = target_dt.isoformat()
                 session.updated_at = (target_dt + timedelta(minutes=5)).isoformat()
+                if session.steps:
+                    for s_idx, step in enumerate(session.steps):
+                        step_ts = target_dt.timestamp() + s_idx * 3.0
+                        if isinstance(step, dict):
+                            step["timestamp"] = step_ts
+                        elif hasattr(step, "timestamp"):
+                            step.timestamp = step_ts
                 rs.save_run(session)
                 seeded_evals += 1
             except Exception as exc:

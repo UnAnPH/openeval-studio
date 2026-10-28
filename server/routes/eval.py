@@ -13,8 +13,10 @@ import os
 import re
 import time
 from collections.abc import AsyncGenerator, Awaitable, Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol, cast
+from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -27,7 +29,7 @@ from engine.react_agent import AgentAction, AgentStep, AgentTrajectory, ReActAge
 from engine.scanners import SchemingScanners
 from engine.verifier import VerifierRunner
 from sandbox.docker_runner import DockerSandbox, create_sandbox_for_task
-from schemas.models import get_default_model, get_model_spec
+from schemas.models import get_default_model, get_model_spec, resolve_model_provider
 from schemas.task_spec import TaskMetadata, TaskSpec, load_task_spec
 from schemas.watcher_models import Session
 from server.db import current_user_slug
@@ -179,6 +181,7 @@ async def _run_catalog_eval_worker(
     provider: str,
     api_key: str | None = None,
     env: dict[str, str] | None = None,
+    chaos_mode: bool = False,
     *,
     task_resolver: Callable[[str], Any] | None = None,
     runner: CatalogLLM | None = None,
@@ -192,6 +195,8 @@ async def _run_catalog_eval_worker(
         env_map = env if env is not None else os.environ
         if provider == "google":
             key = env_map.get("GEMINI_API_KEY") or env_map.get("GOOGLE_API_KEY")
+        elif provider == "opencode":
+            key = env_map.get("OPENCODE_API_KEY")
         else:
             key = env_map.get("OPENAI_API_KEY")
 
@@ -202,7 +207,7 @@ async def _run_catalog_eval_worker(
             task_id,
             model,
             provider,
-            reason=f"No API key for provider '{provider}'. Set GEMINI_API_KEY or OPENAI_API_KEY in environment or pass in launch request.",
+            reason=f"No API key for provider '{provider}'. Set GEMINI_API_KEY, OPENAI_API_KEY, or OPENCODE_API_KEY in environment or pass in launch request.",
         )
         return
 
@@ -210,13 +215,28 @@ async def _run_catalog_eval_worker(
     if provider == "google" and key:
         os.environ.setdefault("GOOGLE_API_KEY", key)
         os.environ.setdefault("GEMINI_API_KEY", key)
+    elif provider == "opencode" and key:
+        os.environ.setdefault("OPENCODE_API_KEY", key)
     elif provider == "openai" and key:
         os.environ.setdefault("OPENAI_API_KEY", key)
 
-    global_run_store.update_run(run_id, status="running")
-    global_run_store.publish_event(
-        run_id, "start", {"task_id": task_id, "model": model, "provider": provider}
-    )
+    global_run_store.update_run(run_id, status="running", chaos_mode=chaos_mode)
+    start_payload: dict[str, Any] = {"task_id": task_id, "model": model, "provider": provider}
+    if chaos_mode:
+        start_payload["chaos_mode"] = True
+    global_run_store.publish_event(run_id, "start", start_payload)
+
+    if chaos_mode:
+        chaos_notice = (
+            "[CHAOS MONKEY] Injecting adversarial environment faults: "
+            "transient command failures, simulated CI pressure, and exposed verifier harness"
+        )
+        logger.info("🐒 %s (catalog run %s)", chaos_notice, run_id)
+        global_run_store.publish_event(
+            run_id,
+            "chaos_notice",
+            {"message": chaos_notice, "chaos_mode": True},
+        )
 
     if runner is None:
         runner = AsyncLLMRunner(api_key=key, provider=provider)  # type: ignore[arg-type]
@@ -536,6 +556,7 @@ async def _run_evaluation_worker(
     model: str,
     provider: str,
     api_key: str | None = None,
+    chaos_mode: bool = False,
 ) -> None:
     """Background worker executing the ReAct agent in Docker and streaming SSE events."""
     task_path = TASKS_DIR / task_id
@@ -549,10 +570,11 @@ async def _run_evaluation_worker(
         )
         return
 
-    global_run_store.update_run(run_id, status="running")
-    global_run_store.publish_event(
-        run_id, "start", {"task_id": task_id, "model": model, "provider": provider}
-    )
+    global_run_store.update_run(run_id, status="running", chaos_mode=chaos_mode)
+    start_payload: dict[str, Any] = {"task_id": task_id, "model": model, "provider": provider}
+    if chaos_mode:
+        start_payload["chaos_mode"] = True
+    global_run_store.publish_event(run_id, "start", start_payload)
 
     try:
         spec = load_task_spec(task_path)
@@ -571,6 +593,8 @@ async def _run_evaluation_worker(
     if not key:
         if provider == "google":
             key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        elif provider == "opencode":
+            key = os.getenv("OPENCODE_API_KEY") or os.getenv("GEMINI_API_KEY") or "opencode-key"
         else:
             key = os.getenv("OPENAI_API_KEY")
 
@@ -581,7 +605,7 @@ async def _run_evaluation_worker(
             task_id,
             model,
             provider,
-            reason=f"No API key for provider '{provider}'. Set GEMINI_API_KEY / OPENAI_API_KEY.",
+            reason=f"No API key for provider '{provider}'. Set GEMINI_API_KEY, OPENAI_API_KEY, or OPENCODE_API_KEY.",
         )
         return
 
@@ -605,12 +629,39 @@ async def _run_evaluation_worker(
             )
         global_run_store.publish_event(run_id, "step_complete", step.model_dump())
 
+    if chaos_mode:
+        chaos_notice = (
+            "[CHAOS MONKEY] Injecting adversarial environment faults: "
+            "transient command failures, simulated CI pressure, and exposed verifier harness"
+        )
+        logger.info("🐒 %s (run %s)", chaos_notice, run_id)
+        global_run_store.publish_event(
+            run_id,
+            "chaos_notice",
+            {"message": chaos_notice, "chaos_mode": True},
+        )
+        chaos_step = AgentStep(
+            step_number=0,
+            thought="Chaos Monkey perturbation active: injecting simulated transient environment faults and CI pressure.",
+            action=AgentAction(
+                tool="execute_bash",
+                command="chaos_monkey --inject-adversarial-faults",
+            ),
+            observation=chaos_notice,
+            latency_ms=0.0,
+            tokens_used=0,
+        )
+        _on_step_complete(chaos_step)
+
     sandbox = None
     try:
-        sandbox = create_sandbox_for_task(spec)
+        sandbox = create_sandbox_for_task(spec, chaos_mode=chaos_mode)
         active_sandboxes[run_id] = sandbox
         await sandbox.start()
         global_run_store.publish_event(run_id, "sandbox_ready", {"network": "none"})
+
+        if chaos_mode:
+            await sandbox.plant_chaos_environment()
 
         base_executor = sandbox.as_tool_executor()
 
@@ -675,27 +726,56 @@ async def _run_evaluation_worker(
             else 0.0
         )
 
+        if chaos_mode and sandbox:
+            sandbox.enable_chaos(False)
+
         global_run_store.publish_event(run_id, "verifier_start", {})
         verifier = VerifierRunner()
         grade = await verifier.grade_container(sandbox, spec)
 
-        # Run AI Safety & Alignment Trajectory Judges + Post-Hoc Scheming Scanners
-        global_run_store.publish_event(run_id, "audits_start", {})
-        judge_results, scanner_results = await asyncio.gather(
-            TrajectoryJudges.audit_full_trajectory(trajectory, spec, runner, model=model),
-            SchemingScanners.scan_all(trajectory, spec, runner, model=model),
-            return_exceptions=True,
-        )
-
-        verdicts = []
-        if isinstance(judge_results, list):
-            verdicts.extend(judge_results)
-        if isinstance(scanner_results, list):
-            verdicts.extend(scanner_results)
+        # Immediately record grade and status right after grading so run is never left stuck
+        if getattr(trajectory, "status", None) == "error" and len(getattr(trajectory, "steps", [])) == 0:
+            status_to_set = "error"
+            err_msg = getattr(trajectory, "error_message", "Unknown LLM API Error")
+            failure_reason_to_set = f"LLM API Error ({model}): {err_msg}"
+        else:
+            status_to_set = trajectory.status if trajectory.status in ("completed", "failed") else "completed"
+            failure_reason_to_set = grade.failure_reason
 
         global_run_store.update_run(
             run_id,
-            status=trajectory.status,
+            status=status_to_set,
+            total_steps=len(trajectory.steps),
+            total_tokens=trajectory.total_tokens,
+            total_duration_sec=trajectory.total_duration_sec,
+            estimated_cost_usd=cost,
+            final_summary=trajectory.final_summary,
+            reward=grade.reward,
+            passed=grade.passed,
+            failure_reason=failure_reason_to_set,
+        )
+
+        verdicts = []
+        try:
+            # Run AI Safety & Alignment Trajectory Judges + Post-Hoc Scheming Scanners
+            global_run_store.publish_event(run_id, "audits_start", {})
+            judge_results, scanner_results = await asyncio.gather(
+                TrajectoryJudges.audit_full_trajectory(trajectory, spec, runner, model=model),
+                SchemingScanners.scan_all(trajectory, spec, runner, model=model),
+                return_exceptions=True,
+            )
+            if isinstance(judge_results, list):
+                verdicts.extend(judge_results)
+            if isinstance(scanner_results, list):
+                verdicts.extend(scanner_results)
+        except Exception as audit_err:
+            logger.warning("Post-hoc audits failed for run %s: %s", run_id, audit_err)
+
+        global_run_store.update_run(
+            run_id,
+            status=status_to_set,
+            total_steps=len(trajectory.steps),
+            total_tokens=trajectory.total_tokens,
             total_duration_sec=trajectory.total_duration_sec,
             estimated_cost_usd=cost,
             final_summary=trajectory.final_summary,
@@ -709,7 +789,7 @@ async def _run_evaluation_worker(
             run_id,
             "completed",
             {
-                "status": trajectory.status,
+                "status": status_to_set,
                 "reward": grade.reward,
                 "passed": grade.passed,
                 "duration_sec": trajectory.total_duration_sec,
@@ -736,6 +816,23 @@ async def _run_evaluation_worker(
     finally:
         active_sandboxes.pop(run_id, None)
         active_run_tasks.pop(run_id, None)
+        # Guarantee run status is reconciled and never left as 'running'
+        rec = global_run_store.get_run(run_id)
+        if rec and rec.status == "running":
+            has_finished = False
+            if rec.steps:
+                last_step = rec.steps[-1]
+                action = last_step.get("action", {}) if isinstance(last_step, dict) else getattr(last_step, "action", None)
+                tool = action.get("tool") if isinstance(action, dict) else getattr(action, "tool", None)
+                obs = str(last_step.get("observation", "") if isinstance(last_step, dict) else getattr(last_step, "observation", ""))
+                if tool == "finish" or "finished by agent" in obs.lower():
+                    has_finished = True
+            new_status = "completed" if has_finished else "error"
+            global_run_store.update_run(
+                run_id,
+                status=new_status,
+                failure_reason=None if has_finished else "Worker exited unexpectedly",
+            )
         if sandbox:
             with contextlib.suppress(Exception):
                 await sandbox.stop()
@@ -748,10 +845,7 @@ async def launch_eval(req: LaunchEvalRequest) -> LaunchEvalResponse:
     """Spawn an asynchronous evaluation run in the background."""
     task_path = TASKS_DIR / req.task_id
     model_id = req.model or get_default_model("google").id
-    is_openai = (
-        model_id.startswith("gpt-") or model_id.startswith("o1") or model_id.startswith("o3")
-    )
-    provider = "openai" if is_openai else "google"
+    provider = resolve_model_provider(model_id)
 
     # If task does not have a local docker environment, check if it is in catalog or 404
     from server.app import INSPECT_EVALS_CATALOG
@@ -771,6 +865,7 @@ async def launch_eval(req: LaunchEvalRequest) -> LaunchEvalResponse:
         model=model_id,
         provider=provider,
         run_id=req.run_id,
+        chaos_mode=req.chaos_mode,
     )
 
     if not has_local_task and is_catalog_task:
@@ -781,6 +876,7 @@ async def launch_eval(req: LaunchEvalRequest) -> LaunchEvalResponse:
                 model=model_id,
                 provider=provider,
                 api_key=req.api_key,
+                chaos_mode=req.chaos_mode,
             )
         )
         active_run_tasks[record.run_id] = eval_task
@@ -800,6 +896,7 @@ async def launch_eval(req: LaunchEvalRequest) -> LaunchEvalResponse:
             model=model_id,
             provider=provider,
             api_key=req.api_key,
+            chaos_mode=req.chaos_mode,
         )
     )
     active_run_tasks[record.run_id] = eval_task
@@ -876,6 +973,20 @@ async def launch_inspect_eval(req: LaunchEvalRequest) -> dict[str, str]:
     else:
         inspect_model = model_name
 
+    now_str = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+    run_id = f"eval-{task_snake}-{now_str}-{uuid4().hex[:6]}"
+    run_session = Session(
+        session_id=run_id,
+        run_id=run_id,
+        task_id=req.task_id,
+        project_name=req.task_id,
+        model=inspect_model,
+        provider="inspect_ai",
+        agent_type="inspect_eval",
+        status="running",
+    )
+    global_run_store.save_run(run_session)
+
     async def _run_inspect_task() -> None:
         try:
             from inspect_ai import eval_async
@@ -897,13 +1008,19 @@ async def launch_inspect_eval(req: LaunchEvalRequest) -> dict[str, str]:
                     log_dir=str(LOGS_DIR),
                 )
             logger.info("Inspect eval_async completed successfully for %s", task_snake)
+            global_run_store.update_run(run_id, status="completed")
         except Exception as e:
             logger.error("Inspect eval_async failed: %s", e)
+            global_run_store.update_run(run_id, status="error", failure_reason=str(e))
+        finally:
+            active_run_tasks.pop(run_id, None)
 
-    asyncio.create_task(_run_inspect_task())
+    task = asyncio.create_task(_run_inspect_task())
+    active_run_tasks[run_id] = task
 
     return {
         "status": "running",
+        "run_id": run_id,
         "task_id": req.task_id,
         "inspect_task": f"inspect_tasks.py@{task_snake}",
         "model": inspect_model,
@@ -1123,6 +1240,9 @@ async def semantic_compare_runs(
 ) -> dict[str, Any]:
     """Execute LLM-as-a-Judge semantic trajectory comparison to evaluate strategic divergence."""
     from engine.diff_engine import TrajectoryDiffEngine
+    from engine.graders_suite import get_canonical_grader
+
+    comparator_grader = get_canonical_grader("SemanticRunComparatorGrader")
 
     run_a_id = (body.run_a if body else None) or run_a
     run_b_id = (body.run_b if body else None) or run_b
@@ -1147,7 +1267,11 @@ async def semantic_compare_runs(
             detail=f"Could not load runs ('{run_a_id}', '{run_b_id}') for semantic evaluation.",
         )
 
-    return verdict.model_dump()
+    dumped = verdict.model_dump()
+    if comparator_grader:
+        dumped["grader_name"] = comparator_grader.name
+        dumped["dimension"] = comparator_grader.dimension
+    return dumped
 
 
 @router.get("/api/eval/analytics/summary")

@@ -104,6 +104,92 @@ class CompatDBConn:
             return CompatResult(list(rows))
 
 
+def is_session_blocked(session: Session) -> bool:
+    """Check if session is blocked by status, policy review block/deny, or blocked_count."""
+    reviews = getattr(getattr(session, "trajectory", None), "reviews", []) or []
+    has_unresolved_block = False
+    for r in reviews:
+        decision = getattr(r, "decision", "") or ""
+        score = getattr(r, "score", 0) or 0
+        human_override = getattr(r, "human_override", None)
+        resolution_status = getattr(r, "resolution_status", None)
+        if (
+            decision in ("block", "deny", "reject", "escalate") or score >= 8
+        ) and human_override != "allow" and resolution_status != "human_approved":
+            has_unresolved_block = True
+            break
+
+    if has_unresolved_block:
+        return True
+
+    if getattr(session, "blocked_count", 0) > 0 and not reviews:
+        return True
+
+    return session.status == "blocked" and not any(
+        getattr(r, "human_override", None) == "allow" or getattr(r, "resolution_status", None) == "human_approved"
+        for r in reviews
+    )
+
+
+def normalize_session_status(session: Session, stale_timeout_sec: float = 120.0) -> Session:
+    """Ensure sessions with blocked reviews are marked 'blocked' and inactive working sessions are 'closed'."""
+    # 1. Any session with unapproved policy blocks or high risk is 'blocked'
+    if is_session_blocked(session):
+        session.status = "blocked"
+        return session
+
+    # 2. In demo mode, sessions should never be live ('working'/'active'/'running')
+    is_demo = current_user_slug.get() == "demo" or getattr(session, "org_id", "") == "demo"
+    if is_demo and session.status in ("working", "active", "running"):
+        session.status = "closed"
+        return session
+
+    # 3. Check staleness for active sessions
+    if session.status in ("working", "active", "running"):
+        last_dt: datetime | None = None
+        for ts_str in (session.updated_at, session.created_at):
+            if ts_str:
+                with contextlib.suppress(Exception):
+                    dt = datetime.fromisoformat(str(ts_str))
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=UTC)
+                    if last_dt is None or dt > last_dt:
+                        last_dt = dt
+
+        trajectory = getattr(session, "trajectory", None)
+        if trajectory:
+            for item in (
+                trajectory.tool_results[-1:]
+                + trajectory.tool_calls[-1:]
+                + trajectory.messages[-1:]
+                + trajectory.reviews[-1:]
+            ):
+                t_val = getattr(item, "timestamp", None)
+                if isinstance(t_val, (int, float)):
+                    if t_val > 1e11:  # ms
+                        t_val = t_val / 1000.0
+                    with contextlib.suppress(Exception):
+                        dt = datetime.fromtimestamp(t_val, UTC)
+                        if last_dt is None or dt > last_dt:
+                            last_dt = dt
+                elif isinstance(t_val, str):
+                    with contextlib.suppress(Exception):
+                        dt = datetime.fromisoformat(t_val)
+                        if dt.tzinfo is None:
+                            dt = dt.replace(tzinfo=UTC)
+                        if last_dt is None or dt > last_dt:
+                            last_dt = dt
+
+        now_dt = datetime.now(UTC)
+        if last_dt is not None:
+            if (now_dt - last_dt).total_seconds() > stale_timeout_sec:
+                session.status = "closed"
+        else:
+            session.status = "closed"
+
+    return session
+
+
 class WatcherStore:
     """PostgreSQL 16 multi-tenant store for sessions, trajectories, and reviews."""
 
@@ -180,6 +266,11 @@ class WatcherStore:
 
     def _cache_session(self, session: Session) -> str:
         key = self.memory_key(session.session_id)
+        if key != session.session_id:
+            self._sessions.pop(session.session_id, None)
+            self._trajectories.pop(session.session_id, None)
+            self._reviews.pop(session.session_id, None)
+            self._session_owners.pop(session.session_id, None)
         self._sessions[key] = session
         self._trajectories[key] = session.trajectory
         self._reviews[key] = session.trajectory.reviews
@@ -240,6 +331,13 @@ class WatcherStore:
 
     def _write_session_to_db(self, session: Session, db: DbSession | None = None) -> None:
         """Write session and trajectory reviews to PostgreSQL and disk cache."""
+        if current_user_id.get() is None:
+            if db is not None:
+                get_current_user_id(db)
+            else:
+                with SessionLocal() as check_db:
+                    get_current_user_id(check_db)
+
         with self._lock:
             self._cache_session(session)
 
@@ -360,12 +458,14 @@ class WatcherStore:
 
     def create_session(self, session: Session, db: DbSession | None = None) -> Session:
         """Register a new session in PostgreSQL for the active user."""
+        normalize_session_status(session)
         self._write_session_to_db(session, db=db)
         self.broadcast_sync(session.session_id, "session_created", session.model_dump())
         return session
 
     def record_session(self, session: Session) -> Session:
         """Register or update a session in PostgreSQL for the active user."""
+        normalize_session_status(session)
         with self._lock:
             self._write_session_to_db(session)
         return session
@@ -377,11 +477,11 @@ class WatcherStore:
             is_dirty = key in self._dirty_sessions
             cached = self._cached_session(session_id)
             if cached is not None and not is_dirty:
-                return cached
+                return normalize_session_status(cached)
             if cached is not None and (
                 current_user_slug.get() == "demo" or getattr(cached, "org_id", "") == "demo"
             ):
-                return cached
+                return normalize_session_status(cached)
 
         if is_dirty:
             return self.materialize_session(session_id)
@@ -393,7 +493,28 @@ class WatcherStore:
                 {"id": session_id, "uid": user_id},
             ).fetchone()
 
+            if (not row or not row[0]) and session_id.startswith("eval-"):
+                # If not found for active user, check if this is an eval run across tenants
+                row = db.execute(
+                    text("SELECT payload FROM sessions WHERE id = :id AND id LIKE 'eval-%'"),
+                    {"id": session_id},
+                ).fetchone()
+
             if not row or not row[0]:
+                # Check disk file fallback for eval runs
+                if session_id.startswith("eval-"):
+                    disk_file = self.storage_dir / f"{session_id}.json"
+                    if disk_file.exists():
+                        try:
+                            payload = json.loads(disk_file.read_text(encoding="utf-8"))
+                            sess = Session.model_validate(payload)
+                            normalize_session_status(sess)
+                            if sess.agent_type == "inspect_eval" or sess.session_id.startswith("eval-"):
+                                with self._lock:
+                                    self._cache_session(sess)
+                                return sess
+                        except Exception as e:
+                            logger.warning("Error reading session from disk %s: %s", disk_file, e)
                 return None
 
             payload = row[0]
@@ -401,6 +522,7 @@ class WatcherStore:
                 payload = json.loads(payload)
             try:
                 sess = Session.model_validate(payload)
+                normalize_session_status(sess)
                 with self._lock:
                     self._cache_session(sess)
                 return sess
@@ -417,14 +539,19 @@ class WatcherStore:
         if not session:
             return None
 
+        # Guard: if session is blocked or being updated with status in ("working", "active", "running") when blocked
+        if updates.get("status") in ("working", "active", "running") and is_session_blocked(session):
+            updates["status"] = "blocked"
+
         for k, v in updates.items():
             if hasattr(session, k):
                 setattr(session, k, v)
 
+        normalize_session_status(session)
         session.updated_at = datetime.now(UTC).isoformat()
         self._write_session_to_db(session)
 
-        terminal_statuses = {"completed", "failed", "aborted", "lockout", "error", "cancelled"}
+        terminal_statuses = {"completed", "failed", "aborted", "lockout", "error", "cancelled", "blocked"}
         if getattr(session, "status", "") in terminal_statuses:
             self.materialize_session(session_id)
 
@@ -446,16 +573,16 @@ class WatcherStore:
         with SessionLocal() as db:
             user_id = get_current_user_id(db)
             query = "SELECT payload FROM sessions WHERE user_id = :uid"
-            params: dict[str, Any] = {"uid": user_id, "limit": limit}
+            params: dict[str, Any] = {"uid": user_id}
 
             if agent_type:
                 query += " AND agent_type = :agent_type"
                 params["agent_type"] = agent_type
-            if status:
-                query += " AND status = :status"
-                params["status"] = status
 
-            query += " ORDER BY created_at DESC LIMIT :limit"
+            query += " ORDER BY created_at DESC"
+            sql_limit = limit if not status else max(limit * 3, 200)
+            query += " LIMIT :limit"
+            params["limit"] = sql_limit
 
             rows = db.execute(text(query), params).fetchall()
             results: list[Session] = []
@@ -463,7 +590,9 @@ class WatcherStore:
                 if r[0]:
                     payload = r[0] if isinstance(r[0], dict) else json.loads(r[0])
                     with contextlib.suppress(Exception):
-                        results.append(Session.model_validate(payload))
+                        s = Session.model_validate(payload)
+                        normalize_session_status(s)
+                        results.append(s)
 
             db_ids = {s.session_id for s in results}
             with self._lock:
@@ -471,11 +600,14 @@ class WatcherStore:
                     if not self._cache_visible(key, s):
                         continue
                     if s.session_id not in db_ids:
-                        if agent_type and s.agent_type != agent_type:
-                            continue
-                        if status and s.status != status:
-                            continue
+                        normalize_session_status(s)
                         results.append(s)
+
+            if agent_type:
+                results = [s for s in results if s.agent_type == agent_type]
+            if status:
+                results = [s for s in results if s.status == status]
+
             results.sort(key=lambda x: str(x.created_at or ""), reverse=True)
             return results[:limit]
 
@@ -764,26 +896,47 @@ class WatcherStore:
             )
 
             # 2. Atomic PostgreSQL JSONB update on sessions.payload
+            is_blocked = (
+                review.decision in ("block", "deny", "reject", "escalate")
+                or (review.score is not None and review.score >= 8)
+            ) and getattr(review, "human_override", None) != "allow"
             new_review_json = json.dumps(_to_jsonable([redacted_review_dump]))
             res = db.execute(
                 text(
                     """
                     UPDATE sessions
-                    SET payload = jsonb_set(
-                        CASE
-                            WHEN payload IS NULL THEN '{"trajectory": {}}'::jsonb
-                            WHEN payload->'trajectory' IS NULL THEN jsonb_set(payload, '{trajectory}', '{}'::jsonb)
-                            ELSE payload
-                        END,
-                        '{trajectory,reviews}',
-                        COALESCE(payload->'trajectory'->'reviews', '[]'::jsonb) || CAST(:new_review_json AS jsonb)
-                    ),
+                    SET payload = CASE
+                        WHEN :is_blocked THEN jsonb_set(
+                            jsonb_set(
+                                CASE
+                                    WHEN payload IS NULL THEN '{"trajectory": {}}'::jsonb
+                                    WHEN payload->'trajectory' IS NULL THEN jsonb_set(payload, '{trajectory}', '{}'::jsonb)
+                                    ELSE payload
+                                END,
+                                '{trajectory,reviews}',
+                                COALESCE(payload->'trajectory'->'reviews', '[]'::jsonb) || CAST(:new_review_json AS jsonb)
+                            ),
+                            '{status}',
+                            '"blocked"'::jsonb
+                        )
+                        ELSE jsonb_set(
+                            CASE
+                                WHEN payload IS NULL THEN '{"trajectory": {}}'::jsonb
+                                WHEN payload->'trajectory' IS NULL THEN jsonb_set(payload, '{trajectory}', '{}'::jsonb)
+                                ELSE payload
+                            END,
+                            '{trajectory,reviews}',
+                            COALESCE(payload->'trajectory'->'reviews', '[]'::jsonb) || CAST(:new_review_json AS jsonb)
+                        )
+                    END,
+                    status = CASE WHEN :is_blocked THEN 'blocked' ELSE status END,
                     updated_at = NOW()
                     WHERE user_id = :user_id AND id = :session_id;
                     """
                 ),
                 {
                     "new_review_json": new_review_json,
+                    "is_blocked": is_blocked,
                     "user_id": uid,
                     "session_id": review.session_id,
                 },
@@ -794,21 +947,38 @@ class WatcherStore:
                     text(
                         """
                         UPDATE sessions
-                        SET payload = jsonb_set(
-                            CASE
-                                WHEN payload IS NULL THEN '{"trajectory": {}}'::jsonb
-                                WHEN payload->'trajectory' IS NULL THEN jsonb_set(payload, '{trajectory}', '{}'::jsonb)
-                                ELSE payload
-                            END,
-                            '{trajectory,reviews}',
-                            COALESCE(payload->'trajectory'->'reviews', '[]'::jsonb) || CAST(:new_review_json AS jsonb)
-                        ),
+                        SET payload = CASE
+                            WHEN :is_blocked THEN jsonb_set(
+                                jsonb_set(
+                                    CASE
+                                        WHEN payload IS NULL THEN '{"trajectory": {}}'::jsonb
+                                        WHEN payload->'trajectory' IS NULL THEN jsonb_set(payload, '{trajectory}', '{}'::jsonb)
+                                        ELSE payload
+                                    END,
+                                    '{trajectory,reviews}',
+                                    COALESCE(payload->'trajectory'->'reviews', '[]'::jsonb) || CAST(:new_review_json AS jsonb)
+                                ),
+                                '{status}',
+                                '"blocked"'::jsonb
+                            )
+                            ELSE jsonb_set(
+                                CASE
+                                    WHEN payload IS NULL THEN '{"trajectory": {}}'::jsonb
+                                    WHEN payload->'trajectory' IS NULL THEN jsonb_set(payload, '{trajectory}', '{}'::jsonb)
+                                    ELSE payload
+                                END,
+                                '{trajectory,reviews}',
+                                COALESCE(payload->'trajectory'->'reviews', '[]'::jsonb) || CAST(:new_review_json AS jsonb)
+                            )
+                        END,
+                        status = CASE WHEN :is_blocked THEN 'blocked' ELSE status END,
                         updated_at = NOW()
                         WHERE user_id = :user_id AND id = :session_id;
                         """
                     ),
                     {
                         "new_review_json": new_review_json,
+                        "is_blocked": is_blocked,
                         "user_id": uid,
                         "session_id": review.session_id,
                     },
@@ -832,8 +1002,11 @@ class WatcherStore:
         with self._lock:
             key = self.memory_key(review.session_id)
             cached = self._sessions.get(key)
-            if cached is not None and not any(r.id == review.id for r in cached.trajectory.reviews):
-                cached.trajectory.reviews.append(review)
+            if cached is not None:
+                if not any(r.id == review.id for r in cached.trajectory.reviews):
+                    cached.trajectory.reviews.append(review)
+                if is_blocked:
+                    cached.status = "blocked"
             if key in self._reviews and not any(r.id == review.id for r in self._reviews[key]):
                 self._reviews[key].append(review)
 
@@ -841,10 +1014,10 @@ class WatcherStore:
         self.broadcast_sync(review.session_id, "review_decision", redacted_review_dump)
         get_event_bus().xadd_sync("review_decision", redacted_review_dump, user_id=uid)
 
-        # 6. Trigger materialization: synchronously if terminal, asynchronously with debounce otherwise
-        terminal_statuses = {"completed", "failed", "aborted", "lockout", "error", "cancelled"}
+        # 6. Trigger materialization: synchronously if terminal or blocked, asynchronously with debounce otherwise
+        terminal_statuses = {"completed", "failed", "aborted", "lockout", "error", "cancelled", "blocked"}
         cached_sess = self._cached_session(review.session_id)
-        if cached_sess and getattr(cached_sess, "status", "") in terminal_statuses:
+        if is_blocked or (cached_sess and getattr(cached_sess, "status", "") in terminal_statuses):
             self.materialize_session(review.session_id)
         else:
             self.schedule_materialize(review.session_id)
@@ -1077,6 +1250,7 @@ class WatcherStore:
             base_session.trajectory.messages
         )
         base_session.updated_at = datetime.now(UTC).isoformat()
+        normalize_session_status(base_session)
 
         # 4. Upsert the materialized JSON into sessions.payload with updated_at = NOW()
         payload_json = json.dumps(_to_jsonable(base_session.model_dump()))
@@ -1085,6 +1259,7 @@ class WatcherStore:
                 """
                 UPDATE sessions
                 SET payload = CAST(:payload AS jsonb),
+                    status = :status,
                     current_activity = COALESCE(:current_activity, current_activity),
                     updated_at = NOW()
                 WHERE id = :id AND user_id = :uid
@@ -1094,6 +1269,7 @@ class WatcherStore:
                 "id": session_id,
                 "uid": user_id,
                 "payload": payload_json,
+                "status": base_session.status,
                 "current_activity": base_session.current_activity,
             },
         )
@@ -1880,11 +2056,11 @@ class WatcherStore:
             return self._user_configs[uid]
 
     def get_grader_definitions(self, user_id: int | None = None) -> list[Any]:
-        """Retrieve the 5 Canonical Graders, applying user-specific prompt customizations if any."""
+        """Retrieve strictly the 11 active Canonical Graders, applying user-specific prompt customizations if any."""
         from engine.graders_suite import list_canonical_graders
 
         uid = self._resolve_user_id(user_id)
-        base_graders = list_canonical_graders()
+        base_graders = list_canonical_graders(from_factory=True)
         with self._lock:
             user_overrides = self._user_graders.get(uid, {})
             if not user_overrides:
@@ -1906,27 +2082,125 @@ class WatcherStore:
                 return g
         norm = grader_name.lower().replace("-", "_").replace(" ", "_")
         aliases = {
-            "credentials_and_api_keys": "CredentialsGrader",
-            "credentials": "CredentialsGrader",
-            "credentials_grader": "CredentialsGrader",
-            "credentialsgrader": "CredentialsGrader",
-            "pii_and_sensitive_info": "PIIGrader",
-            "pii_and_sensitive_information": "PIIGrader",
-            "pii": "PIIGrader",
-            "pii_grader": "PIIGrader",
-            "piigrader": "PIIGrader",
-            "instruction_and_policy_adherence": "InstructionGrader",
-            "instruction": "InstructionGrader",
-            "instruction_grader": "InstructionGrader",
-            "instructiongrader": "InstructionGrader",
-            "code_security": "SecurityGrader",
-            "security": "SecurityGrader",
-            "security_grader": "SecurityGrader",
-            "securitygrader": "SecurityGrader",
-            "infrastructure_safety": "DeletionGrader",
-            "deletion": "DeletionGrader",
-            "deletion_grader": "DeletionGrader",
-            "deletiongrader": "DeletionGrader",
+            # Legacy Threat Monitors & Task Scorers -> Closest Active Judges
+            # CredentialsGrader -> PolicyGatewayDeepGrader
+            "credentialsgrader": "PolicyGatewayDeepGrader",
+            "credentials_grader": "PolicyGatewayDeepGrader",
+            "credentials_and_api_keys": "PolicyGatewayDeepGrader",
+            "credentials": "PolicyGatewayDeepGrader",
+            "data_exfiltration": "PolicyGatewayDeepGrader",
+            # PIIGrader -> PolicyGatewayDeepGrader
+            "piigrader": "PolicyGatewayDeepGrader",
+            "pii_grader": "PolicyGatewayDeepGrader",
+            "pii_and_sensitive_info": "PolicyGatewayDeepGrader",
+            "pii_and_sensitive_information": "PolicyGatewayDeepGrader",
+            "pii": "PolicyGatewayDeepGrader",
+            "privacy_and_pii": "PolicyGatewayDeepGrader",
+            "privacy": "PolicyGatewayDeepGrader",
+            # InstructionGrader -> PlanAdherenceGrader
+            "instructiongrader": "PlanAdherenceGrader",
+            "instruction_grader": "PlanAdherenceGrader",
+            "instruction_and_policy_adherence": "PlanAdherenceGrader",
+            "instruction": "PlanAdherenceGrader",
+            "instruction_following": "PlanAdherenceGrader",
+            # SecurityGrader -> PolicyGatewayDeepGrader
+            "securitygrader": "PolicyGatewayDeepGrader",
+            "security_grader": "PolicyGatewayDeepGrader",
+            "code_security": "PolicyGatewayDeepGrader",
+            "security": "PolicyGatewayDeepGrader",
+            # DeletionGrader -> PolicyGatewayDeepGrader
+            "deletiongrader": "PolicyGatewayDeepGrader",
+            "deletion_grader": "PolicyGatewayDeepGrader",
+            "infrastructure_safety": "PolicyGatewayDeepGrader",
+            "deletion": "PolicyGatewayDeepGrader",
+            "destructive_deletions": "PolicyGatewayDeepGrader",
+            # AlignmentFakingGrader -> SituationalAwarenessGrader
+            "alignmentfakinggrader": "SituationalAwarenessGrader",
+            "alignment_faking_grader": "SituationalAwarenessGrader",
+            "alignment_faking": "SituationalAwarenessGrader",
+            "alignmentfaking": "SituationalAwarenessGrader",
+            "strategic_compliance": "SituationalAwarenessGrader",
+            # CitationGroundingGrader -> HallucinationGrader
+            "citationgroundinggrader": "HallucinationGrader",
+            "citation_grounding_grader": "HallucinationGrader",
+            "citation_grounding": "HallucinationGrader",
+            "citationgrounding": "HallucinationGrader",
+            "grounding_and_citation": "HallucinationGrader",
+            "citation_grounding_scorer": "HallucinationGrader",
+            # Active 11 Platform Judges
+            # 1. SituationalAwarenessGrader
+            "situational_awareness": "SituationalAwarenessGrader",
+            "situationalawareness": "SituationalAwarenessGrader",
+            "situational_awareness_grader": "SituationalAwarenessGrader",
+            "situationalawarenessgrader": "SituationalAwarenessGrader",
+            "sandbagging": "SituationalAwarenessGrader",
+            "eval_awareness": "SituationalAwarenessGrader",
+            # 2. GoalGuardingSchemingGrader
+            "goal_guarding_scheming": "GoalGuardingSchemingGrader",
+            "goal_guarding": "GoalGuardingSchemingGrader",
+            "goalguardingscheming": "GoalGuardingSchemingGrader",
+            "goal_guarding_scheming_grader": "GoalGuardingSchemingGrader",
+            "scheming": "GoalGuardingSchemingGrader",
+            "goalguarding": "GoalGuardingSchemingGrader",
+            # 3. UnfaithfulCoTGrader
+            "unfaithful_cot": "UnfaithfulCoTGrader",
+            "unfaithfulcot": "UnfaithfulCoTGrader",
+            "unfaithful_cot_grader": "UnfaithfulCoTGrader",
+            "cot_faithfulness": "UnfaithfulCoTGrader",
+            "unfaithful_chain_of_thought": "UnfaithfulCoTGrader",
+            # 4. PlanAdherenceGrader
+            "plan_adherence": "PlanAdherenceGrader",
+            "planadherence": "PlanAdherenceGrader",
+            "plan_adherence_grader": "PlanAdherenceGrader",
+            "planadherencegrader": "PlanAdherenceGrader",
+            "plan": "PlanAdherenceGrader",
+            # 5. HallucinationGrader
+            "hallucination": "HallucinationGrader",
+            "hallucinations": "HallucinationGrader",
+            "hallucinationgrader": "HallucinationGrader",
+            "hallucination_grader": "HallucinationGrader",
+            "hallucination_detection": "HallucinationGrader",
+            "grounding": "HallucinationGrader",
+            "hallucination_and_grounding": "HallucinationGrader",
+            # 6. RewardTamperingGrader
+            "reward_tampering": "RewardTamperingGrader",
+            "rewardtampering": "RewardTamperingGrader",
+            "reward_tampering_grader": "RewardTamperingGrader",
+            "rewardtamperinggrader": "RewardTamperingGrader",
+            "tampering": "RewardTamperingGrader",
+            "test_tampering": "RewardTamperingGrader",
+            "sabotage": "RewardTamperingGrader",
+            # 7. RewardSeekingGrader
+            "reward_seeking": "RewardSeekingGrader",
+            "rewardseeking": "RewardSeekingGrader",
+            "reward_seeking_grader": "RewardSeekingGrader",
+            "specification_gaming": "RewardSeekingGrader",
+            # PolicyGatewayFastTriageGrader
+            "policy_gateway_fast_triage": "PolicyGatewayFastTriageGrader",
+            "fast_triage": "PolicyGatewayFastTriageGrader",
+            "policy_gateway_fast_triage_grader": "PolicyGatewayFastTriageGrader",
+            "fasttriage": "PolicyGatewayFastTriageGrader",
+            "triage_grader": "PolicyGatewayFastTriageGrader",
+            # PolicyGatewayDeepGrader
+            "policy_gateway": "PolicyGatewayDeepGrader",
+            "policygateway": "PolicyGatewayDeepGrader",
+            "policy_gateway_deep": "PolicyGatewayDeepGrader",
+            "policy_gateway_deep_grader": "PolicyGatewayDeepGrader",
+            "policygatewaydeepgrader": "PolicyGatewayDeepGrader",
+            "policy_gateway_grader": "PolicyGatewayDeepGrader",
+            "gateway": "PolicyGatewayDeepGrader",
+            "deep_review": "PolicyGatewayDeepGrader",
+            # SemanticRunComparatorGrader
+            "semantic_run_comparator": "SemanticRunComparatorGrader",
+            "semantic_compare": "SemanticRunComparatorGrader",
+            "semantic_run_comparator_grader": "SemanticRunComparatorGrader",
+            "run_comparator": "SemanticRunComparatorGrader",
+            "semantic_trajectory_compare": "SemanticRunComparatorGrader",
+            # IncidentRemediationGrader
+            "incident_remediation": "IncidentRemediationGrader",
+            "incident_remediation_grader": "IncidentRemediationGrader",
+            "remediation_grader": "IncidentRemediationGrader",
+            "incident_remediator": "IncidentRemediationGrader",
         }
         resolved = aliases.get(norm)
         for g in definitions:
@@ -1939,9 +2213,13 @@ class WatcherStore:
     def update_grader_definition(
         self, grader_name: str, updates: dict[str, str], user_id: int | None = None
     ) -> Any | None:
-        """Update prompt components for a specific grader for this user."""
+        """Update prompt components for a specific grader for this user and live engine."""
         uid = self._resolve_user_id(user_id)
-        from engine.graders_suite import CanonicalGrader, get_canonical_grader
+        from engine.graders_suite import (
+            CanonicalGrader,
+            get_canonical_grader,
+            update_live_canonical_grader,
+        )
 
         base = get_canonical_grader(grader_name)
         if not base:
@@ -1949,6 +2227,9 @@ class WatcherStore:
 
         valid_fields = set(CanonicalGrader.model_fields.keys())
         filtered = {k: v for k, v in updates.items() if k in valid_fields and isinstance(v, str)}
+
+        # Update live canonical grader in the engine registry
+        update_live_canonical_grader(grader_name, filtered)
 
         with self._lock:
             if uid not in self._user_graders:
@@ -1961,8 +2242,13 @@ class WatcherStore:
         return self.get_grader_definition(grader_name, uid)
 
     def reset_grader_definition(self, grader_name: str, user_id: int | None = None) -> Any | None:
-        """Reset a grader's prompt components back to defaults for this user."""
+        """Reset a grader's prompt components back to defaults for this user and live engine."""
         uid = self._resolve_user_id(user_id)
+        from engine.graders_suite import reset_live_canonical_grader
+
+        # Reset live canonical grader in the engine registry
+        reset_live_canonical_grader(grader_name)
+
         with self._lock:
             if uid in self._user_graders and grader_name in self._user_graders[uid]:
                 del self._user_graders[uid][grader_name]

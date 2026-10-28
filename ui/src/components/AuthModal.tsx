@@ -105,7 +105,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="e.g. alice"
-                className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-purple-500"
+                className="w-full h-9 pl-9 pr-3 rounded-xl border border-slate-300 text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-purple-500"
                 required
                 autoFocus
               />
@@ -121,7 +121,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-purple-500"
+                className="w-full h-9 pl-9 pr-3 rounded-xl border border-slate-300 text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-purple-500"
                 required
               />
             </div>
@@ -130,7 +130,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-semibold text-xs transition-colors shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            className="h-9 w-full rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold shadow-xs inline-flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
           >
             {loading ? (
               <span>Connecting...</span>
@@ -157,7 +157,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 setMode(mode === 'login' ? 'register' : 'login');
                 setError(null);
               }}
-              className="text-purple-600 font-semibold hover:underline cursor-pointer"
+              className="h-7 px-2.5 rounded-lg text-xs font-semibold text-purple-600 hover:text-purple-700 hover:bg-purple-50 transition-all cursor-pointer inline-flex items-center"
             >
               {mode === 'login' ? 'Create Account' : 'Sign In'}
             </button>
@@ -166,7 +166,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <div className="pt-2 text-center">
             <a
               href="/demo"
-              className="text-[11px] text-slate-400 hover:text-slate-600 inline-flex items-center gap-1"
+              className="text-xs text-slate-400 hover:text-slate-600 inline-flex items-center gap-1"
             >
               <Shield className="w-3 h-3 text-slate-400" />
               <span>Or explore public demo mode (/demo)</span>

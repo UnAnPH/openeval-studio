@@ -74,6 +74,18 @@ ion-app, ion-page, ion-content, ion-card, ion-header, ion-toolbar {
     width: 15px;
     height: 15px;
   }
+
+  /* Universal Styled Select Standard: eliminates browser native arrow border overflow */
+  select {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2364748b' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 0.75rem center;
+    background-repeat: no-repeat;
+    background-size: 1rem 1rem;
+    padding-right: 2.25rem !important;
+  }
 }
 
 ion-icon {
@@ -106,6 +118,23 @@ svg.icon-inner {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #B6B0CC;
+}
+
+/* Segmented Control Containers (Pill bars) & no-scrollbar utility: suppresses internal scrollbars */
+.no-scrollbar,
+.segmented-control,
+[class*="bg-slate-100"][class*="rounded-xl"][class*="p-1"] {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+  overflow-y: hidden !important;
+}
+
+.no-scrollbar::-webkit-scrollbar,
+.segmented-control::-webkit-scrollbar,
+[class*="bg-slate-100"][class*="rounded-xl"][class*="p-1"]::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 
 /* Aegis Component Styles */

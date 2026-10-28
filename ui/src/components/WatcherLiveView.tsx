@@ -461,13 +461,40 @@ export const WatcherLiveView: React.FC<WatcherLiveViewProps> = ({
     }
   };
 
+  const isSessionBlocked = (s: WatcherSession): boolean =>
+    s.status === 'blocked' ||
+    (s.trajectory?.reviews || []).some(
+      (r) =>
+        (r.decision === 'block' || r.decision === 'deny' || r.decision === 'reject' || (r.score || 0) >= 8) &&
+        r.human_override !== 'allow' &&
+        r.resolution_status !== 'human_approved'
+    ) ||
+    Boolean((s as any).blocked_count && (s as any).blocked_count > 0);
+
+  const isSessionActive = (s: WatcherSession): boolean => {
+    if (isSessionBlocked(s)) return false;
+    if (s.status !== 'active' && s.status !== 'working' && s.status !== 'running') return false;
+    let lastTime = 0;
+    if (s.updated_at) {
+      const t = new Date(s.updated_at).getTime();
+      if (!isNaN(t)) lastTime = Math.max(lastTime, t);
+    }
+    if (s.created_at) {
+      const t = new Date(s.created_at).getTime();
+      if (!isNaN(t)) lastTime = Math.max(lastTime, t);
+    }
+    if (lastTime > 0 && Date.now() - lastTime > 15 * 60 * 1000) return false;
+    return true;
+  };
+
   // Filtered lists
   const filteredSessions = sessions.filter((s) => {
+    const isAct = isSessionActive(s);
     const matchesFilter =
       sessionFilter === 'active'
-        ? s.status === 'active' || s.status === 'working'
+        ? isAct
         : sessionFilter === 'closed'
-        ? s.status === 'completed' || s.status === 'error' || s.status === 'cancelled'
+        ? !isAct && s.status !== 'parked'
         : s.status === 'parked';
 
     const matchesSearch =
@@ -510,14 +537,14 @@ export const WatcherLiveView: React.FC<WatcherLiveViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2.5">
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/60 text-xs font-medium">
+          <div className="h-9 bg-slate-100 p-1 rounded-xl border border-slate-200/70 inline-flex items-center gap-1">
             <button
               type="button"
               onClick={() => setActiveTab('rules')}
-              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+              className={`h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center transition-all cursor-pointer ${
                 activeTab === 'rules'
-                  ? 'bg-white text-slate-900 shadow-xs font-semibold'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white text-slate-900 shadow-xs font-bold'
+                  : 'text-slate-500 hover:text-slate-900'
               }`}
             >
               Command Rules
@@ -525,10 +552,10 @@ export const WatcherLiveView: React.FC<WatcherLiveViewProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('thresholds')}
-              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+              className={`h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center transition-all cursor-pointer ${
                 activeTab === 'thresholds'
-                  ? 'bg-white text-slate-900 shadow-xs font-semibold'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white text-slate-900 shadow-xs font-bold'
+                  : 'text-slate-500 hover:text-slate-900'
               }`}
             >
               Tool Thresholds
@@ -536,10 +563,10 @@ export const WatcherLiveView: React.FC<WatcherLiveViewProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('analyzer')}
-              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+              className={`h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center transition-all cursor-pointer ${
                 activeTab === 'analyzer'
-                  ? 'bg-white text-slate-900 shadow-xs font-semibold'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white text-slate-900 shadow-xs font-bold'
+                  : 'text-slate-500 hover:text-slate-900'
               }`}
             >
               Analyzer
@@ -564,7 +591,7 @@ export const WatcherLiveView: React.FC<WatcherLiveViewProps> = ({
                       : 'text-[#6b7280]'
                   }`}
                 >
-                  Active ({sessions.filter((s) => s.status === 'active' || s.status === 'working').length})
+                  Active ({sessions.filter((s) => isSessionActive(s)).length})
                 </button>
                 <button
                   onClick={() => setSessionFilter('closed')}
@@ -613,7 +640,8 @@ export const WatcherLiveView: React.FC<WatcherLiveViewProps> = ({
               ) : (
                 filteredSessions.map((s) => {
                   const isSelected = s.session_id === selectedSessionId;
-                  const isWorking = s.status === 'working';
+                  const isBlocked = isSessionBlocked(s);
+                  const isWorking = isSessionActive(s);
                   return (
                     <div
                       key={s.session_id}
@@ -631,18 +659,35 @@ export const WatcherLiveView: React.FC<WatcherLiveViewProps> = ({
                         <span className="text-xs font-bold text-[#111827] truncate" title={s.title || s.project_name || s.task_id}>
                           {s.title || s.project_name || s.task_id || 'unnamed-session'}
                         </span>
-                        <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-semibold ${s.agent_type === 'antigravity' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'text-[#6b7280]'}`}>
-                          {s.agent_type === 'antigravity' ? '⚡ Antigravity' : s.agent_type}
-                        </span>
+                        <div className="flex items-center gap-1">
+                          <span
+                            className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-semibold ${
+                              isBlocked
+                                ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                : isWorking
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-slate-100 text-slate-600'
+                            }`}
+                          >
+                            {isBlocked ? 'Blocked' : isWorking ? 'Active' : 'Closed'}
+                          </span>
+                          <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-semibold ${s.agent_type === 'antigravity' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'text-[#6b7280]'}`}>
+                            {s.agent_type === 'antigravity' ? '⚡ Antigravity' : s.agent_type}
+                          </span>
+                        </div>
                       </div>
 
                       <div className="flex items-center gap-1.5 text-[11px] text-[#4b5563] mb-2 font-mono">
                         <span
                           className={`w-1.5 h-1.5 rounded-full ${
-                            isWorking ? 'bg-amber-500 animate-ping' : 'bg-emerald-500'
+                            isBlocked
+                              ? 'bg-rose-500'
+                              : isWorking
+                              ? 'bg-emerald-500 animate-pulse'
+                              : 'bg-slate-400'
                           }`}
                         />
-                        <span className="truncate">{s.current_activity || (isWorking ? 'working...' : 'idle')}</span>
+                        <span className="truncate">{s.current_activity || (isBlocked ? 'Action blocked by policy' : isWorking ? 'working...' : 'completed')}</span>
                       </div>
 
                       <div className="flex items-center justify-between text-[10px] text-[#9ca3af] font-mono">
@@ -1127,57 +1172,61 @@ export const WatcherLiveView: React.FC<WatcherLiveViewProps> = ({
                 interception.
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
               <button
                 type="button"
                 onClick={handleResetPolicy}
-                className="px-3 py-1.5 text-xs font-mono font-bold rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 cursor-pointer"
+                className="h-9 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
               >
                 Reset to defaults
               </button>
-            {/* Category Filter */}
-            <div className="flex items-center bg-[#f3f4f6] p-1 rounded-lg border border-[#e5e7eb] text-xs">
-              <button
-                onClick={() => setRulesCategory('all')}
-                className={`px-3 py-1 rounded-md ${
-                  rulesCategory === 'all'
-                    ? 'bg-white text-[#111827] font-bold shadow-xs'
-                    : 'text-[#6b7280]'
-                }`}
-              >
-                All ({policy.command_rules.length})
-              </button>
-              <button
-                onClick={() => setRulesCategory('git')}
-                className={`px-3 py-1 rounded-md ${
-                  rulesCategory === 'git'
-                    ? 'bg-white text-[#111827] font-bold shadow-xs'
-                    : 'text-[#6b7280]'
-                }`}
-              >
-                Git Operations
-              </button>
-              <button
-                onClick={() => setRulesCategory('security')}
-                className={`px-3 py-1 rounded-md ${
-                  rulesCategory === 'security'
-                    ? 'bg-white text-[#111827] font-bold shadow-xs'
-                    : 'text-[#6b7280]'
-                }`}
-              >
-                Security &amp; Secrets
-              </button>
-              <button
-                onClick={() => setRulesCategory('fs')}
-                className={`px-3 py-1 rounded-md ${
-                  rulesCategory === 'fs'
-                    ? 'bg-white text-[#111827] font-bold shadow-xs'
-                    : 'text-[#6b7280]'
-                }`}
-              >
-                Filesystem
-              </button>
-            </div>
+              {/* Category Filter */}
+              <div className="h-9 bg-slate-100 p-1 rounded-xl border border-slate-200/70 inline-flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setRulesCategory('all')}
+                  className={`h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center transition-all cursor-pointer ${
+                    rulesCategory === 'all'
+                      ? 'bg-white text-slate-900 shadow-xs font-bold'
+                      : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                >
+                  All ({policy.command_rules.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRulesCategory('git')}
+                  className={`h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center transition-all cursor-pointer ${
+                    rulesCategory === 'git'
+                      ? 'bg-white text-slate-900 shadow-xs font-bold'
+                      : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                >
+                  Git Operations
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRulesCategory('security')}
+                  className={`h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center transition-all cursor-pointer ${
+                    rulesCategory === 'security'
+                      ? 'bg-white text-slate-900 shadow-xs font-bold'
+                      : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                >
+                  Security &amp; Secrets
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRulesCategory('fs')}
+                  className={`h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center transition-all cursor-pointer ${
+                    rulesCategory === 'fs'
+                      ? 'bg-white text-slate-900 shadow-xs font-bold'
+                      : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                >
+                  Filesystem
+                </button>
+              </div>
             </div>
           </div>
 
@@ -1257,9 +1306,9 @@ export const WatcherLiveView: React.FC<WatcherLiveViewProps> = ({
                   <button
                     onClick={handleSaveThresholds}
                     disabled={!isThresholdDirty || isSavingThresholds}
-                    className={`rounded-lg px-4 py-1.5 text-xs font-mono font-bold transition-all shadow-xs ${
+                    className={`h-9 px-4 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all shadow-xs ${
                       isThresholdDirty
-                        ? 'bg-teal-600 hover:bg-teal-700 text-white cursor-pointer'
+                        ? 'bg-slate-900 hover:bg-black text-white cursor-pointer'
                         : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
                     }`}
                   >
@@ -1311,7 +1360,7 @@ export const WatcherLiveView: React.FC<WatcherLiveViewProps> = ({
                     <button
                       type="button"
                       onClick={() => toggleAutoApprove(t.tool_name)}
-                      className={`rounded-lg border px-3 py-1 text-xs transition-colors font-mono cursor-pointer ${
+                      className={`h-8 px-3 rounded-lg border text-xs font-semibold inline-flex items-center justify-center transition-colors font-mono cursor-pointer ${
                         t.auto_approve
                           ? 'bg-emerald-50 text-emerald-700 border-emerald-300 font-bold shadow-2xs'
                           : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
@@ -1325,7 +1374,7 @@ export const WatcherLiveView: React.FC<WatcherLiveViewProps> = ({
                       <button
                         type="button"
                         onClick={() => toggleEscalate(t.tool_name)}
-                        className={`rounded-l-lg border-y border-l px-3 py-1 text-xs transition-colors font-mono cursor-pointer ${
+                        className={`h-8 px-3 rounded-l-lg border-y border-l text-xs font-semibold inline-flex items-center justify-center transition-colors font-mono cursor-pointer ${
                           t.escalate_ge != null
                             ? 'bg-amber-50 text-amber-800 border-amber-300 font-bold'
                             : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
@@ -1340,7 +1389,7 @@ export const WatcherLiveView: React.FC<WatcherLiveViewProps> = ({
                         placeholder="—"
                         value={t.escalate_ge ?? ''}
                         onChange={(e) => updateEscalateGte(t.tool_name, e.target.value)}
-                        className={`w-11 rounded-r-lg border py-1 text-center font-mono text-xs transition-colors focus:outline-none ${
+                        className={`h-8 w-11 rounded-r-lg border py-0 text-center font-mono text-xs transition-colors focus:outline-none ${
                           t.escalate_ge != null
                             ? 'border-amber-300 bg-amber-50/60 text-amber-900 font-bold focus:border-amber-500'
                             : 'border-slate-200 bg-white text-slate-400'
@@ -1353,7 +1402,7 @@ export const WatcherLiveView: React.FC<WatcherLiveViewProps> = ({
                       <button
                         type="button"
                         onClick={() => toggleAutoDeny(t.tool_name)}
-                        className={`rounded-l-lg border-y border-l px-3 py-1 text-xs transition-colors font-mono cursor-pointer ${
+                        className={`h-8 px-3 rounded-l-lg border-y border-l text-xs font-semibold inline-flex items-center justify-center transition-colors font-mono cursor-pointer ${
                           t.auto_deny_ge != null
                             ? 'bg-rose-50 text-rose-700 border-rose-300 font-bold'
                             : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
@@ -1368,7 +1417,7 @@ export const WatcherLiveView: React.FC<WatcherLiveViewProps> = ({
                         placeholder="—"
                         value={t.auto_deny_ge ?? ''}
                         onChange={(e) => updateAutoDenyGte(t.tool_name, e.target.value)}
-                        className={`w-11 rounded-r-lg border py-1 text-center font-mono text-xs transition-colors focus:outline-none ${
+                        className={`h-8 w-11 rounded-r-lg border py-0 text-center font-mono text-xs transition-colors focus:outline-none ${
                           t.auto_deny_ge != null
                             ? 'border-rose-300 bg-rose-50/60 text-rose-900 font-bold focus:border-rose-500'
                             : 'border-slate-200 bg-white text-slate-400'
@@ -1380,7 +1429,7 @@ export const WatcherLiveView: React.FC<WatcherLiveViewProps> = ({
                     <button
                       type="button"
                       onClick={() => toggleAlwaysEscalate(t.tool_name)}
-                      className={`rounded-lg border px-3 py-1 text-xs transition-colors font-mono cursor-pointer ${
+                      className={`h-8 px-3 rounded-lg border text-xs font-semibold inline-flex items-center justify-center transition-colors font-mono cursor-pointer ${
                         t.always_escalate
                           ? 'bg-purple-50 text-purple-700 border-purple-300 font-bold shadow-2xs'
                           : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
@@ -1419,9 +1468,10 @@ export const WatcherLiveView: React.FC<WatcherLiveViewProps> = ({
               </div>
               <div className="flex items-center gap-2">
                 <button
+                  type="button"
                   onClick={fetchAnalyzerSummary}
                   disabled={isLoadingAnalyzer}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-xs font-mono font-medium text-slate-700 hover:bg-white hover:text-slate-900 transition-all cursor-pointer shadow-2xs"
+                  className="h-9 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isLoadingAnalyzer ? 'animate-spin' : ''}`} />
                   <span>{isLoadingAnalyzer ? 'Refreshing...' : 'Refresh Metrics'}</span>
@@ -1721,17 +1771,19 @@ export const WatcherLiveView: React.FC<WatcherLiveViewProps> = ({
               </div>
             </div>
 
-            <div className="p-4 bg-[#f9fafb] border-t border-[#e5e7eb] flex items-center justify-end gap-2">
+            <div className="p-4 bg-[#f9fafb] border-t border-[#e5e7eb] flex items-center justify-end gap-2.5">
               <button
+                type="button"
                 onClick={() => setActiveResolveReview(null)}
-                className="px-3 py-1.5 text-xs font-medium text-[#4b5563] hover:text-[#111827] transition-colors"
+                className="h-9 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
               >
                 Dismiss
               </button>
               <button
+                type="button"
                 onClick={handleResolveDecision}
                 disabled={isResolving}
-                className="px-4 py-1.5 text-xs font-medium bg-[#4f46e5] text-white rounded-lg hover:bg-[#4338ca] transition-colors shadow-xs"
+                className="h-9 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
               >
                 {isResolving ? 'Submitting...' : 'Confirm Decision'}
               </button>

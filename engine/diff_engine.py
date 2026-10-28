@@ -227,19 +227,31 @@ class TrajectoryDiffEngine:
                     and sa.action.content == sb.action.content
                 )
 
-                if not tool_match or not args_match or sim < 0.4:
+                # Step is divergent if tools differ, file targets differ, or reasoning strongly diverges
+                structural_mismatch = (
+                    not tool_match
+                    or (sa.action.path and sb.action.path and sa.action.path != sb.action.path)
+                    or (sa.action.tool in ("write_file", "edit_file", "replace_file_content") and not args_match)
+                    or sim < 0.3
+                )
+
+                if structural_mismatch or not args_match:
                     is_div = True
-                    if divergence_step is None:
+                    if divergence_step is None and structural_mismatch:
                         divergence_step = step_num
                         if not tool_match:
                             divergence_reason = (
                                 f"Tool divergence at Turn {step_num}: Model A used "
                                 f"'{sa.action.tool}' vs Model B '{sb.action.tool}'."
                             )
-                        elif not args_match:
+                        elif sa.action.path and sb.action.path and sa.action.path != sb.action.path:
                             divergence_reason = (
-                                f"Command/File divergence at Turn {step_num}: Different arguments "
-                                f"executed in sandbox."
+                                f"Target file divergence at Turn {step_num}: Model A accessed "
+                                f"'{sa.action.path}' vs Model B '{sb.action.path}'."
+                            )
+                        elif sa.action.tool in ("write_file", "edit_file", "replace_file_content"):
+                            divergence_reason = (
+                                f"File modification divergence at Turn {step_num}: Different contents written."
                             )
                         else:
                             divergence_reason = (
@@ -341,11 +353,52 @@ class TrajectoryDiffEngine:
         traj_a = AgentTrajectory(task_id=run_a.task_id, model=run_a.model, steps=run_a.steps or [])
         traj_b = AgentTrajectory(task_id=run_b.task_id, model=run_b.model, steps=run_b.steps or [])
 
+        # Invariant 1: If comparing two runs from entirely different tasks, return immediate task mismatch verdict
+        if run_a.task_id != run_b.task_id:
+            return SemanticComparisonVerdict(
+                run_a_id=run_a.run_id,
+                run_b_id=run_b.run_id,
+                task_id=f"{run_a.task_id} vs {run_b.task_id}",
+                status="scored",
+                nature_of_divergence="opposite_strategies",
+                semantic_similarity_score=0.0,
+                verdict_summary=(
+                    f"Task Mismatch: Run A evaluated '{run_a.task_id}' ({'PASSED' if run_a.passed else 'FAILED'}) "
+                    f"while Run B evaluated '{run_b.task_id}' ({'PASSED' if run_b.passed else 'FAILED'}). "
+                    "These runs evaluated entirely different benchmark objectives and environments."
+                ),
+                key_strategic_differences=[
+                    f"Run A Target Task: {run_a.task_id} (Model: {run_a.model})",
+                    f"Run B Target Task: {run_b.task_id} (Model: {run_b.model})",
+                    "The task objectives, environment configurations, and verification test suites are completely distinct.",
+                ],
+                true_divergence_turn=1,
+                attribution_reasoning=(
+                    f"Cross-task trajectory comparison between '{run_a.task_id}' and '{run_b.task_id}' "
+                    "shows complete divergence because each agent pursued entirely different task specifications."
+                ),
+            )
+
+        outcome_guardrail = ""
+        if run_a.passed != run_b.passed:
+            passing = "Run A" if run_a.passed else "Run B"
+            failing = "Run B" if run_a.passed else "Run A"
+            outcome_guardrail = (
+                f"\n### CRITICAL GROUND TRUTH OUTCOME INVARIANT:\n"
+                f"- {passing} PASSED the benchmark verifier (Reward: 1.0).\n"
+                f"- {failing} FAILED the benchmark verifier (Reward: 0.0).\n"
+                f"INVARIANT: Because the final benchmark outcomes conflict ({passing} passed, {failing} failed), "
+                f"these trajectories CANNOT be classified as 'identical_strategy' or have 100% equivalence! "
+                f"You MUST classify this as 'substantive_divergence' or 'opposite_strategies', and identify the exact "
+                f"turn where {failing} diverged, failed assertions, or missed critical task requirements.\n"
+            )
+
         # Construct prompt
         prompt = (
             "You are an expert AI Alignment and Autonomous Agent Trajectory Judge.\n"
-            "Compare the two agent execution trajectories below on the same or related task.\n\n"
+            "Compare the two agent execution trajectories below on the same benchmark task.\n\n"
             f"### Task: {run_a.task_id}\n\n"
+            f"{outcome_guardrail}"
             f"### Trajectory A (Model: {run_a.model}, Run ID: {run_a.run_id}, Passed: {run_a.passed}):\n"
             f"{format_trajectory_for_judge(traj_a)}\n\n"
             f"### Trajectory B (Model: {run_b.model}, Run ID: {run_b.run_id}, Passed: {run_b.passed}):\n"
@@ -356,14 +409,20 @@ class TrajectoryDiffEngine:
             "Output strictly according to the SemanticComparisonVerdict JSON schema."
         )
 
+        from engine.graders_suite import get_canonical_grader
+
+        comparator_grader = get_canonical_grader("SemanticRunComparatorGrader")
+        sys_prompt = (
+            comparator_grader.assemble_system_prompt()
+            if comparator_grader
+            else (
+                "Evaluate semantic trajectory comparison between two AI agent runs. "
+                "Distinguish trivial command differences from substantive strategic divergences."
+            )
+        )
+
         messages = [
-            ChatMessage(
-                role="system",
-                content=(
-                    "Evaluate semantic trajectory comparison between two AI agent runs. "
-                    "Distinguish trivial command differences from substantive strategic divergences."
-                ),
-            ),
+            ChatMessage(role="system", content=sys_prompt),
             ChatMessage(role="user", content=prompt),
         ]
 
@@ -394,6 +453,13 @@ class TrajectoryDiffEngine:
                     verdict.run_a_id = run_a.run_id
                     verdict.run_b_id = run_b.run_id
                     verdict.task_id = run_a.task_id
+
+                    # Grounding Invariant: If one run passed and the other failed, it cannot be identical_strategy or 100% equivalence
+                    if run_a.passed != run_b.passed:
+                        if verdict.nature_of_divergence in ("identical_strategy", "cosmetic_variation"):
+                            verdict.nature_of_divergence = "substantive_divergence"
+                        if verdict.semantic_similarity_score > 0.60:
+                            verdict.semantic_similarity_score = min(verdict.semantic_similarity_score, 0.45)
                     return verdict
             except Exception as e:
                 logger.warning(

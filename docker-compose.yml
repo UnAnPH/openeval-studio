@@ -27,6 +27,9 @@ services:
       - "8000:8000"
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENCODE_API_KEY=${OPENCODE_API_KEY:-}
+      - OPENCODE_BASE_URL=${OPENCODE_BASE_URL:-https://opencode.ai/inference/openai/v1}
       - OPENEVAL_WATCHER_USE_LLM=${OPENEVAL_WATCHER_USE_LLM:-0}
       - WATCHER_STORAGE_DIR=/data/watcher
       - WATCHER_WEBHOOK_URL=${WATCHER_WEBHOOK_URL:-}

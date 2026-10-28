@@ -31,7 +31,7 @@ from engine.react_agent import AgentStep, ReActAgent
 from engine.sweep import BenchmarkSweeper, discover_all_tasks
 from engine.verifier import VerifierRunner
 from sandbox.docker_runner import DockerSandbox, DockerSandboxConfig, create_sandbox_for_task
-from schemas.models import get_available_models, get_model_spec
+from schemas.models import get_available_models, get_model_spec, resolve_model_provider
 from schemas.task_spec import load_task_spec
 
 load_dotenv()
@@ -66,12 +66,14 @@ async def cmd_test_llm(args: argparse.Namespace) -> None:
     print_banner()
 
     model = args.model
-    is_openai = model.startswith("gpt-") or model.startswith("o1") or model.startswith("o3")
-    provider = "openai" if is_openai else "google"
+    provider = resolve_model_provider(model)
 
     if provider == "google":
         api_key = args.api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
         key_var = "GEMINI_API_KEY"
+    elif provider == "opencode":
+        api_key = args.api_key or os.getenv("OPENCODE_API_KEY")
+        key_var = "OPENCODE_API_KEY"
     else:
         api_key = args.api_key or os.getenv("OPENAI_API_KEY")
         key_var = "OPENAI_API_KEY"
@@ -135,13 +137,14 @@ async def cmd_run_eval(args: argparse.Namespace) -> None:
     print(f"   • RAM Quota:  {task.environment.memory_mb} MB")
 
     model = args.model
-    is_openai = model.startswith("gpt-") or model.startswith("o1") or model.startswith("o3")
-    provider = "openai" if is_openai else "google"
+    provider = resolve_model_provider(model)
 
     api_key = args.api_key
     if not api_key:
         if provider == "google":
             api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        elif provider == "opencode":
+            api_key = os.getenv("OPENCODE_API_KEY")
         else:
             api_key = os.getenv("OPENAI_API_KEY")
 
@@ -327,7 +330,10 @@ def main() -> None:
     # list-models command
     p_models = subparsers.add_parser("list-models", help="List supported models and pricing")
     p_models.add_argument(
-        "--provider", default="all", choices=["all", "google", "openai"], help="Filter by provider"
+        "--provider",
+        default="all",
+        choices=["all", "google", "openai", "opencode"],
+        help="Filter by provider",
     )
 
     # test-llm command

@@ -8,7 +8,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-ModelProvider = Literal["google", "openai", "anthropic", "custom", "ollama", "vllm"]
+ModelProvider = Literal["google", "openai", "anthropic", "custom", "ollama", "vllm", "opencode"]
 ModelTier = Literal["flagship", "balanced", "fast", "preview", "specialized"]
 
 
@@ -46,7 +46,7 @@ MODEL_CATALOG: list[ModelSpec] = [
         name="Gemini 3.1 Flash-Lite",
         provider="google",
         tier="fast",
-        description="High quota 500 RPD, 15 RPM. Frontier speed and cost-efficiency for evaluation benchmarks.",
+        description="High quota (500 RPD / 15 RPM). Frontier speed and cost-efficiency for evaluation benchmarks.",
         context_window=1_048_576,
         max_output_tokens=8192,
         input_cost_per_m=0.075,
@@ -59,7 +59,7 @@ MODEL_CATALOG: list[ModelSpec] = [
         name="Gemini 3.5 Flash-Lite",
         provider="google",
         tier="fast",
-        description="High quota 500 RPD, 15 RPM. Fast, cost-effective 3.5 model for high-throughput evaluation loops.",
+        description="High quota (500 RPD / 15 RPM). Fast, cost-effective 3.5 model for high-throughput evaluation loops.",
         context_window=1_048_576,
         max_output_tokens=8192,
         input_cost_per_m=0.075,
@@ -67,11 +67,23 @@ MODEL_CATALOG: list[ModelSpec] = [
         capabilities=["fast", "agentic", "tool_use"],
     ),
     ModelSpec(
+        id="gemini-3.8-flash",
+        name="Gemini 3.8 Flash",
+        provider="google",
+        tier="flagship",
+        description="Standard quota (5 RPM / 20 RPD). Frontier Flash model built for complex coding and agentic reasoning.",
+        context_window=1_048_576,
+        max_output_tokens=8192,
+        input_cost_per_m=0.15,
+        output_cost_per_m=0.60,
+        capabilities=["coding", "agentic", "tool_use", "reasoning"],
+    ),
+    ModelSpec(
         id="gemini-3.7-flash",
         name="Gemini 3.7 Flash",
         provider="google",
         tier="flagship",
-        description="Most capable Flash model, built for complex coding and agentic reasoning.",
+        description="Standard quota (5 RPM / 20 RPD). Most capable Flash model, built for complex coding and agentic reasoning.",
         context_window=1_048_576,
         max_output_tokens=8192,
         input_cost_per_m=0.15,
@@ -83,7 +95,7 @@ MODEL_CATALOG: list[ModelSpec] = [
         name="Gemini 3.6 Flash",
         provider="google",
         tier="balanced",
-        description="Balanced speed and agentic tool-use capabilities.",
+        description="Standard quota (5 RPM / 20 RPD). Balanced speed and agentic tool-use capabilities.",
         context_window=1_048_576,
         max_output_tokens=8192,
         input_cost_per_m=0.10,
@@ -95,7 +107,7 @@ MODEL_CATALOG: list[ModelSpec] = [
         name="Gemini 3.5 Flash",
         provider="google",
         tier="balanced",
-        description="Standard Flash model providing baseline speed for routine agentic tasks.",
+        description="Standard quota (5 RPM / 20 RPD). Standard Flash model providing baseline speed for routine agentic tasks.",
         context_window=1_048_576,
         max_output_tokens=8192,
         input_cost_per_m=0.10,
@@ -107,7 +119,7 @@ MODEL_CATALOG: list[ModelSpec] = [
         name="Gemini 3 Flash",
         provider="google",
         tier="preview",
-        description="Preview Flash model with frontier-class speed and reasoning capabilities.",
+        description="Standard quota (5 RPM / 20 RPD). Preview Flash model with frontier-class speed and reasoning capabilities.",
         context_window=1_048_576,
         max_output_tokens=8192,
         input_cost_per_m=0.10,
@@ -119,7 +131,7 @@ MODEL_CATALOG: list[ModelSpec] = [
         name="Gemini 2.5 Flash-Lite",
         provider="google",
         tier="fast",
-        description="Fast budget-friendly model in the 2.5 family.",
+        description="High quota (500 RPD / 15 RPM). Fast budget-friendly model in the 2.5 family.",
         context_window=1_048_576,
         max_output_tokens=8192,
         input_cost_per_m=0.075,
@@ -131,12 +143,36 @@ MODEL_CATALOG: list[ModelSpec] = [
         name="Gemini 2.5 Flash",
         provider="google",
         tier="balanced",
-        description="Low-latency reasoning and tool use in the 2.5 generation.",
+        description="Standard quota (5 RPM / 20 RPD). Low-latency reasoning and tool use in the 2.5 generation.",
         context_window=1_048_576,
         max_output_tokens=8192,
         input_cost_per_m=0.10,
         output_cost_per_m=0.40,
         capabilities=["coding", "agentic", "tool_use", "fast"],
+    ),
+    ModelSpec(
+        id="gemini-3.8-live-extended-thinking",
+        name="Gemini 3.8 Live Extended Thinking",
+        provider="google",
+        tier="flagship",
+        description="Unlimited RPD, 65K TPM Live API WebSocket model with extended thinking enabled for deep agentic evaluation runs.",
+        context_window=131_072,
+        max_output_tokens=65_536,
+        input_cost_per_m=0.15,
+        output_cost_per_m=0.60,
+        capabilities=["coding", "agentic", "tool_use", "reasoning", "live_api", "extended_thinking"],
+    ),
+    ModelSpec(
+        id="gemini-3.8-live",
+        name="Gemini 3.8 Live",
+        provider="google",
+        tier="flagship",
+        description="Unlimited RPD, 65K TPM Live API WebSocket model for high-throughput agentic evaluation runs.",
+        context_window=131_072,
+        max_output_tokens=65_536,
+        input_cost_per_m=0.15,
+        output_cost_per_m=0.60,
+        capabilities=["coding", "agentic", "tool_use", "reasoning", "live_api"],
     ),
     ModelSpec(
         id="antigravity-preview-05-2026",
@@ -352,6 +388,166 @@ MODEL_CATALOG: list[ModelSpec] = [
         output_cost_per_m=0.0,
         capabilities=["local", "lora", "high_throughput"],
     ),
+    # =========================================================================
+    # OPENCODE CONSOLE INFERENCE API FREE MODELS ($0 / $0, 128k context)
+    # =========================================================================
+    ModelSpec(
+        id="opencode/glm-5.3-flash-free",
+        name="GLM-5.3-Flash (OpenCode Free)",
+        provider="opencode",
+        tier="fast",
+        description="High-throughput GLM 5.3 Flash free tier model via OpenCode Console Inference API.",
+        context_window=128000,
+        max_output_tokens=8192,
+        input_cost_per_m=0.0,
+        output_cost_per_m=0.0,
+        capabilities=["fast", "agentic", "tool_use", "open_weights", "free"],
+        is_default=True,
+    ),
+    ModelSpec(
+        id="opencode/deepseek-v4.1-flash-free",
+        name="DeepSeek V4.1 Flash (OpenCode Free)",
+        provider="opencode",
+        tier="fast",
+        description="Fast DeepSeek V4.1 Flash model free tier via OpenCode Console Inference API.",
+        context_window=128000,
+        max_output_tokens=8192,
+        input_cost_per_m=0.0,
+        output_cost_per_m=0.0,
+        capabilities=["fast", "coding", "agentic", "open_weights", "free"],
+    ),
+    ModelSpec(
+        id="opencode/big-pickle",
+        name="Big Pickle (OpenCode Free)",
+        provider="opencode",
+        tier="balanced",
+        description="Balanced reasoning and evaluation model free tier via OpenCode Console Inference API.",
+        context_window=128000,
+        max_output_tokens=8192,
+        input_cost_per_m=0.0,
+        output_cost_per_m=0.0,
+        capabilities=["balanced", "reasoning", "agentic", "open_weights", "free"],
+    ),
+    ModelSpec(
+        id="opencode/beam-free",
+        name="Beam (OpenCode Free)",
+        provider="opencode",
+        tier="fast",
+        description="Fast Beam model free tier via OpenCode Console Inference API.",
+        context_window=128000,
+        max_output_tokens=8192,
+        input_cost_per_m=0.0,
+        output_cost_per_m=0.0,
+        capabilities=["fast", "tool_use", "open_weights", "free"],
+    ),
+    ModelSpec(
+        id="opencode/mimo-v2.6-flash-free",
+        name="MiMo-V2.6-Flash (OpenCode Free)",
+        provider="opencode",
+        tier="fast",
+        description="Fast MiMo V2.6 Flash model free tier via OpenCode Console Inference API.",
+        context_window=128000,
+        max_output_tokens=8192,
+        input_cost_per_m=0.0,
+        output_cost_per_m=0.0,
+        capabilities=["fast", "coding", "open_weights", "free"],
+    ),
+    ModelSpec(
+        id="opencode/nemotron-3.5-lightning-free",
+        name="Nemotron 3.5 Lightning (OpenCode Free)",
+        provider="opencode",
+        tier="fast",
+        description="Fast Nemotron 3.5 Lightning model free tier via OpenCode Console Inference API.",
+        context_window=128000,
+        max_output_tokens=8192,
+        input_cost_per_m=0.0,
+        output_cost_per_m=0.0,
+        capabilities=["fast", "reasoning", "open_weights", "free"],
+    ),
+    ModelSpec(
+        id="opencode/nemotron-3.5-super-vl-free",
+        name="Nemotron 3.5 Super VL (OpenCode Free)",
+        provider="opencode",
+        tier="specialized",
+        description="Specialized vision-language Nemotron 3.5 model free tier via OpenCode Console Inference API.",
+        context_window=128000,
+        max_output_tokens=8192,
+        input_cost_per_m=0.0,
+        output_cost_per_m=0.0,
+        capabilities=["specialized", "multimodal", "open_weights", "free"],
+    ),
+    ModelSpec(
+        id="opencode/longcat-2.5-preview-free",
+        name="LongCat 2.5 Preview (OpenCode Free)",
+        provider="opencode",
+        tier="preview",
+        description="Long-context preview model free tier via OpenCode Console Inference API.",
+        context_window=128000,
+        max_output_tokens=8192,
+        input_cost_per_m=0.0,
+        output_cost_per_m=0.0,
+        capabilities=["preview", "long_context", "open_weights", "free"],
+    ),
+    ModelSpec(
+        id="opencode/space-bunny-free",
+        name="Space Bunny (OpenCode Free)",
+        provider="opencode",
+        tier="balanced",
+        description="Balanced Space Bunny model free tier via OpenCode Console Inference API.",
+        context_window=128000,
+        max_output_tokens=8192,
+        input_cost_per_m=0.0,
+        output_cost_per_m=0.0,
+        capabilities=["balanced", "open_weights", "free"],
+    ),
+    ModelSpec(
+        id="opencode/nemotron-3-ultra-free",
+        name="Nemotron 3 Ultra (OpenCode Free)",
+        provider="opencode",
+        tier="flagship",
+        description="Flagship Nemotron 3 Ultra reasoning model free tier via OpenCode Console Inference API.",
+        context_window=128000,
+        max_output_tokens=8192,
+        input_cost_per_m=0.0,
+        output_cost_per_m=0.0,
+        capabilities=["flagship", "reasoning", "coding", "open_weights", "free"],
+    ),
+    ModelSpec(
+        id="opencode/mimo-v2.5-free",
+        name="MiMo-V2.5 (OpenCode Free)",
+        provider="opencode",
+        tier="balanced",
+        description="Balanced MiMo V2.5 model free tier via OpenCode Console Inference API.",
+        context_window=128000,
+        max_output_tokens=8192,
+        input_cost_per_m=0.0,
+        output_cost_per_m=0.0,
+        capabilities=["balanced", "open_weights", "free"],
+    ),
+    ModelSpec(
+        id="opencode/ll-alpha-free",
+        name="LL Alpha (OpenCode Free)",
+        provider="opencode",
+        tier="preview",
+        description="Preview LL Alpha model free tier via OpenCode Console Inference API.",
+        context_window=128000,
+        max_output_tokens=8192,
+        input_cost_per_m=0.0,
+        output_cost_per_m=0.0,
+        capabilities=["preview", "reasoning", "open_weights", "free"],
+    ),
+    ModelSpec(
+        id="opencode/exo-free",
+        name="Exo (OpenCode Free)",
+        provider="opencode",
+        tier="balanced",
+        description="Balanced Exo model free tier via OpenCode Console Inference API.",
+        context_window=128000,
+        max_output_tokens=8192,
+        input_cost_per_m=0.0,
+        output_cost_per_m=0.0,
+        capabilities=["balanced", "agentic", "open_weights", "free"],
+    ),
 ]
 
 
@@ -367,7 +563,31 @@ def get_model_spec(model_id: str) -> ModelSpec | None:
     for m in MODEL_CATALOG:
         if m.id == model_id:
             return m
+        # Support looking up models with or without provider prefix (e.g. opencode/ or google/)
+        if m.provider == "opencode":
+            if m.id.removeprefix("opencode/") == model_id.removeprefix("opencode/"):
+                return m
+        elif m.id.removeprefix(f"{m.provider}/") == model_id.removeprefix(f"{m.provider}/"):
+            return m
     return None
+
+
+def resolve_model_provider(model_id: str) -> ModelProvider:
+    """Resolve the appropriate provider string for a given model ID or slug."""
+    spec = get_model_spec(model_id)
+    if spec:
+        return spec.provider
+    if model_id.startswith("opencode/") or model_id == "big-pickle" or model_id.endswith("-free"):
+        return "opencode"
+    if model_id.startswith("gpt-") or model_id.startswith("o1") or model_id.startswith("o3"):
+        return "openai"
+    if model_id.startswith("claude-"):
+        return "anthropic"
+    if model_id.startswith("ollama/"):
+        return "ollama"
+    if model_id.startswith("vllm/"):
+        return "vllm"
+    return "google"
 
 
 def get_default_model(provider: ModelProvider = "google") -> ModelSpec:
@@ -379,3 +599,4 @@ def get_default_model(provider: ModelProvider = "google") -> ModelSpec:
     if models:
         return models[0]
     return MODEL_CATALOG[0]
+

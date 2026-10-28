@@ -16,6 +16,14 @@ interface ScorecardProps {
   run: RunRecord | null;
 }
 
+function formatRunIdTail(id: string, maxLen: number = 34): string {
+  if (!id) return '';
+  if (id.length <= maxLen) return id;
+  const tailLen = 18; // Preserves e.g. "-192514-1ti8q0" or "-20261016-192514"
+  const headLen = Math.max(8, maxLen - tailLen - 3);
+  return `${id.slice(0, headLen)}...${id.slice(-tailLen)}`;
+}
+
 export const Scorecard: React.FC<ScorecardProps> = ({ run }) => {
   if (!run) {
     return (
@@ -40,8 +48,8 @@ export const Scorecard: React.FC<ScorecardProps> = ({ run }) => {
       {/* Run Identifier Tag */}
       <div className="flex items-center justify-between text-xs pb-1 border-b border-border-subtle/60">
         <span className="text-[11px] font-mono text-text-muted font-medium">Evaluation Target</span>
-        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-surface-subtle text-brand-purple font-bold">
-          {run.run_id.slice(0, 12)}...
+        <span className="text-[10px] font-mono px-2 py-0.5 rounded-lg bg-surface-subtle text-brand-purple font-bold">
+          {formatRunIdTail(run.run_id, 40)}
         </span>
       </div>
 
