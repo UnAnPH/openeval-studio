@@ -1905,6 +1905,51 @@ async def ingest_agent_log(payload: IngestAgentLogPayload) -> dict[str, Any]:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+@app.post("/api/v1/agent-logs/scan-local")
+async def scan_and_ingest_local_agent_logs(
+    limit: int = Query(default=100, ge=1, le=500),
+    agent: str = Query(default="all"),
+) -> dict[str, Any]:
+    """Scan local Antigravity, Claude Code, and Cursor directories on the host machine and ingest sessions for active user."""
+    from scripts.ingest_local_agent_logs import (
+        discover_antigravity_transcripts,
+        discover_claude_transcripts,
+        discover_cursor_transcripts,
+    )
+    from server.agent_log_loader import UniversalAgentLogLoader, get_antigravity_titles
+
+    UniversalAgentLogLoader._ag_titles = get_antigravity_titles()
+    ingested_sessions: list[str] = []
+    now = time.time()
+
+    if agent in ("all", "antigravity"):
+        for idx, t_path in enumerate(discover_antigravity_transcripts()[:limit], 1):
+            age_sec = now - t_path.stat().st_mtime
+            is_active = (age_sec < 45 * 60) or (idx == 1 and age_sec < 90 * 60)
+            status_val = "working" if is_active else "completed"
+            s = UniversalAgentLogLoader.ingest_antigravity_transcript(t_path, status=status_val)  # type: ignore[arg-type]
+            if s:
+                ingested_sessions.append(s.session_id)
+
+    if agent in ("all", "cursor"):
+        for p in discover_cursor_transcripts()[:limit]:
+            s = UniversalAgentLogLoader.ingest_cursor_agent_transcript_jsonl(p)
+            if s:
+                ingested_sessions.append(s.session_id)
+
+    if agent in ("all", "claude_code"):
+        for p in discover_claude_transcripts()[:limit]:
+            s = UniversalAgentLogLoader.ingest_claude_code_jsonl(p)
+            if s:
+                ingested_sessions.append(s.session_id)
+
+    return {
+        "status": "success",
+        "ingested_count": len(ingested_sessions),
+        "session_ids": ingested_sessions,
+    }
+
+
 @app.post("/api/v1/sessions/{session_id}/annotate")
 async def annotate_session(
     session_id: str,

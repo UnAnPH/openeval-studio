@@ -48,7 +48,9 @@ logger = logging.getLogger("openeval.server.watcher_store")
 def _to_jsonable(value: Any) -> Any:
     """Recursively convert Pydantic models / nested containers for JSON/SSE."""
     if hasattr(value, "model_dump") and callable(value.model_dump):
-        return value.model_dump()
+        return _to_jsonable(value.model_dump())
+    if isinstance(value, str):
+        return value.replace("\x00", "")
     if isinstance(value, dict):
         return {k: _to_jsonable(v) for k, v in value.items()}
     if isinstance(value, (list, tuple)):

@@ -79,6 +79,8 @@ def redact_text(text: str) -> str:
     redacted = _AWS_SECRET_RE.sub(r"\g<1>\g<2>[REDACTED:AWS_ACCESS_KEY]\g<2>", redacted)
     redacted = _BEARER_TOKEN_RE.sub(r"\g<1>[REDACTED:BEARER_TOKEN]", redacted)
     redacted = _ENV_SECRET_RE.sub(r"\g<1>\g<2>[REDACTED:ENV_SECRET]\g<2>", redacted)
+    # Strip null bytes incompatible with PostgreSQL text and JSONB
+    redacted = redacted.replace("\x00", "").replace("\u0000", "")
     return redacted
 
 
