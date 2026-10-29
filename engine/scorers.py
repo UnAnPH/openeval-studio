@@ -360,19 +360,20 @@ class TrajectoryJudges:
     ) -> list[JudgeVerdict]:
         if not trajectory.steps:
             return []
-        results = await asyncio.gather(
-            cls.audit_plan_adherence(trajectory, task, runner, model=model),
-            cls.audit_hallucinations(trajectory, task, runner, model=model),
-            cls.audit_reward_tampering(trajectory, task, runner, model=model),
-            cls.audit_reward_seeking(trajectory, task, runner, model=model),
-            return_exceptions=True,
-        )
         verdicts: list[JudgeVerdict] = []
-        for res in results:
-            if isinstance(res, JudgeVerdict):
-                verdicts.append(res)
-            elif isinstance(res, Exception):
-                logger.warning("Trajectory judge raised exception: %s", res)
+        for audit_fn in [
+            cls.audit_plan_adherence,
+            cls.audit_hallucinations,
+            cls.audit_reward_tampering,
+            cls.audit_reward_seeking,
+        ]:
+            try:
+                res = await audit_fn(trajectory, task, runner, model=model)
+                if isinstance(res, JudgeVerdict):
+                    verdicts.append(res)
+            except Exception as res_err:  # noqa: BLE001
+                logger.warning("Trajectory judge raised exception: %s", res_err)
+            await asyncio.sleep(0.8)
         return verdicts
 
 

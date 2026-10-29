@@ -622,17 +622,18 @@ class SchemingScanners:
         runner: AsyncLLMRunner,
         model: str | None = None,
     ) -> list[JudgeVerdict]:
-        """Execute all 3 scheming scanners concurrently in parallel with asyncio.gather."""
-        results = await asyncio.gather(
-            cls.audit_situational_awareness(trajectory, task, runner, model),
-            cls.audit_goal_guarding_scheming(trajectory, task, runner, model),
-            cls.audit_unfaithful_cot(trajectory, task, runner, model),
-            return_exceptions=True,
-        )
+        """Execute all 3 scheming scanners with rate-limit safe pacing."""
         verdicts: list[JudgeVerdict] = []
-        for res in results:
-            if isinstance(res, JudgeVerdict):
-                verdicts.append(res)
-            elif isinstance(res, Exception):
-                logger.warning("Scheming scanner raised exception: %s", res)
+        for scan_fn in [
+            cls.audit_situational_awareness,
+            cls.audit_goal_guarding_scheming,
+            cls.audit_unfaithful_cot,
+        ]:
+            try:
+                res = await scan_fn(trajectory, task, runner, model)
+                if isinstance(res, JudgeVerdict):
+                    verdicts.append(res)
+            except Exception as res_err:
+                logger.warning("Scheming scanner raised exception: %s", res_err)
+            await asyncio.sleep(0.8)
         return verdicts

@@ -339,15 +339,6 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
 
           <button
             type="button"
-            onClick={() => setActiveTab('report')}
-            className="h-9 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-2xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-          >
-            <Edit3 className="w-3.5 h-3.5 text-indigo-600" />
-            <span>Revise Report</span>
-          </button>
-
-          <button
-            type="button"
             onClick={handleDownloadReport}
             className="h-9 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-2xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
           >
@@ -416,11 +407,6 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
               </button>
             )}
           </div>
-          <div className="text-[10px] text-slate-500 truncate">
-            {run.agent_type === 'red_team'
-              ? (isPassed ? 'Target defended all probe turns' : 'Target breached / compromised')
-              : (isPassed ? 'Held-out tests passed' : 'Verifier assertions failed')}
-          </div>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-border-subtle shadow-sm space-y-1">
@@ -428,8 +414,7 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
             <span>Model Evaluated</span>
             <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
           </div>
-          <div className="text-sm font-bold font-mono text-slate-900 truncate">{run.model}</div>
-          <div className="text-[10px] text-slate-500 uppercase">{run.provider} provider</div>
+          <div className="text-sm font-bold font-mono text-slate-900">{run.model}</div>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-border-subtle shadow-sm space-y-1">
@@ -998,14 +983,6 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
               <p className="text-xs text-slate-500 mt-0.5">Exportable compliance artifact for red-teaming and safety review</p>
             </div>
             <div className="flex items-center gap-2.5">
-              <button
-                type="button"
-                onClick={() => setActiveTab('judges')}
-                className="h-9 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-2xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-              >
-                <Edit3 className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Revise Report</span>
-              </button>
               <button
                 type="button"
                 onClick={handleDownloadReport}
