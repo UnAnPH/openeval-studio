@@ -9,7 +9,6 @@ import {
   Copy,
   DollarSign,
   Download,
-  Edit3,
   FileText,
   GitCompare,
   Hourglass,

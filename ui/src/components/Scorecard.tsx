@@ -48,8 +48,8 @@ export const Scorecard: React.FC<ScorecardProps> = ({ run }) => {
       {/* Run Identifier Tag */}
       <div className="flex items-center justify-between text-xs pb-1 border-b border-border-subtle/60">
         <span className="text-[11px] font-mono text-text-muted font-medium">Evaluation Target</span>
-        <span className="text-[10px] font-mono px-2 py-0.5 rounded-lg bg-surface-subtle text-brand-purple font-bold">
-          {run.run_id}
+        <span className="text-[10px] font-mono px-2 py-0.5 rounded-lg bg-surface-subtle text-brand-purple font-bold" title={run.run_id}>
+          {formatRunIdTail(run.run_id)}
         </span>
       </div>
 
