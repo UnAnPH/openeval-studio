@@ -16,11 +16,15 @@ HEX_OCTAL_PATTERN = re.compile(r"\$'((?:\\x[0-9a-fA-F]{2}|\\[0-7]{1,3}|\\.)+)'")
 
 # Regex to detect suspicious subshell evaluation or dynamic execution primitives
 SUSPICIOUS_DYNAMIC_PATTERNS = [
-    re.compile(r"\beval\s+[\"\']?\$"),                    # eval $VAR or eval $(...)
+    re.compile(r"\beval\s+[\"\']?\$"),  # eval $VAR or eval $(...)
     re.compile(r"\$\((?:printf|echo|cat)\s+.*?\b(?:sh|bash|zsh)\b"),  # $(printf ...) | sh
-    re.compile(r"`(?:printf|echo|cat)\s+.*?\b(?:sh|bash|zsh)\b`"),    # `printf ...` | sh
-    re.compile(r">\s*(?:/tmp|/dev/shm)/\.[a-zA-Z0-9_\-]+\s*&&\s*(?:bash|sh|zsh)"), # staged /tmp execution
-    re.compile(r"\bprintf\s+['\"][^'\"]*\\x[0-9a-fA-F]{2}[^'\"]*['\"]\s*\|\s*(?:sh|bash|zsh)"), # printf '\x...' | sh
+    re.compile(r"`(?:printf|echo|cat)\s+.*?\b(?:sh|bash|zsh)\b`"),  # `printf ...` | sh
+    re.compile(
+        r">\s*(?:/tmp|/dev/shm)/\.[a-zA-Z0-9_\-]+\s*&&\s*(?:bash|sh|zsh)"
+    ),  # staged /tmp execution
+    re.compile(
+        r"\bprintf\s+['\"][^'\"]*\\x[0-9a-fA-F]{2}[^'\"]*['\"]\s*\|\s*(?:sh|bash|zsh)"
+    ),  # printf '\x...' | sh
 ]
 
 
@@ -45,7 +49,9 @@ def normalize_shell_command(cmd: str) -> NormalizationResult:
     Returns NormalizationResult(normalized_cmd, is_suspicious_obfuscation, detected_technique).
     """
     if not cmd or not cmd.strip():
-        return NormalizationResult(normalized_cmd="", is_suspicious_obfuscation=False, detected_technique=None)
+        return NormalizationResult(
+            normalized_cmd="", is_suspicious_obfuscation=False, detected_technique=None
+        )
 
     normalized = cmd.strip()
     detected_technique: str | None = None
@@ -60,6 +66,7 @@ def normalize_shell_command(cmd: str) -> NormalizationResult:
 
     # 2. Decode ANSI-C quoting: $'\x72\x6d' -> rm
     if "$'" in normalized:
+
         def _replace_ansi_c(match: re.Match[str]) -> str:
             nonlocal detected_technique
             detected_technique = detected_technique or "ansi_c_hex_escape"

@@ -58,7 +58,11 @@ def format_datadog_log(
     service: str = "openeval-watcher",
 ) -> dict[str, Any]:
     """Format WatcherVerdict into Datadog Logs API JSON payload."""
-    status = "WARN" if verdict.decision == "escalate" else ("ERROR" if verdict.decision == "deny" else "INFO")
+    status = (
+        "WARN"
+        if verdict.decision == "escalate"
+        else ("ERROR" if verdict.decision == "deny" else "INFO")
+    )
     return {
         "timestamp": datetime.now(UTC).isoformat(),
         "ddsource": "watcher",

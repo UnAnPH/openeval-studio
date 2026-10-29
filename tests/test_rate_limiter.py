@@ -24,7 +24,9 @@ def test_token_bucket_allows_within_capacity() -> None:
 
 
 def test_token_bucket_refills_over_time() -> None:
-    limiter = TokenBucketRateLimiter(capacity=2, refill_rate_per_sec=10.0)  # 10 tokens per sec (1 every 100ms)
+    limiter = TokenBucketRateLimiter(
+        capacity=2, refill_rate_per_sec=10.0
+    )  # 10 tokens per sec (1 every 100ms)
     session_id = "test-session-refill"
 
     # Drain bucket

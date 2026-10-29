@@ -35,7 +35,9 @@ class TokenBucketRateLimiter:
         self.capacity = capacity
         self.refill_rate = refill_rate_per_sec
         self._lock = threading.Lock()
-        self._local_buckets: dict[str, tuple[float, float]] = {}  # {key: (tokens, last_refill_time)}
+        self._local_buckets: dict[
+            str, tuple[float, float]
+        ] = {}  # {key: (tokens, last_refill_time)}
 
         self._redis_client: redis.Redis[bytes] | None = None
         target_redis_url = redis_url or os.getenv("REDIS_URL")
@@ -117,11 +119,15 @@ class TokenBucketRateLimiter:
         """
         try:
             now = time.time()
-            res = self._redis_client.eval(lua_script, 1, f"ratelimit:{key}", self.capacity, self.refill_rate, now)  # type: ignore[no-untyped-call]
+            res = self._redis_client.eval(
+                lua_script, 1, f"ratelimit:{key}", self.capacity, self.refill_rate, now
+            )  # type: ignore[no-untyped-call]
             allowed = bool(res[0] == 1)
             retry_ms = int(res[1])
             remaining = int(res[2])
-            return RateLimitResult(allowed=allowed, retry_after_ms=retry_ms, remaining_tokens=remaining)
+            return RateLimitResult(
+                allowed=allowed, retry_after_ms=retry_ms, remaining_tokens=remaining
+            )
         except Exception:  # noqa: BLE001
             # Fall back to local on transient Redis failure
             return self._check_local(key)
