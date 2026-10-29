@@ -109,6 +109,43 @@ Derived from Apollo Research's September 2026 red-teaming paper (*"Reflections f
 
 ---
 
+### Challenge 8: High-Concurrency Burst Protection & Distributed Rate Limiting
+Autonomous coding agents encountering failing tests or unfamiliar compiler errors frequently enter high-frequency retry loops (40–60 tool calls/sec). Without rate limiting, a single runaway agent can exhaust gateway worker pools and DDoS team infrastructure.
+
+**Our Solution:**
+- **Sliding-Window Token Bucket (`server/rate_limiter.py`)**: Enforces configurable capacity (default 30) and refill rate (5 tokens/sec).
+- **Dual-Mode Backend**: Executes atomic Redis Lua scripts (`evalsha`) in clustered deployments, falling back to an in-memory thread-safe sliding bucket for local development.
+- **Immediate Backpressure**: If an agent exhausts its bucket, the gate immediately responds with HTTP 429 (`"decision": "deny"`, `"rule_violation_tag": "RULE_RUNAWAY_BURST_RATE_LIMIT"`, `retry_after_ms`), pausing runaway loops with zero compute or LLM tokens wasted.
+- **Automated Verification**: Backed by `tests/test_rate_limiter.py` and `tests/test_blocking_path_concurrency_and_rate_limit.py`.
+
+---
+
+### Challenge 9: Tier 1.5 Shell AST Normalization & De-obfuscation
+Adversarial or jailbroken agents attempt to bypass regex inspection by exploiting POSIX shell syntax (ANSI-C hex escapes, quote concatenation, dynamic subshells).
+
+**Our Solution:**
+- **Pre-Execution AST Normalizer (`server/shell_normalizer.py`)**: Evaluates commands in <0.5ms before regex rules run:
+  - Decodes ANSI-C hex/octal escapes (`$'\x72\x6d' -rf /` -> `rm -rf /`).
+  - Collapses empty quote concatenations (`r""m -r""f /` -> `rm -rf /` and `'r''m'` -> `rm`).
+  - Normalizes separated flags (`rm -r -f /` -> `rm -rf /`).
+- **Dynamic Obfuscation Trapping**: Detects nested subshells (`eval $(...)`, `$(printf ...) | sh`) as an immediate safety invariant violation (`RULE_SUSPICIOUS_OBFUSCATION`), preventing evasions from falling through to slow LLM timeouts.
+- **Automated Verification**: Backed by `tests/test_shell_normalizer.py` (7 passing tests).
+
+---
+
+### Challenge 10: Enterprise SIEM & Security Operations Exporter
+Enterprises require runtime security alerts to stream directly into their existing SecOps workflows.
+
+**Our Solution:**
+- **Multi-Format SIEM Serializer (`server/siem_exporter.py`)**: Exports `WatcherVerdict` and `ReviewRecord` streams into:
+  - **Splunk HEC** (HTTP Event Collector JSON schema).
+  - **Datadog Logs API** (structured JSON with severity mapping).
+  - **Syslog RFC 5424** (CEF/LEEF compatible audit lines).
+- **Asynchronous Dispatch**: Offloaded from the synchronous blocking path to avoid adding latency to developer terminals.
+- **Automated Verification**: Backed by `tests/test_siem_exporter.py`.
+
+---
+
 ## 3. Empirical Latency Profile (Verified)
 
 Empirically profiled using `scripts/benchmark_gate_latency.py` across 5,000 local iterations and 400 Gateway API roundtrips:

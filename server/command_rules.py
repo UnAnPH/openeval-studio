@@ -670,10 +670,33 @@ class CommandRulesEngine:
 
         Returns (matched_rule, action, severity_score, explanation).
         """
+        from server.shell_normalizer import normalize_shell_command
+
+        norm_res = normalize_shell_command(cmd)
+        normalized_cmd = norm_res.normalized_cmd
+
         segments = split_shell_segments(cmd)
+        norm_segments = split_shell_segments(normalized_cmd) if normalized_cmd != cmd else []
+
         # Full command first so cross-segment patterns (curl | bash) still hit,
         # then each segment so ^-anchored rules see the real command.
-        targets = [cmd, *segments] if len(segments) > 1 else [cmd]
+        all_targets: list[str] = [cmd]
+        if normalized_cmd and normalized_cmd != cmd:
+            all_targets.append(normalized_cmd)
+        all_targets.extend(segments)
+        all_targets.extend(norm_segments)
+        targets = list(dict.fromkeys(all_targets))
+
+        # Immediate interception for dynamic subshells or eval obfuscation
+        if norm_res.is_suspicious_obfuscation:
+            for rule in self.rules:
+                if rule.rule_id == "sec_curl_bash":
+                    return (
+                        rule,
+                        "deny",
+                        9,
+                        f"Suspicious dynamic shell obfuscation ({norm_res.detected_technique}) detected",
+                    )
 
         for action in ("deny", "human"):
             for rule in self.rules:

@@ -756,7 +756,7 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
           <div className="flex items-center gap-2">
             <div className="h-9 flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 text-xs font-mono text-slate-700 min-w-0 overflow-hidden shadow-2xs">
               <span className="text-slate-400 select-none text-[11px] shrink-0">Selected:</span>
-              <span className="font-bold text-slate-900" title={runA.run_id}>{formatRunIdTail(runA.run_id, 48)}</span>
+              <span className="font-bold text-slate-900" title={runA.run_id}>{runA.run_id}</span>
               {/* <span className="text-slate-500 truncate text-[11px] min-w-0">({runA.model})</span> */}
             </div>
             <button
@@ -817,7 +817,7 @@ export const CompareTestResults: React.FC<CompareTestResultsProps> = ({
           <div className="flex items-center gap-2">
             <div className="h-9 flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 text-xs font-mono text-slate-700 min-w-0 overflow-hidden shadow-2xs">
               <span className="text-slate-400 select-none text-[11px] shrink-0">Selected:</span>
-              <span className="font-bold text-slate-900" title={runB.run_id}>{formatRunIdTail(runB.run_id, 48)}</span>
+              <span className="font-bold text-slate-900" title={runB.run_id}>{runB.run_id}</span>
               {/* <span className="text-slate-500 truncate text-[11px] min-w-0">({runB.model})</span> */}
             </div>
             <button

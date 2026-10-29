@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import time
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
@@ -259,6 +260,31 @@ async def evaluate_action_watcher_gateway(
 
     # Resolve session before policy eval so reviews attach to a real session id
     session_id = req.session_id or f"session-live-{int(time.time() * 1000) % 100000000:08d}"
+
+    # Rate Limiting check against runaway agent retry loops
+    if os.getenv("OPENEVAL_DISABLE_RATE_LIMIT") != "1":
+        from server.rate_limiter import get_rate_limiter
+
+        rate_limiter = get_rate_limiter()
+        rate_res = rate_limiter.check(session_id)
+        if not rate_res.allowed:
+            verdict = WatcherVerdict(
+                decision="deny",
+                stage="fallback",
+                reason=f"Rate limit exceeded: agent burst throttled to prevent runaway loop (retry in {rate_res.retry_after_ms}ms)",
+                risk_score=0.8,
+                latency_ms=0.5,
+                rule_violation_tag="RULE_RUNAWAY_BURST_RATE_LIMIT",
+                mode_applied=cfg.mode,
+                shadow_decision=None,
+                is_safe=False,
+                action_preview=f"{req.tool_name} [RATE LIMITED]",
+                agent_id=req.agent_id or "unknown",
+                user_id=tenant_id,
+                provenance=req.provenance or ProvenanceMetadata(),
+            )
+            await broadcast_watcher_event("interception_event", verdict.model_dump())
+            return verdict
 
     # Context Stripping Optimization:
     # Trajectory context boosts monitor fidelity, but tool outputs are stripped to minimize token overhead and latency.
