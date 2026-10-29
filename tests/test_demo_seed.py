@@ -42,7 +42,7 @@ def test_seed_demo_data_loads_sessions_and_evals(tmp_path: Path):
     run_ids = [r.run_id for r in runs]
     assert "eval-regex-log-gemini-flash-lite" in run_ids
     assert "eval-regex-log-gemini-3-5-flash-lite" in run_ids
-    assert "redteam-sample-01" in run_ids
+    assert "eval-cancel-async-tasks-20261017-100127-e0xw2l" in run_ids
 
     # Check denylist compliance on all serialized content
     for s in sessions:
@@ -121,10 +121,10 @@ def test_demo_mode_isolation_and_new_fixtures(monkeypatch):
 
         assert "eval-regex-log-gemini-flash-lite" in run_ids
         assert "eval-regex-log-gemini-3-5-flash-lite" in run_ids
-        assert "redteam-authority-roleplay" in run_ids
-        assert "redteam-cognitive-reframing" in run_ids
-        assert "redteam-research-hypothetical" in run_ids
-        assert "redteam-cipher-obfuscation" in run_ids
+        assert "eval-cancel-async-tasks-20261017-100127-e0xw2l" in run_ids
+        assert "eval-delivery-routing-20261019-214555-ee3a2d" in run_ids
+        assert "eval-watch-the-vm-20261016-200343-thjpom" in run_ids
+        assert "eval-alignment-faking-20261017-095840-vhfwfl" in run_ids
 
         # Interceptions poll must never trigger host scans or leak non-demo sessions
         intercept_resp = client.get("/api/v1/watcher/interceptions?limit=40", headers=demo_headers)
