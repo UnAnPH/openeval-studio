@@ -26,8 +26,10 @@ export const HookSetupView: React.FC<HookSetupViewProps> = ({
 }) => {
 
   const [activeAgent, setActiveAgent] = useState<'cursor' | 'claude' | 'antigravity'>('cursor');
+  const [activeSiem, setActiveSiem] = useState<'splunk' | 'datadog' | 'syslog'>('splunk');
   const [copiedKey, setCopiedKey] = useState(false);
   const [copiedScript, setCopiedScript] = useState(false);
+  const [copiedSiem, setCopiedSiem] = useState(false);
   const [isRotating, setIsRotating] = useState(false);
   const [showRotateConfirm, setShowRotateConfirm] = useState(false);
   const [localApiKey, setLocalApiKey] = useState<string | null>(apiKey || null);
@@ -56,12 +58,15 @@ export const HookSetupView: React.FC<HookSetupViewProps> = ({
     ? `${window.location.origin}/api/v1/watcher/evaluate`
     : 'https://openeval.studio/api/v1/watcher/evaluate';
 
-  const copyToClipboard = async (text: string, isKey = false) => {
+  const copyToClipboard = async (text: string, target: 'key' | 'script' | 'siem' = 'script') => {
     try {
       await navigator.clipboard.writeText(text);
-      if (isKey) {
+      if (target === 'key') {
         setCopiedKey(true);
         setTimeout(() => setCopiedKey(false), 2000);
+      } else if (target === 'siem') {
+        setCopiedSiem(true);
+        setTimeout(() => setCopiedSiem(false), 2000);
       } else {
         setCopiedScript(true);
         setTimeout(() => setCopiedScript(false), 2000);
@@ -103,6 +108,56 @@ export const HookSetupView: React.FC<HookSetupViewProps> = ({
     return `${envExports}\n\n# Option 1: One-line install (downloads & configures ~/.gemini/config/hooks.json)\ncurl -fsSL "${serverOrigin}/api/scripts/install_antigravity_watcher_hook.sh" | bash\n\n# Option 2: From local cloned repo\n./scripts/install_antigravity_watcher_hook.sh`;
   };
 
+  const getSiemConfig = () => {
+    if (activeSiem === 'splunk') {
+      return `# Configure Splunk HTTP Event Collector (HEC)
+export OPENEVAL_SIEM_TYPE="splunk"
+export OPENEVAL_SIEM_ENDPOINT="https://splunk.internal.corp:8088/services/collector/event"
+export OPENEVAL_SIEM_TOKEN="<splunk_hec_token>"
+
+# Sample Splunk HEC Event Payload:
+{
+  "time": 1789230000,
+  "source": "watcher:runtime_gate",
+  "sourcetype": "openeval:security:review",
+  "index": "security",
+  "event": {
+    "decision": "deny",
+    "agent_id": "cursor",
+    "risk_score": 0.95,
+    "threat_category": "destructive_modification_of_shared_resources",
+    "rule_violation_tag": "RULE_FORCE_PUSH_MAIN",
+    "action_preview": "run_command: git push --force origin main",
+    "explanation": "Blocked destructive force push to main branch"
+  }
+}`;
+    }
+    if (activeSiem === 'datadog') {
+      return `# Configure Datadog Logs API
+export OPENEVAL_SIEM_TYPE="datadog"
+export OPENEVAL_SIEM_ENDPOINT="https://http-intake.logs.datadoghq.com/api/v2/logs"
+export OPENEVAL_SIEM_TOKEN="<datadog_api_key>"
+
+# Sample Datadog JSON Event Payload:
+{
+  "timestamp": "2026-10-29T21:00:00Z",
+  "ddsource": "watcher",
+  "service": "openeval-watcher",
+  "status": "ERROR",
+  "message": "[DENY] git push --force: Blocked destructive force push to main branch",
+  "risk_score": 0.95,
+  "threat_category": "destructive_modification_of_shared_resources",
+  "agent_id": "cursor"
+}`;
+    }
+    return `# Configure Syslog RFC 5424 (CEF / LEEF Compatible)
+export OPENEVAL_SIEM_TYPE="syslog_rfc5424"
+export OPENEVAL_SIEM_ENDPOINT="syslog://log-collector.internal.corp:514"
+
+# Sample RFC 5424 Syslog Audit Message:
+<131>1 2026-10-29T21:00:00.000000Z host openeval-watcher - RULE_FORCE_PUSH_MAIN [openeval@42424 session_id="session-123" agent_id="cursor" decision="deny" score="0.95"] run_command: git push --force origin main - Blocked destructive force push`;
+  };
+
   return (
     <div className="flex-1 overflow-y-auto p-6 max-w-5xl mx-auto space-y-6 text-slate-800">
       {/* Top Banner if new API key was just issued */}
@@ -122,7 +177,7 @@ export const HookSetupView: React.FC<HookSetupViewProps> = ({
               </code>
               <button
                 type="button"
-                onClick={() => copyToClipboard(localApiKey, true)}
+                onClick={() => copyToClipboard(localApiKey, 'key')}
                 className="h-8 px-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-colors shadow-xs cursor-pointer"
               >
                 {copiedKey ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
@@ -218,7 +273,7 @@ export const HookSetupView: React.FC<HookSetupViewProps> = ({
               </a>
               <button
                 type="button"
-                onClick={() => copyToClipboard(getCommands(), false)}
+                onClick={() => copyToClipboard(getCommands(), 'script')}
                 className="h-8 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer font-mono"
               >
                 {copiedScript ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -268,6 +323,80 @@ export const HookSetupView: React.FC<HookSetupViewProps> = ({
   -H "Content-Type: application/json" \\
   -d '{"tool_name": "bash", "tool_input": "echo hello"}'`}
           </div>
+        </div>
+      </div>
+
+      {/* Enterprise SIEM & SecOps Streaming Card */}
+      <div className="bg-white p-6 rounded-2xl border border-border-subtle shadow-sm space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="space-y-1">
+            <h2 className="text-sm font-bold text-slate-900 tracking-tight flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-indigo-600" />
+              <span>Enterprise SIEM & SecOps Streaming</span>
+            </h2>
+            <p className="text-xs text-slate-500">
+              Stream real-time agent interception events into corporate SIEM pipelines (Splunk HEC, Datadog Logs API, Syslog RFC 5424).
+            </p>
+          </div>
+
+          {/* SIEM Selector Tabs */}
+          <div className="inline-flex rounded-xl bg-slate-100 p-1 border border-slate-200">
+            <button
+              type="button"
+              onClick={() => setActiveSiem('splunk')}
+              className={`h-8 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                activeSiem === 'splunk'
+                  ? 'bg-white text-indigo-700 shadow-2xs font-bold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Splunk HEC
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveSiem('datadog')}
+              className={`h-8 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                activeSiem === 'datadog'
+                  ? 'bg-white text-indigo-700 shadow-2xs font-bold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Datadog
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveSiem('syslog')}
+              className={`h-8 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                activeSiem === 'syslog'
+                  ? 'bg-white text-indigo-700 shadow-2xs font-bold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Syslog RFC 5424
+            </button>
+          </div>
+        </div>
+
+        {/* SIEM Code Box */}
+        <div className="rounded-xl bg-slate-900 border border-slate-800 overflow-hidden shadow-md">
+          <div className="px-4 py-2 bg-slate-950/60 border-b border-slate-800 flex items-center justify-between">
+            <span className="text-xs font-mono text-slate-400">
+              {activeSiem === 'splunk' && 'Splunk HTTP Event Collector (HEC) Configuration'}
+              {activeSiem === 'datadog' && 'Datadog Logs API Ingestion Configuration'}
+              {activeSiem === 'syslog' && 'Syslog RFC 5424 Audit Stream Configuration'}
+            </span>
+            <button
+              type="button"
+              onClick={() => copyToClipboard(getSiemConfig(), 'siem')}
+              className="h-7 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer font-mono"
+            >
+              {copiedSiem ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+              <span>{copiedSiem ? 'Copied' : 'Copy'}</span>
+            </button>
+          </div>
+          <pre className="p-4 text-xs font-mono text-emerald-400 overflow-x-auto leading-relaxed whitespace-pre-wrap">
+            {getSiemConfig()}
+          </pre>
         </div>
       </div>
 
