@@ -450,7 +450,7 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                   </th>
                   <th className="py-3 px-4">Status</th>
                   <th className="py-3 px-4">Run ID</th>
-                  <th className="py-3 px-4">Benchmark Task</th>
+                  {/* <th className="py-3 px-4">Benchmark Task</th> */}
                   <th className="py-3 px-4">Model</th>
                   <th className="py-3 px-4">Duration</th>
                   <th className="py-3 px-4 text-right">Actions</th>
@@ -538,10 +538,10 @@ export const RunsTable: React.FC<RunsTableProps> = ({
                         </div>
                       </td>
 
-                      {/* Benchmark Task */}
+                      {/* Benchmark Task
                       <td className="py-3.5 px-4 font-mono font-medium text-text-primary text-xs">
                         {run.task_id}
-                      </td>
+                      </td> */}
 
                       {/* Model */}
                       <td className="py-3.5 px-4 font-sans text-xs">
