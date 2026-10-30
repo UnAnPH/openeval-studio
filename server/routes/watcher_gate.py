@@ -709,13 +709,16 @@ async def stream_watcher_events(
             seen: set[str] = set()
             history: list[dict[str, Any]] = []
             for row in live_hist + store_hist:
-                key = f"{row.get('agent_id')}|{row.get('decision')}|{row.get('action_preview')}|{row.get('timestamp')}"
+                rid = row.get("review_id")
+                ts_sec = str(row.get("timestamp") or "")[:19]
+                key = rid if rid else f"{row.get('agent_id')}|{row.get('action_preview')}|{ts_sec}"
                 if key in seen:
                     continue
                 seen.add(key)
                 history.append(_enrich_verdict_dict(row))
-                if len(history) >= 40:
-                    break
+
+            history.sort(key=lambda r: str(r.get("timestamp") or ""), reverse=True)
+            history = history[:40]
             init_data = {
                 "status": "connected",
                 "config": store.get_user_config().model_dump(),

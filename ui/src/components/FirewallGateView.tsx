@@ -8,7 +8,7 @@ import {
   Copy,
   Terminal,
 } from 'lucide-react';
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { FindingRecord, RunRecord, WatcherConfig, WatcherVerdict } from '../types';
 
 interface FirewallGateViewProps {
@@ -218,16 +218,38 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
     }
   };
 
-  // Canonical Control universe: live interception events from SSE (not findings/runs/sessions).
+  // Canonical Control universe: live interception events from SSE sorted newest-first and deduplicated
+  const sortedAndDedupedLive = useMemo(() => {
+    const seen = new Set<string>();
+    const result: WatcherVerdict[] = [];
 
-  const totalAllCount = liveInterceptions.length;
-  const totalBlockedCount = liveInterceptions.filter((v) => classifyLiveDecision(v) === 'blocked').length;
-  const totalClosedCount = liveInterceptions.filter((v) => classifyLiveDecision(v) === 'closed').length;
+    // Sort by timestamp descending (newest first)
+    const sorted = [...liveInterceptions].sort((a, b) => {
+      const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+      const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+      if (isNaN(timeA) || isNaN(timeB)) return 0;
+      return timeB - timeA;
+    });
+
+    for (const v of sorted) {
+      // Deduplicate by review_id, or composite (agent + action + second)
+      const secStamp = (v.timestamp || '').slice(0, 19);
+      const key = v.review_id || `${v.agent_id}|${v.action_preview}|${secStamp}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push(v);
+    }
+    return result;
+  }, [liveInterceptions]);
+
+  const totalAllCount = sortedAndDedupedLive.length;
+  const totalBlockedCount = sortedAndDedupedLive.filter((v) => classifyLiveDecision(v) === 'blocked').length;
+  const totalClosedCount = sortedAndDedupedLive.filter((v) => classifyLiveDecision(v) === 'closed').length;
 
   const filteredLive =
     streamFilter === 'all'
-      ? liveInterceptions
-      : liveInterceptions.filter((v) => classifyLiveDecision(v) === streamFilter);
+      ? sortedAndDedupedLive
+      : sortedAndDedupedLive.filter((v) => classifyLiveDecision(v) === streamFilter);
 
   const totalItems = filteredLive.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));

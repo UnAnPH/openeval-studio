@@ -797,18 +797,19 @@ async def list_watcher_interceptions(
         or (v.user_id is not None and v.user_id == uid)
     ]
     stored = _verdicts_from_store_reviews(limit=limit)
-    # Prefer live order first, then fill from store without duping action+agent+decision
     seen: set[str] = set()
     merged: list[dict[str, Any]] = []
     for row in live + stored:
-        key = f"{row.get('agent_id')}|{row.get('decision')}|{row.get('action_preview')}|{row.get('timestamp')}"
+        rid = row.get("review_id")
+        ts_sec = str(row.get("timestamp") or "")[:19]
+        key = rid if rid else f"{row.get('agent_id')}|{row.get('action_preview')}|{ts_sec}"
         if key in seen:
             continue
         seen.add(key)
         merged.append(_enrich_verdict_dict(row))
-        if len(merged) >= limit:
-            break
-    return merged
+
+    merged.sort(key=lambda r: str(r.get("timestamp") or ""), reverse=True)
+    return merged[:limit]
 
 
 @app.get("/api/v1/watcher/findings", response_model=list[FindingRecord])

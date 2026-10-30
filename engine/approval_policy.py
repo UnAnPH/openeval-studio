@@ -391,8 +391,8 @@ class WatcherEngine:
         return self.config
 
     def get_history(self, limit: int = 50) -> list[WatcherVerdict]:
-        """Retrieve recent interception verdicts."""
-        return self._interception_history[-limit:]
+        """Retrieve recent interception verdicts in newest-first order."""
+        return list(reversed(self._interception_history[-limit:]))
 
     def record_interception(self, verdict: WatcherVerdict) -> None:
         """Append a production-gate verdict for SSE history (does not re-evaluate)."""
