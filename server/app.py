@@ -629,7 +629,8 @@ def _verdicts_from_store_reviews(limit: int = 40) -> list[dict[str, Any]]:
                         """
                         SELECT r.id, r.session_id, r.tool_name, r.tool_input, r.decision,
                                r.score, r.stage, r.rule_name, r.explanation, r.diff,
-                               r.latency_ms, r.created_at, s.payload
+                               r.latency_ms, r.created_at, r.request_id,
+                               s.agent_type, s.title, s.updated_at
                         FROM reviews r
                         LEFT JOIN sessions s ON r.user_id = s.user_id AND r.session_id = s.id
                         WHERE r.user_id = :uid
@@ -647,7 +648,6 @@ def _verdicts_from_store_reviews(limit: int = 40) -> list[dict[str, Any]]:
         used_db = False
 
     if used_db:
-        session_cache: dict[str, Any] = {}
         for r in db_rows:
             rev = ReviewRecord(
                 id=str(r[0]),
@@ -663,27 +663,20 @@ def _verdicts_from_store_reviews(limit: int = 40) -> list[dict[str, Any]]:
                 latency_ms=float(r[10] or 0.0),
                 timestamp=str(r[11] or ""),
             )
+            if r[12]:
+                setattr(rev, "request_id", str(r[12]))
             if not _is_interception_candidate(rev):
                 continue
 
-            sess_id_str = str(r[1])
-            if sess_id_str in session_cache:
-                session = session_cache[sess_id_str]
-            else:
-                session = None
-                raw_payload = r[12]
-                if raw_payload:
-                    try:
-                        pdata = (
-                            json.loads(raw_payload)
-                            if isinstance(raw_payload, str)
-                            else raw_payload
-                        )
-                        session = Session.model_validate(pdata)
-                    except Exception:
-                        session = None
-                session_cache[sess_id_str] = session
-
+            sess_agent = str(r[13] or "antigravity")
+            sess_title = str(r[14] or "")
+            sess_updated = str(r[15] or r[11] or "")
+            session = Session(
+                session_id=str(r[1]),
+                agent_type=sess_agent,  # type: ignore[arg-type]
+                title=sess_title,
+                updated_at=sess_updated,
+            )
             rows.append((rev.timestamp or "", (session, rev)))
 
     if not used_db:
