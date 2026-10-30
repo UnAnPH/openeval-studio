@@ -2,17 +2,25 @@
 # Install / refresh OpenEval Watcher hooks for Cursor (project + user-level).
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-GATE="$ROOT/scripts/cursor_watcher_gate.py"
-PROJECT_HOOKS="$ROOT/.cursor/hooks.json"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || echo "")"
+ROOT=""
+if [ -n "$SCRIPT_DIR" ] && [ -d "$SCRIPT_DIR/../.git" ]; then
+  ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
+
+GATE="${ROOT:+$ROOT/scripts/cursor_watcher_gate.py}"
+PROJECT_HOOKS="${ROOT:+$ROOT/.cursor/hooks.json}"
 USER_HOOKS="${HOME}/.cursor/hooks.json"
 
 INSTALL_DIR="${HOME}/scripts"
 INSTALL_GATE="${INSTALL_DIR}/cursor_watcher_gate.py"
 
-mkdir -p "$ROOT/.cursor" "${HOME}/.cursor" "${HOME}/.openeval" "$INSTALL_DIR"
+mkdir -p "${HOME}/.cursor" "${HOME}/.openeval" "$INSTALL_DIR"
+if [ -n "$ROOT" ]; then
+  mkdir -p "$ROOT/.cursor"
+fi
 
-if [ -f "$GATE" ]; then
+if [ -n "$GATE" ] && [ -f "$GATE" ]; then
   chmod +x "$GATE"
   cp "$GATE" "$INSTALL_GATE"
 else
@@ -67,8 +75,9 @@ def merge_hooks(path: Path, cmd: str) -> None:
     path.write_text(json.dumps(existing, indent=2) + "\n")
     print(f"Updated {path} -> {cmd}")
 
-# Project hooks use portable relative invocation; user-level hooks use absolute path
-merge_hooks(Path(${PROJECT_HOOKS@Q}), "python3 scripts/cursor_watcher_gate.py")
+project_hooks_str = ${PROJECT_HOOKS@Q}
+if project_hooks_str:
+    merge_hooks(Path(project_hooks_str), "python3 scripts/cursor_watcher_gate.py")
 merge_hooks(Path(${USER_HOOKS@Q}), f'python3 "{gate}"')
 print(f"Gate: {gate}")
 PY

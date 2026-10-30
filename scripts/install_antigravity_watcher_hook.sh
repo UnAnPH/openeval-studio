@@ -2,15 +2,19 @@
 # Install / refresh OpenEval Watcher PreToolUse gate for Google Antigravity.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-GATE="$ROOT/scripts/antigravity_watcher_gate.py"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || echo "")"
+ROOT=""
+if [ -n "$SCRIPT_DIR" ] && [ -d "$SCRIPT_DIR/../.git" ]; then
+  ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
+GATE="${ROOT:+$ROOT/scripts/antigravity_watcher_gate.py}"
 INSTALL_DIR="${HOME}/scripts"
 INSTALL_GATE="${INSTALL_DIR}/antigravity_watcher_gate.py"
 HOOKS_JSON="${HOME}/.gemini/config/hooks.json"
 
 mkdir -p "$INSTALL_DIR" "${HOME}/.gemini/config" "${HOME}/.openeval"
 
-if [ -f "$GATE" ]; then
+if [ -n "$GATE" ] && [ -f "$GATE" ]; then
   chmod +x "$GATE"
   cp "$GATE" "$INSTALL_GATE"
 else
@@ -21,6 +25,27 @@ else
   curl -fsSL "${SERVER_URL}/api/scripts/antigravity_watcher_gate.py" -o "$INSTALL_GATE"
 fi
 chmod +x "$INSTALL_GATE"
+
+# Persist configuration to ~/.openeval/config.json so GUI apps (Antigravity IDE) load it reliably
+python3 - <<CFG
+import json, os
+cfg_path = os.path.expanduser("~/.openeval/config.json")
+data = {}
+if os.path.exists(cfg_path):
+    try:
+        data = json.load(open(cfg_path))
+    except Exception:
+        pass
+key = os.environ.get("OPENEVAL_API_KEY", "").strip()
+url = os.environ.get("OPENEVAL_WATCHER_URL", "https://openeval.studio/api/v1/watcher/evaluate").strip()
+if key:
+    data["api_key"] = key
+if url:
+    data["watcher_url"] = url
+with open(cfg_path, "w") as f:
+    json.dump(data, f, indent=2)
+os.chmod(cfg_path, 0o600)
+CFG
 if ! grep -q "OPENEVAL_API_KEY" "$INSTALL_GATE"; then
   echo "Installed gate is missing OPENEVAL_API_KEY auth headers: $INSTALL_GATE" >&2
   exit 1
