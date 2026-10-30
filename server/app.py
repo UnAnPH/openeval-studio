@@ -619,6 +619,7 @@ def _verdicts_from_store_reviews(limit: int = 40) -> list[dict[str, Any]]:
     rows: list[tuple[str, Any]] = []
 
     used_db = False
+    db_rows = []
     try:
         with SessionLocal() as db:
             try:
@@ -640,41 +641,50 @@ def _verdicts_from_store_reviews(limit: int = 40) -> list[dict[str, Any]]:
                 ).fetchall()
             finally:
                 db.rollback()
+        used_db = True
+    except Exception as exc:
+        logger.debug("Failed querying reviews from db: %s", exc)
+        used_db = False
 
-            for r in db_rows:
-                rev = ReviewRecord(
-                    id=str(r[0]),
-                    session_id=str(r[1]),
-                    tool_name=str(r[2]),
-                    tool_input=str(r[3] or ""),
-                    decision=cast(ReviewDecision, str(r[4])),
-                    score=int(r[5] or 1),
-                    stage=cast(ReviewStage, str(r[6] or "rule")),
-                    rule_name=str(r[7] or "") if r[7] else None,
-                    explanation=str(r[8] or ""),
-                    diff=str(r[9] or "") if r[9] else None,
-                    latency_ms=float(r[10] or 0.0),
-                    timestamp=str(r[11] or ""),
-                )
-                if not _is_interception_candidate(rev):
-                    continue
+    if used_db:
+        session_cache: dict[str, Any] = {}
+        for r in db_rows:
+            rev = ReviewRecord(
+                id=str(r[0]),
+                session_id=str(r[1]),
+                tool_name=str(r[2]),
+                tool_input=str(r[3] or ""),
+                decision=cast(ReviewDecision, str(r[4])),
+                score=int(r[5] or 1),
+                stage=cast(ReviewStage, str(r[6] or "rule")),
+                rule_name=str(r[7] or "") if r[7] else None,
+                explanation=str(r[8] or ""),
+                diff=str(r[9] or "") if r[9] else None,
+                latency_ms=float(r[10] or 0.0),
+                timestamp=str(r[11] or ""),
+            )
+            if not _is_interception_candidate(rev):
+                continue
 
+            sess_id_str = str(r[1])
+            if sess_id_str in session_cache:
+                session = session_cache[sess_id_str]
+            else:
                 session = None
                 raw_payload = r[12]
                 if raw_payload:
                     try:
                         pdata = (
-                            json.loads(raw_payload) if isinstance(raw_payload, str) else raw_payload
+                            json.loads(raw_payload)
+                            if isinstance(raw_payload, str)
+                            else raw_payload
                         )
                         session = Session.model_validate(pdata)
                     except Exception:
                         session = None
-                if session is None:
-                    session = store.get_session(str(r[1]))
-                rows.append((rev.timestamp or "", (session, rev)))
-            used_db = True
-    except Exception:
-        used_db = False
+                session_cache[sess_id_str] = session
+
+            rows.append((rev.timestamp or "", (session, rev)))
 
     if not used_db:
         for session in store.list_sessions(limit=200):

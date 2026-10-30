@@ -708,6 +708,7 @@ async def stream_watcher_events(
             store_hist = await asyncio.to_thread(_verdicts_from_store_reviews, 20)
             seen: set[str] = set()
             history: list[dict[str, Any]] = []
+            session_cache: dict[str, Any] = {}
             for row in live_hist + store_hist:
                 rid = row.get("review_id")
                 ts_sec = str(row.get("timestamp") or "")[:19]
@@ -715,7 +716,7 @@ async def stream_watcher_events(
                 if key in seen:
                     continue
                 seen.add(key)
-                history.append(_enrich_verdict_dict(row))
+                history.append(_enrich_verdict_dict(row, session_cache=session_cache))
 
             history.sort(key=lambda r: str(r.get("timestamp") or ""), reverse=True)
             history = history[:40]
