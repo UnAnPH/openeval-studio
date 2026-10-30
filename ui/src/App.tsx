@@ -277,14 +277,35 @@ export function App() {
     } catch {}
   }, []);
 
-  // Fetch initial data & poll until connected
+  // Fetch initial data once on mount, then poll dynamic data gently (every 8s when tab is active)
   useEffect(() => {
     fetchInitialData();
     const interval = setInterval(() => {
-      fetchInitialData();
-    }, 3000);
+      pollDynamicData();
+    }, 8000);
     return () => clearInterval(interval);
   }, []);
+
+  const pollDynamicData = async () => {
+    if (typeof document !== 'undefined' && document.hidden) return;
+    try {
+      const [healthRes, interceptRes] = await Promise.all([
+        fetch('/api/health').catch(() => null),
+        fetch('/api/v1/watcher/interceptions?limit=40').catch(() => null),
+      ]);
+      if (healthRes && healthRes.ok) {
+        setServerConnected(true);
+      }
+      if (interceptRes && interceptRes.ok) {
+        const rows: WatcherVerdict[] = await interceptRes.json();
+        if (Array.isArray(rows)) {
+          setLiveInterceptions(rows);
+        }
+      }
+    } catch {
+      // silent on transient network blip
+    }
+  };
 
   const fetchInitialData = async () => {
     try {
@@ -450,9 +471,7 @@ export function App() {
 
         if (interceptRes && interceptRes.ok) {
           const rows: WatcherVerdict[] = await interceptRes.json();
-          setLiveInterceptions(Array.isArray(rows) ? rows : []);
-        } else {
-          setLiveInterceptions([]);
+          if (Array.isArray(rows)) setLiveInterceptions(rows);
         }
       }
 

@@ -453,9 +453,8 @@ class WatcherStore:
         if db is not None:
             _execute_write(db)
         else:
-            with SessionLocal() as active_db:
+            with SessionLocal() as active_db, active_db.begin():
                 _execute_write(active_db)
-                active_db.commit()
 
         # Update disk JSON cache for file-based tools / inspection
         try:
@@ -892,7 +891,7 @@ class WatcherStore:
         rule_name = str(review.rule_name or getattr(review, "threat_category", "") or "")
         req_id = getattr(review, "request_id", None)
 
-        with SessionLocal() as db:
+        with SessionLocal() as db, db.begin():
             uid = user_id if user_id is not None else get_current_user_id(db)
 
             # 1. Insert or update the normalized reviews relational row within the transaction
@@ -1033,8 +1032,6 @@ class WatcherStore:
                 payload=redacted_review_dump,
             )
             self.append_event(event, db=db)
-
-            db.commit()
 
         # 4. Update in-memory session cache directly
         with self._lock:
