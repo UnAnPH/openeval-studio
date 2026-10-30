@@ -26,6 +26,8 @@ services:
       - path: .release-env
         required: false
     volumes:
+      - ./server:/app/server:ro
+      - ./ui/dist:/app/ui/dist:ro
       - ./alembic:/app/alembic:ro
       - ./alembic.ini:/app/alembic.ini:ro
       - ./scripts:/app/scripts:ro
