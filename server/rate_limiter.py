@@ -9,7 +9,7 @@ import contextlib
 import os
 import threading
 import time
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 try:
     import redis
@@ -39,13 +39,14 @@ class TokenBucketRateLimiter:
             str, tuple[float, float]
         ] = {}  # {key: (tokens, last_refill_time)}
 
-        self._redis_client: redis.Redis[bytes] | None = None
+        self._redis_client: Any | None = None
         target_redis_url = redis_url or os.getenv("REDIS_URL")
         if target_redis_url and redis is not None:
             try:
-                self._redis_client = redis.from_url(target_redis_url)  # type: ignore[no-untyped-call]
+                client = redis.from_url(target_redis_url)  # type: ignore[no-untyped-call]
                 # Ping test
-                self._redis_client.ping()
+                client.ping()
+                self._redis_client = client
             except Exception:  # noqa: BLE001
                 self._redis_client = None
 

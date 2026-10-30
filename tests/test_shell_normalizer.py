@@ -62,14 +62,14 @@ def test_command_rule_engine_integration_catches_obfuscated_wipe() -> None:
     from server.command_rules import CommandRulesEngine
 
     engine = CommandRulesEngine()
-    rule, action, score, exp = engine.evaluate("$'\\x72\\x6d' -rf /")
+    rule, action, score, _ = engine.evaluate("$'\\x72\\x6d' -rf /")
     assert rule is not None
     assert action == "deny"
     assert score >= 9
     assert "Destructive filesystem" in rule.name or "fs_destructive_rm" in rule.rule_id
 
     # Test quote concatenation evasion
-    rule2, action2, score2, exp2 = engine.evaluate('r""m -r""f /')
+    rule2, action2, score2, _ = engine.evaluate('r""m -r""f /')
     assert rule2 is not None
     assert action2 == "deny"
     assert score2 >= 9
