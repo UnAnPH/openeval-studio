@@ -223,11 +223,20 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
     const seen = new Set<string>();
     const result: WatcherVerdict[] = [];
 
-    // Sort by timestamp descending (newest first)
+    const parseTs = (ts?: string): number => {
+      if (!ts) return 0;
+      const str = String(ts).trim();
+      let d = new Date(str).getTime();
+      if (!isNaN(d)) return d;
+      d = new Date(str.replace(' ', 'T')).getTime();
+      if (!isNaN(d)) return d;
+      return 0;
+    };
+
+    // Sort by timestamp descending (latest first)
     const sorted = [...liveInterceptions].sort((a, b) => {
-      const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-      const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-      if (isNaN(timeA) || isNaN(timeB)) return 0;
+      const timeA = parseTs(a.timestamp);
+      const timeB = parseTs(b.timestamp);
       return timeB - timeA;
     });
 
@@ -368,25 +377,10 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
                 <span>{isResolving ? 'Resolving...' : 'Resolve All'}</span>
               </button>
             )}
-            {onNavigateToSessions && (
-              <button
-                type="button"
-                onClick={onNavigateToSessions}
-                className="h-9 px-3.5 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 shadow-2xs shrink-0"
-              >
-                Open Sessions →
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Live Telemetry Stream */}
-        <div>
-          <div className="p-3 px-5 border-b border-border-subtle bg-canvas/30 flex items-center justify-end text-xs">
             <button
               type="button"
               onClick={() => toggleExpandAll(displayedLive.length)}
-              className="h-8 px-3 rounded-lg bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold shadow-2xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+              className="h-9 px-3.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold shadow-2xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0"
             >
               <Icon
                 icon={
@@ -402,7 +396,20 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
                   : 'Expand All'}
               </span>
             </button>
+            {onNavigateToSessions && (
+              <button
+                type="button"
+                onClick={onNavigateToSessions}
+                className="h-9 px-3.5 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 shadow-2xs shrink-0"
+              >
+                Open Sessions →
+              </button>
+            )}
           </div>
+        </div>
+
+        {/* Live Telemetry Stream */}
+        <div>
 
           <div className="divide-y divide-border-subtle max-h-[600px] overflow-y-auto">
             {displayedLive.length === 0 ? (
