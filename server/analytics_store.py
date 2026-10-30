@@ -20,6 +20,10 @@ class DuckDBTraceEngine:
     def __init__(self, logs_dir: Path, db_path: str = ":memory:") -> None:
         self.logs_dir = logs_dir
         self.con = duckdb.connect(database=db_path)
+        try:
+            self.con.execute("SET max_memory = '128MB'; SET threads = 1;")
+        except Exception:
+            pass
         self._init_tables()
         self.sync_logs()
 

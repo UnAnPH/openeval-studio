@@ -68,7 +68,7 @@ payload = {
                     {
                         "type": "command",
                         "command": f"python3 {gate}",
-                        "timeout": 3,
+                        "timeout": 5,
                     }
                 ],
             }
@@ -80,7 +80,7 @@ payload = {
                     {
                         "type": "command",
                         "command": f"python3 {gate} --post",
-                        "timeout": 3,
+                        "timeout": 5,
                     }
                 ],
             }

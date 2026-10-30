@@ -122,26 +122,32 @@ def resolve_api_key_user(raw_key: str) -> tuple[int, str] | None:
     env_key = os.getenv("OPENEVAL_API_KEY", "").strip()
     if env_key and len(raw_key) == len(env_key) and hmac.compare_digest(raw_key, env_key):
         with SessionLocal() as db:
-            from server.db import get_user_id_by_slug
+            try:
+                from server.db import get_user_id_by_slug
 
-            owner_id = get_user_id_by_slug(db, "owner")
-            return owner_id, "owner"
+                owner_id = get_user_id_by_slug(db, "owner")
+                return owner_id, "owner"
+            finally:
+                db.rollback()
 
     # 2. Database lookup by token hash
     token_hash = hash_token(raw_key)
     with SessionLocal() as db:
-        row = db.execute(
-            text(
-                "SELECT u.id, u.slug "
-                "FROM api_keys k "
-                "JOIN users u ON k.user_id = u.id "
-                "WHERE k.token_hash = :hash "
-                "LIMIT 1"
-            ),
-            {"hash": token_hash},
-        ).fetchone()
-        if row:
-            return int(row[0]), str(row[1])
+        try:
+            row = db.execute(
+                text(
+                    "SELECT u.id, u.slug "
+                    "FROM api_keys k "
+                    "JOIN users u ON k.user_id = u.id "
+                    "WHERE k.token_hash = :hash "
+                    "LIMIT 1"
+                ),
+                {"hash": token_hash},
+            ).fetchone()
+            if row:
+                return int(row[0]), str(row[1])
+        finally:
+            db.rollback()
 
     return None
 

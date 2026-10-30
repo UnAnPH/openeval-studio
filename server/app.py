@@ -93,7 +93,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.db_ready = False
     try:
         with SessionLocal() as db:
-            db.execute(text("SELECT 1"))
+            try:
+                db.execute(text("SELECT 1"))
+            finally:
+                db.rollback()
         skip_migration = (
             os.getenv("OPENEVAL_ENV") == "production"
             or os.getenv("OPENEVAL_SKIP_LIFESPAN_MIGRATION") == "1"
@@ -271,7 +274,10 @@ class _AuthMiddleware(BaseHTTPMiddleware):
                 demo_uid = _USER_ID_CACHE.get("demo")
                 if demo_uid is None:
                     with SessionLocal() as db:
-                        demo_uid = get_user_id_by_slug(db, "demo")
+                        try:
+                            demo_uid = get_user_id_by_slug(db, "demo")
+                        finally:
+                            db.rollback()
                 current_user_slug.set("demo")
                 current_user_id.set(demo_uid)
                 return await call_next(request)
@@ -297,7 +303,10 @@ class _AuthMiddleware(BaseHTTPMiddleware):
             if owner_uid is None:
                 try:
                     with SessionLocal() as db:
-                        owner_uid = get_user_id_by_slug(db, "owner")
+                        try:
+                            owner_uid = get_user_id_by_slug(db, "owner")
+                        finally:
+                            db.rollback()
                 except Exception:
                     owner_uid = 1
             current_user_slug.set("owner")
@@ -383,7 +392,10 @@ def probe_database(open_session: Callable[[], Any] | None = None) -> bool:
     opener = open_session or open_db_session
     try:
         with opener() as db:
-            return db.execute(text("SELECT 1")).scalar() == 1
+            res = db.execute(text("SELECT 1")).scalar() == 1
+            if hasattr(db, "rollback"):
+                db.rollback()
+            return res
     except Exception as exc:
         logger.warning("Database health probe failed: %s", exc)
         return False
@@ -396,7 +408,7 @@ async def health_check(
 ) -> dict[str, Any]:
     """Health check endpoint testing PostgreSQL connection."""
     is_demo = os.getenv("OPENEVAL_DEMO_SEED", "0").lower() in ("1", "true", "yes")
-    db_connected = probe_database(open_session)
+    db_connected = await asyncio.to_thread(probe_database, open_session)
 
     if not db_connected:
         response.status_code = 503
@@ -602,22 +614,25 @@ def _verdicts_from_store_reviews(limit: int = 40) -> list[dict[str, Any]]:
     used_db = False
     try:
         with SessionLocal() as db:
-            uid = get_current_user_id(db)
-            db_rows = db.execute(
-                text(
-                    """
-                    SELECT r.id, r.session_id, r.tool_name, r.tool_input, r.decision,
-                           r.score, r.stage, r.rule_name, r.explanation, r.diff,
-                           r.latency_ms, r.created_at, s.payload
-                    FROM reviews r
-                    LEFT JOIN sessions s ON r.user_id = s.user_id AND r.session_id = s.id
-                    WHERE r.user_id = :uid
-                    ORDER BY r.created_at DESC
-                    LIMIT :lim
-                    """
-                ),
-                {"uid": uid, "lim": limit * 4},
-            ).fetchall()
+            try:
+                uid = get_current_user_id(db)
+                db_rows = db.execute(
+                    text(
+                        """
+                        SELECT r.id, r.session_id, r.tool_name, r.tool_input, r.decision,
+                               r.score, r.stage, r.rule_name, r.explanation, r.diff,
+                               r.latency_ms, r.created_at, s.payload
+                        FROM reviews r
+                        LEFT JOIN sessions s ON r.user_id = s.user_id AND r.session_id = s.id
+                        WHERE r.user_id = :uid
+                        ORDER BY r.created_at DESC
+                        LIMIT :lim
+                        """
+                    ),
+                    {"uid": uid, "lim": limit * 4},
+                ).fetchall()
+            finally:
+                db.rollback()
 
             for r in db_rows:
                 rev = ReviewRecord(
@@ -805,7 +820,7 @@ async def list_watcher_interceptions(
         if (v.user_id is None and current_user_slug.get() in ("owner", "demo"))
         or (v.user_id is not None and v.user_id == uid)
     ]
-    stored = _verdicts_from_store_reviews(limit=limit)
+    stored = await asyncio.to_thread(_verdicts_from_store_reviews, limit=limit)
     seen: set[str] = set()
     merged: list[dict[str, Any]] = []
     for row in live + stored:

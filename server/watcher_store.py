@@ -494,22 +494,25 @@ class WatcherStore:
             return self.materialize_session(session_id)
 
         with SessionLocal() as db:
-            user_id = get_current_user_id(db)
-            row = db.execute(
-                text("SELECT payload FROM sessions WHERE id = :id AND user_id = :uid"),
-                {"id": session_id, "uid": user_id},
-            ).fetchone()
-
-            if (
-                (not row or not row[0])
-                and session_id.startswith("eval-")
-                and current_user_slug.get() == "demo"
-            ):
-                # If not found for active user, check if this is an eval run across tenants (demo only)
+            try:
+                user_id = get_current_user_id(db)
                 row = db.execute(
-                    text("SELECT payload FROM sessions WHERE id = :id AND id LIKE 'eval-%'"),
-                    {"id": session_id},
+                    text("SELECT payload FROM sessions WHERE id = :id AND user_id = :uid"),
+                    {"id": session_id, "uid": user_id},
                 ).fetchone()
+
+                if (
+                    (not row or not row[0])
+                    and session_id.startswith("eval-")
+                    and current_user_slug.get() == "demo"
+                ):
+                    # If not found for active user, check if this is an eval run across tenants (demo only)
+                    row = db.execute(
+                        text("SELECT payload FROM sessions WHERE id = :id AND id LIKE 'eval-%'"),
+                        {"id": session_id},
+                    ).fetchone()
+            finally:
+                db.rollback()
 
             if not row or not row[0]:
                 # Check disk file fallback for eval runs (demo surface only)
@@ -594,20 +597,23 @@ class WatcherStore:
             ensure_demo_timeline_fresh(self)
 
         with SessionLocal() as db:
-            user_id = get_current_user_id(db)
-            query = "SELECT payload FROM sessions WHERE user_id = :uid"
-            params: dict[str, Any] = {"uid": user_id}
+            try:
+                user_id = get_current_user_id(db)
+                query = "SELECT payload FROM sessions WHERE user_id = :uid"
+                params: dict[str, Any] = {"uid": user_id}
 
-            if agent_type:
-                query += " AND agent_type = :agent_type"
-                params["agent_type"] = agent_type
+                if agent_type:
+                    query += " AND agent_type = :agent_type"
+                    params["agent_type"] = agent_type
 
-            query += " ORDER BY created_at DESC"
-            sql_limit = limit if not status else max(limit * 3, 200)
-            query += " LIMIT :limit"
-            params["limit"] = sql_limit
+                query += " ORDER BY created_at DESC"
+                sql_limit = limit if not status else max(limit * 3, 200)
+                query += " LIMIT :limit"
+                params["limit"] = sql_limit
 
-            rows = db.execute(text(query), params).fetchall()
+                rows = db.execute(text(query), params).fetchall()
+            finally:
+                db.rollback()
             results: list[Session] = []
             for r in rows:
                 if r[0]:
@@ -1636,7 +1642,8 @@ class WatcherStore:
 
     def get_analytics_overview(self) -> dict[str, Any]:
         """Aggregate high-level overview metrics directly from PostgreSQL for current user."""
-        with SessionLocal() as db:
+        db = SessionLocal()
+        try:
             user_id = get_current_user_id(db)
 
             # Sessions counts
@@ -1731,10 +1738,14 @@ class WatcherStore:
                 "auto_approved_pct": f"{auto_approved_pct}%",
                 "agent_counts": agent_counts,
             }
+        finally:
+            db.rollback()
+            db.close()
 
     def get_analyzer_summary(self) -> dict[str, Any]:
         """Compute organization-wide Analyzer risk metrics and real SQL latency percentiles."""
-        with SessionLocal() as db:
+        db = SessionLocal()
+        try:
             user_id = get_current_user_id(db)
 
             # 1. Core counters
@@ -1905,6 +1916,9 @@ class WatcherStore:
                 "agent_distribution": agent_distribution,
                 "recent_interventions": recent_interventions,
             }
+        finally:
+            db.rollback()
+            db.close()
 
     # -------------------------------------------------------------------------
     # Policy Management (Multi-Tenant Per-User)
