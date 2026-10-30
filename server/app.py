@@ -499,7 +499,9 @@ def _normalize_cmd_for_match(s: str) -> str:
     return "".join(s.split())[:50]
 
 
-def _enrich_verdict_dict(row: dict[str, Any]) -> dict[str, Any]:
+def _enrich_verdict_dict(
+    row: dict[str, Any], session_cache: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """Ensure full_command and tool_result are populated for Control Live Stream."""
     full_cmd = row.get("full_command")
     tool_res = row.get("tool_result")
@@ -509,7 +511,12 @@ def _enrich_verdict_dict(row: dict[str, Any]) -> dict[str, Any]:
     sess_id = row.get("session_id")
     rev_id = row.get("review_id")
     store = get_watcher_store()
-    session = store.get_session(sess_id) if sess_id else None
+    if session_cache is not None and sess_id in session_cache:
+        session = session_cache[sess_id]
+    else:
+        session = store.get_session(sess_id) if sess_id else None
+        if session_cache is not None and sess_id:
+            session_cache[sess_id] = session
 
     if session and session.trajectory:
         tc = None
@@ -799,6 +806,33 @@ def _verdicts_from_store_reviews(limit: int = 40) -> list[dict[str, Any]]:
     return out
 
 
+def _fetch_and_merge_interceptions(
+    limit: int, uid: int | None, user_slug: str
+) -> list[dict[str, Any]]:
+    """Fetch live and stored interceptions and enrich them with session metadata in threadpool."""
+    live = [
+        v.model_dump()
+        for v in global_watcher_engine.get_history(limit)
+        if (v.user_id is None and user_slug in ("owner", "demo"))
+        or (v.user_id is not None and v.user_id == uid)
+    ]
+    stored = _verdicts_from_store_reviews(limit=limit)
+    seen: set[str] = set()
+    merged: list[dict[str, Any]] = []
+    session_cache: dict[str, Any] = {}
+    for row in live + stored:
+        rid = row.get("review_id")
+        ts_sec = str(row.get("timestamp") or "")[:19]
+        key = rid if rid else f"{row.get('agent_id')}|{row.get('action_preview')}|{ts_sec}"
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(_enrich_verdict_dict(row, session_cache=session_cache))
+
+    merged.sort(key=lambda r: str(r.get("timestamp") or ""), reverse=True)
+    return merged[:limit]
+
+
 @app.get("/api/v1/watcher/interceptions")
 async def list_watcher_interceptions(
     limit: int = Query(default=40, ge=1, le=200),
@@ -814,26 +848,8 @@ async def list_watcher_interceptions(
         UniversalAgentLogLoader.scan_default_agent_directories()
 
     uid = current_user_id.get()
-    live = [
-        v.model_dump()
-        for v in global_watcher_engine.get_history(limit)
-        if (v.user_id is None and current_user_slug.get() in ("owner", "demo"))
-        or (v.user_id is not None and v.user_id == uid)
-    ]
-    stored = await asyncio.to_thread(_verdicts_from_store_reviews, limit=limit)
-    seen: set[str] = set()
-    merged: list[dict[str, Any]] = []
-    for row in live + stored:
-        rid = row.get("review_id")
-        ts_sec = str(row.get("timestamp") or "")[:19]
-        key = rid if rid else f"{row.get('agent_id')}|{row.get('action_preview')}|{ts_sec}"
-        if key in seen:
-            continue
-        seen.add(key)
-        merged.append(_enrich_verdict_dict(row))
-
-    merged.sort(key=lambda r: str(r.get("timestamp") or ""), reverse=True)
-    return merged[:limit]
+    user_slug = current_user_slug.get()
+    return await asyncio.to_thread(_fetch_and_merge_interceptions, limit, uid, user_slug)
 
 
 @app.get("/api/v1/watcher/findings", response_model=list[FindingRecord])
