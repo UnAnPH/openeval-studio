@@ -686,11 +686,18 @@ class WatcherStore:
         return deleted or mem_deleted
 
     def purge_empty_sessions(self, min_messages: int = 1) -> list[str]:
-        """Remove sessions that have fewer than min_messages."""
+        """Remove sessions that have fewer than min_messages and no tool calls or reviews."""
         purged: list[str] = []
         for s in self.list_sessions(limit=500):
             msgs = s.trajectory.messages if s.trajectory else []
-            if len(msgs) < min_messages and self.delete_session(s.session_id):
+            tools = s.trajectory.tool_calls if s.trajectory else []
+            reviews = s.trajectory.reviews if s.trajectory else []
+            if (
+                len(msgs) < min_messages
+                and len(tools) == 0
+                and len(reviews) == 0
+                and self.delete_session(s.session_id)
+            ):
                 purged.append(s.session_id)
         return purged
 

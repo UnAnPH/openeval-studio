@@ -1596,7 +1596,11 @@ async def list_watcher_v1_sessions(
         sessions = [
             s
             for s in sessions
-            if len(s.trajectory.messages if s.trajectory else []) >= min_messages
+            if (
+                len(s.trajectory.messages if s.trajectory else []) >= min_messages
+                or len(s.trajectory.tool_calls if s.trajectory else []) >= min_messages
+                or len(s.trajectory.reviews if s.trajectory else []) >= min_messages
+            )
         ]
     return sessions
 
