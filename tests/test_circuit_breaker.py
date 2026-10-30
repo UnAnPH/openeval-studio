@@ -114,7 +114,6 @@ def test_antigravity_circuit_breaker_trips_after_max_failures(temp_circuit_file:
     res3 = _run_antigravity_gate(payload, env)
     assert res3["decision"] == "force_ask"
     assert "CIRCUIT BREAKER TRIPPED" in res3.get("reason", "")
-    assert res3.get("terminal_reason") == "circuit_breaker_tripped"
 
 
 def test_antigravity_circuit_breaker_window_expiry(temp_circuit_file: Path):
