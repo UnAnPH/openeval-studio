@@ -96,7 +96,7 @@ if _CONFIG_FILE.is_file():
             WATCHER_URL = str(_cfg["watcher_url"]).strip()
     except Exception:
         pass
-TIMEOUT_SEC = _safe_float(os.environ.get("OPENEVAL_WATCHER_TIMEOUT"), 1.5)
+TIMEOUT_SEC = _safe_float(os.environ.get("OPENEVAL_WATCHER_TIMEOUT"), 1.2)
 LOCKOUT_DECISION = os.environ.get("OPENEVAL_LOCKOUT_DECISION", "force_ask")
 FAIL_MODE = (
     os.environ.get(

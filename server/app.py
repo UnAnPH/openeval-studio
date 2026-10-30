@@ -94,10 +94,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     try:
         with SessionLocal() as db:
             db.execute(text("SELECT 1"))
-        alembic_ini = PROJECT_ROOT / "alembic.ini"
-        if alembic_ini.exists():
-            alembic_cfg = Config(str(alembic_ini))
-            command.upgrade(alembic_cfg, "head")
+        skip_migration = (
+            os.getenv("OPENEVAL_ENV") == "production"
+            or os.getenv("OPENEVAL_SKIP_LIFESPAN_MIGRATION") == "1"
+        )
+        if not skip_migration:
+            alembic_ini = PROJECT_ROOT / "alembic.ini"
+            if alembic_ini.exists():
+                alembic_cfg = Config(str(alembic_ini))
+                command.upgrade(alembic_cfg, "head")
+        else:
+            logger.info(
+                "Alembic migration skipped in lifespan (already handled by container entrypoint)."
+            )
         app.state.db_ready = True
     except Exception as exc:
         logger.error("Database connection or migration failed during startup: %s", exc)
