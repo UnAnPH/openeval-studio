@@ -277,12 +277,12 @@ export function App() {
     } catch {}
   }, []);
 
-  // Fetch initial data once on mount, then poll dynamic data gently (every 8s when tab is active)
+  // Fetch initial data once on mount, then poll dynamic data gently (every 12s when tab is active)
   useEffect(() => {
     fetchInitialData();
     const interval = setInterval(() => {
       pollDynamicData();
-    }, 8000);
+    }, 12000);
     return () => clearInterval(interval);
   }, []);
 
@@ -299,7 +299,11 @@ export function App() {
       if (interceptRes && interceptRes.ok) {
         const rows: WatcherVerdict[] = await interceptRes.json();
         if (Array.isArray(rows)) {
-          setLiveInterceptions(rows);
+          setLiveInterceptions((prev) => {
+            const prevSig = prev.map((r) => `${r.review_id || ''}:${r.timestamp || ''}:${r.decision || ''}:${r.human_override || ''}`).join(',');
+            const nextSig = rows.map((r) => `${r.review_id || ''}:${r.timestamp || ''}:${r.decision || ''}:${r.human_override || ''}`).join(',');
+            return prevSig === nextSig ? prev : rows;
+          });
         }
       }
     } catch {

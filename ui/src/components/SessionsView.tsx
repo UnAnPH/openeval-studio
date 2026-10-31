@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
-  AlertTriangle,
   ArrowRight,
   Check,
   ChevronDown,
@@ -146,9 +145,12 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
   };
 
   // Fetch sessions from Watcher backend (with automatic fallback to bundled demo fixtures on static hosts)
-  const fetchSessions = async (autoSelect = false) => {
+  const fetchSessions = async (autoSelect = false, isInitial = false) => {
+    if (typeof document !== 'undefined' && document.hidden) return;
     try {
-      setIsLoading(true);
+      if (isInitial) {
+        setIsLoading(true);
+      }
       const res = await fetch('/api/v1/watcher/sessions?min_messages=1').catch(() => null);
       if (res && res.ok) {
         const data: WatcherSession[] = await res.json();
@@ -157,11 +159,15 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
             ? data.filter((s) => (s.session_id || '').includes('demo') || (s.session_id || '').startsWith('demo-'))
             : data.filter((s) => !(s.session_id || '').includes('demo') && !(s.session_id || '').startsWith('demo-') && (s as any).org_id !== 'demo');
           if (validData.length > 0) {
-            setSessions(validData);
+            setSessions((prev) => {
+              const prevSig = prev.map((p) => `${p.session_id}:${p.updated_at || p.created_at || ''}:${p.status || ''}`).join(',');
+              const nextSig = validData.map((p) => `${p.session_id}:${p.updated_at || p.created_at || ''}:${p.status || ''}`).join(',');
+              return prevSig === nextSig ? prev : validData;
+            });
             if (autoSelect || !selectedSessionId) {
               if (initialSessionId && validData.some((s) => s.session_id === initialSessionId)) {
                 setSelectedSessionId(initialSessionId);
-              } else if (validData.length > 0) {
+              } else if (!selectedSessionId && validData.length > 0) {
                 setSelectedSessionId(validData[0].session_id);
               }
             }
@@ -218,7 +224,9 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
       setSessions([]);
       setSelectedSessionId(null);
     } finally {
-      setIsLoading(false);
+      if (isInitial) {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -232,10 +240,10 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
   }, [isDemoActive, demoSessions]);
 
   useEffect(() => {
-    fetchSessions(true);
+    fetchSessions(true, true);
     const interval = setInterval(() => {
-      fetchSessions(false);
-    }, 4000);
+      fetchSessions(false, false);
+    }, 10000);
     return () => clearInterval(interval);
   }, [initialSessionId, isDemoActive]);
 
@@ -722,7 +730,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
 
           <button
             type="button"
-            onClick={() => fetchSessions(false)}
+            onClick={() => fetchSessions(false, true)}
             disabled={isLoading}
             className="h-9 w-9 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 shadow-2xs inline-flex items-center justify-center transition-all cursor-pointer disabled:opacity-50"
             title="Refresh sessions"
@@ -1125,7 +1133,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
               </div>
 
               {/* CARD 2: RECOMMENDED ACTIONS */}
-              <div className="bg-white p-5 rounded-2xl border border-border-subtle shadow-sm space-y-3 shrink-0">
+              {/* <div className="bg-white p-5 rounded-2xl border border-border-subtle shadow-sm space-y-3 shrink-0">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span
@@ -1201,7 +1209,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
                     </div>
                   </div>
                 )}
-              </div>
+              </div> */}
 
               {/* CARD 3: FULL TRANSCRIPT CARD WITH LLM SEARCH */}
               <div className="bg-white p-5 rounded-2xl border border-border-subtle shadow-sm space-y-4">

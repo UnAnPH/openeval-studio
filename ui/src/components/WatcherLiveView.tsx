@@ -139,12 +139,17 @@ export const WatcherLiveView: React.FC<WatcherLiveViewProps> = ({
 
   // Fetch all sessions & active policy on mount
   const fetchSessions = async () => {
+    if (typeof document !== 'undefined' && document.hidden) return;
     try {
       const res = await fetch('/api/v1/watcher/sessions').catch(() => null);
       if (res && res.ok) {
         const data: WatcherSession[] = await res.json();
         if (Array.isArray(data)) {
-          setSessions(data);
+          setSessions((prev) => {
+            const prevSig = prev.map((p) => `${p.session_id}:${p.updated_at || p.created_at || ''}:${p.status || ''}`).join(',');
+            const nextSig = data.map((p) => `${p.session_id}:${p.updated_at || p.created_at || ''}:${p.status || ''}`).join(',');
+            return prevSig === nextSig ? prev : data;
+          });
           if (data.length > 0 && (!selectedSessionId || !data.some((s) => s.session_id === selectedSessionId))) {
             setSelectedSessionId(data[0].session_id);
           } else if (data.length === 0) {
@@ -180,7 +185,7 @@ export const WatcherLiveView: React.FC<WatcherLiveViewProps> = ({
     fetchAnalyzerSummary();
     const interval = setInterval(() => {
       fetchSessions();
-    }, 4000);
+    }, 12000);
     return () => clearInterval(interval);
   }, []);
 

@@ -74,6 +74,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   // Fetch monitored watcher sessions (same source as Safety → Sessions)
   useEffect(() => {
     const fetchSessions = async () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       try {
         const res = await fetch('/api/v1/watcher/sessions');
         if (res.ok) {
@@ -85,7 +86,11 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           } else {
             // When NOT in demo mode, discard any demo sessions
             const clean = data.filter((s) => !(s.session_id || s.id || '').includes('demo') && (s as any).org_id !== 'demo');
-            setWatcherSessions(clean);
+            setWatcherSessions((prev) => {
+              const prevSig = prev.map((p) => `${p.session_id || p.id || ''}:${p.timestamp || p.created_at || ''}`).join(',');
+              const nextSig = clean.map((p) => `${p.session_id || p.id || ''}:${p.timestamp || p.created_at || ''}`).join(',');
+              return prevSig === nextSig ? prev : clean;
+            });
           }
         } else if (isDemo) {
           setWatcherSessions(demoSessions as RawSession[]);
@@ -102,7 +107,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       }
     };
     fetchSessions();
-    const interval = setInterval(fetchSessions, 5000);
+    const interval = setInterval(fetchSessions, 12000);
     return () => clearInterval(interval);
   }, [isDemo, demoSessions]);
 
