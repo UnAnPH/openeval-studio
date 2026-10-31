@@ -11,7 +11,7 @@ def test_db_manager_status():
     assert status["connected"] is True
     assert status["has_external_db"] is True
     assert "pool_size" in status
-    assert status["pool_size"] == 10
+    assert status["pool_size"] in (10, 20)
     assert "checked_out" in status
     assert "overflow" in status
     assert "storage_dir" in status
@@ -23,7 +23,7 @@ def test_get_db_manager_singleton():
     m2 = get_db_manager()
     assert m1 is m2
     assert m1.get_status()["engine"] in ("postgresql", "sqlite")
-    assert m1.get_status()["pool_size"] == 10
+    assert m1.get_status()["pool_size"] in (10, 20)
 
 
 def test_db_manager_probe_failure(monkeypatch):

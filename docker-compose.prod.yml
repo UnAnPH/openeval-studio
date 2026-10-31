@@ -44,6 +44,7 @@ services:
         required: false
     volumes:
       - ./server:/app/server:ro
+      - ./engine:/app/engine:ro
       - ./ui/dist:/app/ui/dist:ro
       - ./alembic:/app/alembic:ro
       - ./alembic.ini:/app/alembic.ini:ro

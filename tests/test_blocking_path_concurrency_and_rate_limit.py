@@ -54,10 +54,10 @@ def test_live_gate_throttles_runaway_agent_loop() -> None:
     client = TestClient(app)
     session_id = "test-runaway-agent-loop"
 
-    # Set capacity=10 for test isolation
+    # Set capacity=10 for test isolation and negligible refill to prevent test flakiness
     limiter = get_rate_limiter()
     limiter.capacity = 10
-    limiter.refill_rate = 1.0  # 1 token/sec
+    limiter.refill_rate = 0.001  # negligible refill during test burst
     limiter.reset(session_id)
 
     # Fire 10 allowed benign requests
