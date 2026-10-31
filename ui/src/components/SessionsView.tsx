@@ -1040,7 +1040,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
                     <span>Connect Watcher Hook</span>
                   </a>
                   <a
-                    href="#/demo"
+                    href="/demo"
                     className="inline-flex items-center gap-2 px-4 py-2 bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-slate-800 text-xs font-medium rounded-xl border border-dashed border-slate-200 transition-colors"
                   >
                     <span>Explore Demo Surface</span>
