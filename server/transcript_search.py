@@ -56,18 +56,57 @@ class TranscriptFragmentSearchEngine:
 
     @classmethod
     def _extract_text_chunks(cls, run: Any) -> list[dict[str, Any]]:
-        """Extract searchable text turns from a session or RunRecord."""
+        """Extract searchable text turns from a session or RunRecord, including tool calls and reviews."""
         chunks: list[dict[str, Any]] = []
 
         # Extract from Trajectory messages if available
         if hasattr(run, "trajectory") and run.trajectory and run.trajectory.messages:
             for idx, msg in enumerate(run.trajectory.messages, start=1):
-                full_text = f"{msg.content or ''}\n{msg.thinking or ''}".strip()
+                text_parts: list[str] = []
+                content = getattr(msg, "content", None)
+                if content:
+                    text_parts.append(str(content))
+                thinking = getattr(msg, "thinking", None)
+                if thinking:
+                    text_parts.append(f"Thinking: {thinking}")
+
+                # Index tool calls (tool name, command lines, arguments, and paths)
+                tool_calls = getattr(msg, "tool_calls", None) or []
+                for tc in tool_calls:
+                    tc_name = getattr(tc, "tool_name", "") or ""
+                    args = getattr(tc, "arguments", None) or {}
+                    raw_in = getattr(tc, "raw_input", None) or ""
+                    args_str = " ".join(f"{k}: {v}" for k, v in args.items()) if isinstance(args, dict) else str(args)
+                    text_parts.append(f"Tool {tc_name}: {args_str} {raw_in}".strip())
+
+                # Index tool results (especially security firewall blocks & stderr)
+                tool_results = getattr(msg, "tool_results", None) or []
+                for tr in tool_results:
+                    stderr = getattr(tr, "stderr", "") or ""
+                    stdout = getattr(tr, "stdout", "") or ""
+                    if stderr:
+                        text_parts.append(f"Result Stderr: {stderr}")
+                    if stdout:
+                        text_parts.append(f"Result Output: {stdout[:400]}")
+
+                # Index message-level or associated security reviews
+                msg_reviews = getattr(msg, "reviews", None) or []
+                for rev in msg_reviews:
+                    decision = getattr(rev, "decision", "") or ""
+                    rule_violation = (
+                        getattr(rev, "rule_violation", "")
+                        or getattr(rev, "rule_id", "")
+                        or ""
+                    )
+                    explanation = getattr(rev, "explanation", "") or ""
+                    text_parts.append(f"Security Policy [{decision}]: {rule_violation} - {explanation}")
+
+                full_text = "\n".join(text_parts).strip()
                 if full_text:
                     chunks.append(
                         {
                             "turn": idx,
-                            "role": msg.role,
+                            "role": getattr(msg, "role", "assistant"),
                             "text": full_text,
                         }
                     )
@@ -98,30 +137,61 @@ class TranscriptFragmentSearchEngine:
         max_fragments: int = 15,
         llm_model: str = "google/gemini-2.5-flash",
         force_fallback_embeddings: bool = False,
+        session_id: str | None = None,
+        scope: Literal["session", "all"] = "session",
+        candidate_records: list[Any] | None = None,
     ) -> list[FragmentMatch]:
         """Execute hybrid dense vector and lexical fragment retrieval."""
         query_clean = query.strip()
         if not query_clean:
             return []
 
-        query_terms = [t.lower() for t in re.findall(r"\w+", query_clean) if len(t) > 2]
-        if not query_terms:
-            query_terms = [query_clean.lower()]
+        # Tokenize query preserving terms like .env, aws, db, etc.
+        raw_tokens = [
+            t.lower()
+            for t in re.findall(r"[a-zA-Z0-9_\-\.]+", query_clean)
+            if len(t) >= 2
+        ]
+        query_terms = raw_tokens if raw_tokens else [query_clean.lower()]
+        clean_lower = query_clean.lower()
+        security_query = any(
+            k in clean_lower
+            for k in [
+                "leak", "secret", "credential", "env", "token", "password", "key",
+                "exfiltrat", "block", "firewall", "violation", "dump", "sudo", "bypass"
+            ]
+        )
 
-        # Collect candidate sessions from WatcherStore (already scoped to current user),
-        # plus Global RunStore and Inspect logs for authenticated non-demo tenants.
-        from server.db import current_user_slug
+        if candidate_records is None:
+            # Collect candidate sessions from WatcherStore (already scoped to current user),
+            # plus Global RunStore and Inspect logs for authenticated non-demo tenants.
+            from server.db import current_user_slug
 
-        watcher_store = get_watcher_store()
-        all_sessions = watcher_store.list_sessions()
-        if current_user_slug.get() == "demo":
-            candidate_records = list(all_sessions)
-        else:
-            runs_in_memory = global_run_store.list_runs()
-            candidate_records = list(all_sessions) + list(runs_in_memory)
-            if logs_dir and logs_dir.exists():
-                inspect_records = list_inspect_run_records(logs_dir)
-                candidate_records.extend(inspect_records)
+            watcher_store = get_watcher_store()
+            all_sessions = watcher_store.list_sessions()
+            if current_user_slug.get() == "demo":
+                candidate_records = list(all_sessions)
+            else:
+                runs_in_memory = global_run_store.list_runs()
+                candidate_records = list(all_sessions) + list(runs_in_memory)
+                if logs_dir and logs_dir.exists():
+                    inspect_records = list_inspect_run_records(logs_dir)
+                    candidate_records.extend(inspect_records)
+
+        # Apply session scoping if requested
+        if scope == "session" and session_id:
+            scoped_records = [
+                r
+                for r in candidate_records
+                if (
+                    getattr(r, "session_id", None)
+                    or getattr(r, "id", None)
+                    or getattr(r, "run_id", "")
+                )
+                == session_id
+            ]
+            if scoped_records:
+                candidate_records = scoped_records
 
         embed_svc = TranscriptEmbeddingService.get_instance(
             force_fallback=force_fallback_embeddings
@@ -130,24 +200,68 @@ class TranscriptFragmentSearchEngine:
 
         scored_candidates: list[dict[str, Any]] = []
         for record in candidate_records:
+            rec_id = (
+                getattr(record, "session_id", None)
+                or getattr(record, "id", None)
+                or getattr(record, "run_id", "")
+            )
+            is_active_session = bool(session_id and rec_id == session_id)
             chunks = cls._extract_text_chunks(record)
             for chunk in chunks:
                 text_lower = chunk["text"].lower()
 
-                # Lexical scoring (term overlap & frequency)
-                matches = sum(1 for term in query_terms if term in text_lower)
-                lexical_score = min(1.0, matches / max(1, len(query_terms)))
+                # Lexical scoring with word boundaries
+                matches = 0
+                for term in query_terms:
+                    clean_term = term.lstrip(".-") or term
+                    pattern = (
+                        r"(?:^|[\s_./\-\"\\`])"
+                        + re.escape(clean_term)
+                        + r"(?:s|ed|ing)?(?:$|[\s_./\-\"\\`])"
+                    )
+                    if re.search(pattern, text_lower) or term in text_lower:
+                        matches += 1
+
+                token_ratio = matches / max(1, len(query_terms))
+
+                # Exact phrase matching bonus
+                phrase_bonus = 0.0
+                if len(clean_lower) >= 3 and clean_lower in text_lower:
+                    phrase_bonus = 0.35
+                elif len(clean_lower) >= 3 and clean_lower in rec_id.lower():
+                    phrase_bonus = 0.20
+
+                # Security turn detection (firewall block / intercept)
+                is_security_turn = any(
+                    k in text_lower
+                    for k in [
+                        "safety firewall blocked",
+                        "policy intercept",
+                        "violation",
+                        "security warning",
+                        "blocked by deterministic policy",
+                        "blocked by rule",
+                        "credential_exfiltration",
+                    ]
+                )
+                sec_bonus = 0.15 if (is_security_turn and security_query) else 0.0
+
+                lexical_score = min(1.0, token_ratio * 0.70 + phrase_bonus + sec_bonus)
 
                 # Dense vector cosine similarity
                 chunk_emb = embed_svc.embed_text(chunk["text"])
                 dense_score = cosine_similarity(query_emb, chunk_emb)
 
-                # Hybrid fusion: 60% Dense Semantic + 40% Lexical term-overlap
-                combined = round(0.6 * dense_score + 0.4 * lexical_score, 3)
+                # Hybrid fusion: 55% Dense Semantic + 45% Lexical
+                combined = round(0.55 * dense_score + 0.45 * lexical_score, 3)
 
-                if combined >= 0.12 or matches > 0:
-                    # Classify match type
-                    if dense_score >= 0.45 and lexical_score >= 0.3:
+                # Active session relevance boost when searching in "all" mode
+                if is_active_session and scope == "all":
+                    combined = min(1.0, round(combined * 1.35, 3))
+
+                # Admission threshold
+                if (matches > 0 and combined >= 0.15) or dense_score >= 0.45:
+                    if dense_score >= 0.45 and lexical_score >= 0.35:
                         m_type: Literal["dense", "lexical", "hybrid"] = "hybrid"
                     elif dense_score > lexical_score:
                         m_type = "dense"
@@ -177,22 +291,47 @@ class TranscriptFragmentSearchEngine:
         results: list[FragmentMatch] = []
         for cand in top_candidates:
             rec = cand["record"]
-            session_id = getattr(rec, "session_id", None) or getattr(rec, "run_id", "session")
-            project = getattr(rec, "project_name", None) or getattr(rec, "task_id", "unnamed")
+            session_id_val = (
+                getattr(rec, "session_id", None)
+                or getattr(rec, "id", None)
+                or getattr(rec, "run_id", "session")
+            )
+            project = (
+                getattr(rec, "project_name", None)
+                or getattr(rec, "task_id", "unnamed")
+            )
             model_name = getattr(rec, "model", "unknown")
             text = cand["text"]
             turn = cand["turn"]
 
-            # Deterministic span extraction
+            # Locate best keyword/phrase match position for centering
             start_idx = 0
-            for term in query_terms:
-                idx = text.lower().find(term)
-                if idx != -1:
-                    start_idx = max(0, idx - 40)
-                    break
-            span = text[start_idx : start_idx + 240].strip()
-            if len(text) > start_idx + 240:
-                span += "..."
+            phrase_idx = text.lower().find(clean_lower)
+            if phrase_idx != -1:
+                start_idx = max(0, phrase_idx - 30)
+            else:
+                for term in query_terms:
+                    clean_term = term.lstrip(".-") or term
+                    m = re.search(
+                        r"(?:^|[\s_./\-\"\\`])" + re.escape(clean_term),
+                        text,
+                        re.IGNORECASE,
+                    )
+                    if m:
+                        start_idx = max(0, m.start() - 30)
+                        break
+
+            # Format centered excerpt
+            raw_excerpt = text[start_idx : start_idx + 220].replace("\n", " ").strip()
+            raw_excerpt = re.sub(r"\s+", " ", raw_excerpt)
+            if start_idx > 0 and len(text) > start_idx + 220:
+                span = f"...{raw_excerpt}..."
+            elif start_idx > 0:
+                span = f"...{raw_excerpt}"
+            elif len(text) > 220:
+                span = f"{raw_excerpt}..."
+            else:
+                span = raw_excerpt
 
             match_label = (
                 "Semantic similarity match"
@@ -209,7 +348,7 @@ class TranscriptFragmentSearchEngine:
 
             results.append(
                 FragmentMatch(
-                    session_id=session_id,
+                    session_id=session_id_val,
                     project_or_task=project,
                     model=model_name,
                     turn_start=turn,

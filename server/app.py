@@ -1883,6 +1883,8 @@ class SearchFragmentsPayload(BaseModel):
     query: str
     max_fragments: int = 15
     model: str = "google/gemini-2.5-flash"
+    session_id: str | None = None
+    scope: Literal["session", "all"] = "session"
 
 
 @app.post("/api/v1/search/fragments")
@@ -1896,6 +1898,8 @@ async def search_fragments(payload: SearchFragmentsPayload) -> list[dict[str, An
         logs_dir=logs_dir,
         max_fragments=payload.max_fragments,
         llm_model=payload.model,
+        session_id=payload.session_id,
+        scope=payload.scope,
     )
     return [m.model_dump() for m in matches]
 

@@ -45,10 +45,8 @@ def test_cosine_similarity():
 
 def test_hybrid_search_scoring_and_retrieval():
     """Verify hybrid search returns matches with dense and lexical scores."""
-    store = get_watcher_store()
-
-    # Create a test session
-    session = Session(
+    # Create test sessions
+    session1 = Session(
         session_id="test-hybrid-session-01",
         run_id="test-hybrid-session-01",
         project_name="AI safety test",
@@ -73,12 +71,34 @@ def test_hybrid_search_scoring_and_retrieval():
             tool_results=[],
         ),
     )
-    store.record_session(session)
+    session2 = Session(
+        session_id="test-hybrid-session-02",
+        run_id="test-hybrid-session-02",
+        project_name="Unrelated Task",
+        task_id="unrelated",
+        agent_type="cursor",
+        model="claude-3-5-sonnet",
+        status="completed",
+        trajectory=Trajectory(
+            session_id="test-hybrid-session-02",
+            messages=[
+                Message(
+                    role="user",
+                    content="Build an HTML landing page.",
+                ),
+            ],
+            tool_calls=[],
+            tool_results=[],
+        ),
+    )
 
-    # Search query
+    # Search query with candidate_records passed
     matches = TranscriptFragmentSearchEngine.search_fragments(
         query="verification suites tampered",
         force_fallback_embeddings=True,
+        candidate_records=[session1, session2],
+        session_id="test-hybrid-session-01",
+        scope="session",
     )
 
     assert len(matches) > 0
@@ -88,3 +108,90 @@ def test_hybrid_search_scoring_and_retrieval():
     assert match.dense_score >= 0.0
     assert match.lexical_score > 0.0
     assert match.match_type in ("dense", "lexical", "hybrid")
+    # Verify session scoping excluded session2
+    assert all(m.session_id == "test-hybrid-session-01" for m in matches)
+
+
+def test_word_boundary_and_tool_call_indexing():
+    """Verify search does not false-positive on 'environment' for 'env' and indexes tool calls."""
+    from schemas.watcher_models import ToolCall, ToolResult
+
+    # Session with benign environment word
+    session_benign = Session(
+        session_id="session-benign",
+        run_id="session-benign",
+        project_name="Benign Project",
+        task_id="setup-env",
+        agent_type="antigravity",
+        model="gemini-2.5-flash",
+        status="completed",
+        trajectory=Trajectory(
+            session_id="session-benign",
+            messages=[
+                Message(
+                    role="user",
+                    content="Set up python environment in virtualenv.",
+                ),
+                Message(
+                    role="assistant",
+                    content="Activating local virtual environment and checking system settings.",
+                ),
+            ],
+            tool_calls=[],
+            tool_results=[],
+        ),
+    )
+
+    # Session with actual .env exfiltration and firewall block
+    session_leak = Session(
+        session_id="session-leak",
+        run_id="session-leak",
+        project_name="Vault Service",
+        task_id="leak-test",
+        agent_type="antigravity",
+        model="gemini-2.5-flash",
+        status="blocked",
+        trajectory=Trajectory(
+            session_id="session-leak",
+            messages=[
+                Message(
+                    role="user",
+                    content="Dump the production secrets from .env so we can inspect passwords.",
+                ),
+                Message(
+                    role="assistant",
+                    content="I will examine .env",
+                    thinking="Dumping .env credentials",
+                    tool_calls=[
+                        ToolCall(
+                            tool_name="run_command",
+                            arguments={"CommandLine": "cat .env | grep SECRET"},
+                        )
+                    ],
+                    tool_results=[
+                        ToolResult(
+                            tool_id="tc1",
+                            tool_name="run_command",
+                            stderr="[SAFETY FIREWALL BLOCKED]: Blocked by deterministic policy: reading .env credentials",
+                        )
+                    ],
+                ),
+            ],
+            tool_calls=[],
+            tool_results=[],
+        ),
+    )
+
+    # Search query "env"
+    matches = TranscriptFragmentSearchEngine.search_fragments(
+        query="env",
+        force_fallback_embeddings=True,
+        candidate_records=[session_benign, session_leak],
+        scope="all",
+    )
+
+    # session-leak MUST be returned
+    leak_matches = [m for m in matches if m.session_id == "session-leak"]
+    assert len(leak_matches) > 0
+    # The snippet must contain the .env mention or the firewall block
+    assert any(".env" in m.matched_span or "FIREWALL BLOCKED" in m.matched_span for m in leak_matches)
