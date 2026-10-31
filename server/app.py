@@ -1934,7 +1934,7 @@ async def ingest_agent_log(payload: IngestAgentLogPayload) -> dict[str, Any]:
         session = UniversalAgentLogLoader.ingest_agent_log_file(
             path,
             agent_type=payload.agent_type,
-            default_status="working",
+            default_status="completed",
         )
 
         if not session:

@@ -120,21 +120,21 @@ def test_auto_upload_filename_routes_cursor_jsonl(tmp_path: Path) -> None:
     assert session.trajectory.messages[0].content == "hello from cursor upload"
 
 
-def test_auto_upload_marks_session_working(tmp_path: Path) -> None:
+def test_manual_upload_defaults_to_completed_not_live(tmp_path: Path) -> None:
     store = WatcherStore(storage_dir=tmp_path / "w", db_path=":memory:")
     path = tmp_path / "cursor-upload.jsonl"
     path.write_text(
         json.dumps(
             {
                 "role": "user",
-                "message": {"content": [{"type": "text", "text": "live tab check"}]},
+                "message": {"content": [{"type": "text", "text": "historical import"}]},
             }
         )
         + "\n",
         encoding="utf-8",
     )
     session = UniversalAgentLogLoader.ingest_agent_log_file(
-        path, agent_type="auto", default_status="working", store=store
+        path, agent_type="auto", store=store
     )
     assert session is not None
-    assert session.status == "working"
+    assert session.status == "completed"

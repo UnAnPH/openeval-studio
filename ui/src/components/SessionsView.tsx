@@ -1601,9 +1601,9 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
                       <Folder className="w-3.5 h-3.5 text-indigo-600" />
                       <span>Where to find your local agent transcript files</span>
                     </div>
-                    <span className="text-[10px] font-mono font-medium text-slate-500 bg-white px-2 py-0.5 rounded-md border border-slate-200 inline-flex items-center gap-1 self-start sm:self-auto">
+                    {/* <span className="text-[10px] font-mono font-medium text-slate-500 bg-white px-2 py-0.5 rounded-md border border-slate-200 inline-flex items-center gap-1 self-start sm:self-auto">
                       macOS: <kbd className="font-semibold text-slate-700">⌘ + Shift + G</kbd> to paste
-                    </span>
+                    </span> */}
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -1622,12 +1622,12 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
                           <span>{copiedId === 'path-ag' ? 'Copied' : 'Copy'}</span>
                         </button>
                       </div>
-                      <code className="text-[10px] font-mono text-slate-600 block truncate bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100" title="~/.gemini/antigravity/brain/">
+                      <code className="text-[10px] font-mono text-slate-600 block bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100" title="~/.gemini/antigravity/brain/">
                         ~/.gemini/antigravity/brain/
                       </code>
-                      <p className="text-[10px] text-slate-500 leading-tight">
+                      {/* <p className="text-[10px] text-slate-500 leading-tight">
                         Select <span className="font-mono text-indigo-600 font-semibold">transcript.jsonl</span> inside any session folder.
-                      </p>
+                      </p> */}
                     </div>
 
                     {/* Cursor */}
@@ -1648,9 +1648,9 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
                       <code className="text-[10px] font-mono text-slate-600 block truncate bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100" title="~/.cursor/projects/">
                         ~/.cursor/projects/
                       </code>
-                      <p className="text-[10px] text-slate-500 leading-tight">
+                      {/* <p className="text-[10px] text-slate-500 leading-tight">
                         Select any <span className="font-mono text-indigo-600 font-semibold">.jsonl</span> in <span className="font-mono">agent-transcripts/</span>.
-                      </p>
+                      </p> */}
                     </div>
 
                     {/* Claude Code */}
@@ -1671,16 +1671,16 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
                       <code className="text-[10px] font-mono text-slate-600 block truncate bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100" title="~/.claude/projects/">
                         ~/.claude/projects/
                       </code>
-                      <p className="text-[10px] text-slate-500 leading-tight">
+                      {/* <p className="text-[10px] text-slate-500 leading-tight">
                         Select any session <span className="font-mono text-indigo-600 font-semibold">.jsonl</span> file.
-                      </p>
+                      </p> */}
                     </div>
                   </div>
 
                   <div className="text-[11px] text-slate-600 bg-indigo-50/60 border border-indigo-100 rounded-lg p-2 flex items-start gap-2">
                     <span className="text-indigo-600 text-xs shrink-0 font-bold">💡</span>
                     <span className="leading-snug">
-                      <strong>Finder / File Picker Tip:</strong> After clicking the browse area above, press <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[10px] font-mono shadow-2xs font-semibold">⌘ + Shift + G</kbd> on macOS (or <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[10px] font-mono shadow-2xs font-semibold">Ctrl + L</kbd> on Linux) to open the "Go to Folder" prompt, paste the path, and pick your transcript.
+                      <strong>Tip:</strong> Press <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[10px] font-mono shadow-2xs font-semibold">⌘ + Shift + G</kbd> on macOS (or <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[10px] font-mono shadow-2xs font-semibold">Ctrl + L</kbd> on Linux) to open the "Go to Folder" prompt, paste the path, and pick your transcript.
                     </span>
                   </div>
                 </div>
