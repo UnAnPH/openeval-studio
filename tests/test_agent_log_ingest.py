@@ -133,8 +133,6 @@ def test_manual_upload_defaults_to_completed_not_live(tmp_path: Path) -> None:
         + "\n",
         encoding="utf-8",
     )
-    session = UniversalAgentLogLoader.ingest_agent_log_file(
-        path, agent_type="auto", store=store
-    )
+    session = UniversalAgentLogLoader.ingest_agent_log_file(path, agent_type="auto", store=store)
     assert session is not None
     assert session.status == "completed"
