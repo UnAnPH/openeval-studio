@@ -8,7 +8,6 @@ from server.transcript_embeddings import (
     cosine_similarity,
 )
 from server.transcript_search import TranscriptFragmentSearchEngine
-from server.watcher_store import get_watcher_store
 
 
 def test_chunk_transcript_text():
@@ -194,7 +193,9 @@ def test_word_boundary_and_tool_call_indexing():
     leak_matches = [m for m in matches if m.session_id == "session-leak"]
     assert len(leak_matches) > 0
     # The snippet must contain the .env mention or the firewall block
-    assert any(".env" in m.matched_span or "FIREWALL BLOCKED" in m.matched_span for m in leak_matches)
+    assert any(
+        ".env" in m.matched_span or "FIREWALL BLOCKED" in m.matched_span for m in leak_matches
+    )
 
 
 def test_query_where_is_the_issue_finds_fault_turn():

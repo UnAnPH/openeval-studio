@@ -2,7 +2,7 @@
 FROM node:20-slim AS ui-builder
 WORKDIR /app/ui
 COPY ui/package*.json ./
-RUN npm ci || npm install
+RUN npm ci
 COPY ui ./
 RUN npm run build
 
@@ -21,10 +21,16 @@ COPY tasks tasks
 COPY alembic alembic
 COPY alembic.ini cli.py inspect_tasks.py ./
 COPY --from=ui-builder /app/ui/dist /app/ui/dist
-RUN uv sync --no-dev || uv pip install --system -e .
+RUN uv sync --no-dev
 
+RUN groupadd -r openeval && useradd -m -u 1000 -g openeval -s /bin/sh openeval \
+    && chown -R openeval:openeval /app
+
+ENV HOME=/home/openeval
 ENV OPENEVAL_DEMO_SEED=0
 ENV PORT=8000
 EXPOSE 8000
+
+USER openeval
 
 CMD ["sh", "-c", "uv run uvicorn server.app:app --host 0.0.0.0 --port ${PORT:-8000}"]

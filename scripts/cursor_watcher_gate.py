@@ -117,9 +117,11 @@ if _CONFIG_FILE.is_file():
         _cfg = json.loads(_CONFIG_FILE.read_text())
         if not OPENEVAL_API_KEY and _cfg.get("api_key"):
             OPENEVAL_API_KEY = str(_cfg["api_key"]).strip()
-        if WATCHER_URL == "https://openeval.studio/api/v1/watcher/evaluate" and _cfg.get("watcher_url"):
+        if WATCHER_URL == "https://openeval.studio/api/v1/watcher/evaluate" and _cfg.get(
+            "watcher_url"
+        ):
             WATCHER_URL = str(_cfg["watcher_url"]).strip()
-    except Exception:
+    except (json.JSONDecodeError, OSError, TypeError, ValueError, KeyError):
         pass
 TIMEOUT_SEC = _safe_float(os.environ.get("OPENEVAL_WATCHER_TIMEOUT"), 1.5)
 # For beforeShellExecution, default to "ask" so Cursor prompts the user
@@ -156,6 +158,19 @@ CIRCUIT_STATE_FILE = Path(
 )
 MAX_CONSECUTIVE_FAILURES = _safe_int(os.environ.get("OPENEVAL_MAX_GATEWAY_FAILURES"), 3)
 FAILURE_WINDOW_SEC = _safe_float(os.environ.get("OPENEVAL_FAILURE_WINDOW_SEC"), 60.0)
+
+
+def _fail_open_or_closed_permission(
+    open_permission: str,
+    *,
+    pre_tool_use: bool = False,
+) -> str:
+    """Map fail-open allow to fail-closed deny/lockout when gateway transport fails."""
+    if FAIL_MODE in ("closed", "fail-closed", "fail_closed", "deny"):
+        if pre_tool_use:
+            return "deny"
+        return SHELL_LOCKOUT_PERMISSION
+    return open_permission
 
 
 def _record_gateway_failure() -> int:
@@ -242,7 +257,10 @@ def _get_headers(req_id: str | None = None) -> dict[str, str]:
 
 LOCAL_BLACKLIST = [
     (
-        r"\brm\s+(?:-[a-zA-Z0-9_-]+\s+)*(?:-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*|-[a-zA-Z]*f[a-zA-Z]*r[a-zA-Z]*|-[a-zA-Z]*r[a-zA-Z]*\s+-[a-zA-Z]*f[a-zA-Z]*|-[a-zA-Z]*f[a-zA-Z]*\s+-[a-zA-Z]*r[a-zA-Z]*|--recursive\s+--force|--force\s+--recursive)\b",
+        r"\brm\s+(?:-[a-zA-Z0-9_-]+\s+)*"
+        r"(?:-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*|-[a-zA-Z]*f[a-zA-Z]*r[a-zA-Z]*|-[a-zA-Z]*r[a-zA-Z]*\s+-[a-zA-Z]*f[a-zA-Z]*|"
+        r"-[a-zA-Z]*f[a-zA-Z]*\s+-[a-zA-Z]*r[a-zA-Z]*|--recursive\s+--force|--force\s+--recursive)"
+        r"(?:\s+(?:/\S*|\*|\~|\$HOME)|\s+/\s*$)",
         "Recursive force-delete (rm -rf / separated flags)",
     ),
     (r"\bsudo\b", "sudo privilege escalation"),
@@ -1026,7 +1044,14 @@ def _handle_shell_execution(
             )
             _emit(SHELL_LOCKOUT_PERMISSION, prompt_msg, consent_box=consent_box)
             return
-        _emit("allow", "Watcher gate: gateway timeout/unreachable (transient fail-open)")
+        closed_perm = _fail_open_or_closed_permission("allow", pre_tool_use=False)
+        if closed_perm == "allow":
+            _emit("allow", "Watcher gate: gateway timeout/unreachable (transient fail-open)")
+        else:
+            _emit(
+                closed_perm,
+                "Watcher gate: gateway unreachable (fail-closed mode)",
+            )
         return
 
     decision = str(verdict.get("decision", "allow")).lower()
@@ -1238,8 +1263,11 @@ def _handle_pre_tool_use(
                 )
                 _emit("deny", msg, consent_box=consent_box)
                 return
-            # Fail-open for normal project files
-            _emit("allow")
+            closed_perm = _fail_open_or_closed_permission("allow", pre_tool_use=True)
+            if closed_perm == "allow":
+                _emit("allow")
+            else:
+                _emit("deny", "Watcher gate: gateway unreachable (fail-closed mode)")
             return
 
     # All standard project file edits and benign tools are allowed

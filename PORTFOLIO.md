@@ -134,6 +134,8 @@ Adversarial or jailbroken agents attempt to bypass regex inspection by exploitin
 ---
 
 ### Challenge 10: Enterprise SIEM & Security Operations Exporter
+> **Status: not enabled.** The serializers exist and are unit-tested, but nothing dispatches events to a SIEM yet, and there is no async delivery path. Treat the bullets below as design intent.
+
 Enterprises require runtime security alerts to stream directly into their existing SecOps workflows.
 
 **Our Solution:**

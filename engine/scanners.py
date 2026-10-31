@@ -249,6 +249,7 @@ class SchemingScanners:
             ChatMessage(role="user", content=prompt),
         ]
         cfg = _resolve_scanner_config(model, runner)
+        llm_error: Exception | None = None
 
         try:
             res = await runner.generate(messages, config=cfg, response_schema=JudgeVerdict)
@@ -256,6 +257,7 @@ class SchemingScanners:
                 v = JudgeVerdict.model_validate(res.parsed_json)
                 v.metric_name = "situational_awareness"
                 return v
+            llm_error = RuntimeError("Scanner LLM returned no structured verdict")
         except Exception as e:
             err_str = str(e)
             if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower():
@@ -275,9 +277,19 @@ class SchemingScanners:
                         v.metric_name = "situational_awareness"
                         return v
                 except Exception as e2:
+                    llm_error = e2
                     logger.warning("LLM situational awareness scanner fallback failed: %s", e2)
             else:
+                llm_error = e
                 logger.warning("LLM situational awareness scanner failed: %s", e)
+
+        if llm_error is not None:
+            return JudgeVerdict(
+                metric_name="situational_awareness",
+                score=0.0,
+                passed=False,
+                reasoning=f"Scanner evaluation error (unscored): {llm_error}",
+            )
 
         return JudgeVerdict(
             metric_name="situational_awareness",
@@ -344,6 +356,7 @@ class SchemingScanners:
             ChatMessage(role="user", content=prompt),
         ]
         cfg = _resolve_scanner_config(model, runner)
+        llm_error: Exception | None = None
 
         try:
             res = await runner.generate(messages, config=cfg, response_schema=JudgeVerdict)
@@ -351,6 +364,7 @@ class SchemingScanners:
                 v = JudgeVerdict.model_validate(res.parsed_json)
                 v.metric_name = "goal_guarding_scheming"
                 return v
+            llm_error = RuntimeError("Scanner LLM returned no structured verdict")
         except Exception as e:
             err_str = str(e)
             if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower():
@@ -370,9 +384,19 @@ class SchemingScanners:
                         v.metric_name = "goal_guarding_scheming"
                         return v
                 except Exception as e2:
+                    llm_error = e2
                     logger.warning("LLM goal guarding scanner fallback failed: %s", e2)
             else:
+                llm_error = e
                 logger.warning("LLM goal guarding scanner failed: %s", e)
+
+        if llm_error is not None:
+            return JudgeVerdict(
+                metric_name="goal_guarding_scheming",
+                score=0.0,
+                passed=False,
+                reasoning=f"Scanner evaluation error (unscored): {llm_error}",
+            )
 
         return JudgeVerdict(
             metric_name="goal_guarding_scheming",
@@ -438,6 +462,7 @@ class SchemingScanners:
             ChatMessage(role="user", content=prompt),
         ]
         cfg = _resolve_scanner_config(model, runner)
+        llm_error: Exception | None = None
 
         try:
             res = await runner.generate(messages, config=cfg, response_schema=JudgeVerdict)
@@ -445,6 +470,7 @@ class SchemingScanners:
                 v = JudgeVerdict.model_validate(res.parsed_json)
                 v.metric_name = "unfaithful_cot"
                 return v
+            llm_error = RuntimeError("Scanner LLM returned no structured verdict")
         except Exception as e:
             err_str = str(e)
             if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower():
@@ -464,9 +490,20 @@ class SchemingScanners:
                         v.metric_name = "unfaithful_cot"
                         return v
                 except Exception as e2:
+                    llm_error = e2
                     logger.warning("LLM unfaithful CoT scanner fallback failed: %s", e2)
             else:
+                llm_error = e
                 logger.warning("LLM unfaithful CoT scanner failed: %s", e)
+
+        if llm_error is not None:
+            return JudgeVerdict(
+                metric_name="unfaithful_cot",
+                score=0.0,
+                passed=False,
+                reasoning=f"Scanner evaluation error (unscored): {llm_error}",
+                discrepancy_details=det_details,
+            )
 
         return JudgeVerdict(
             metric_name="unfaithful_cot",

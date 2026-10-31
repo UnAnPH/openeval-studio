@@ -32,8 +32,9 @@ from inspect_ai.scorer import (
 from inspect_ai.solver import TaskState, basic_agent
 from inspect_ai.tool import ToolCall, ToolCallView, bash, text_editor
 
+from engine.approval_policy import evaluate_action_safety
 from schemas.task_spec import TaskSpec, load_task_spec
-from schemas.watcher_models import ReviewRecord, Session
+from schemas.watcher_models import ReviewDecision, ReviewRecord, ReviewStage, Session
 from server.command_rules import CommandRulesEngine
 from server.policy_gateway import PolicyGateway
 from server.watcher_store import get_watcher_store
@@ -132,15 +133,34 @@ class WatcherTrailingHooks(Hooks):
             )
 
             try:
+                args_dict = tool_args if isinstance(tool_args, dict) else {"input": str(tool_args)}
+                verdict = evaluate_action_safety(
+                    tool_name=str(tool_name),
+                    arguments=args_dict,
+                )
+                decision_map: dict[str, ReviewDecision] = {
+                    "allow": "allow",
+                    "deny": "block",
+                    "escalate": "escalate",
+                }
+                stage_map: dict[str, ReviewStage] = {
+                    "stage_1_readonly": "rule",
+                    "stage_2_deterministic": "rule",
+                    "stage_3_triage": "triage",
+                    "stage_4_deep_review": "deep_review",
+                    "fallback": "rule",
+                }
                 review = ReviewRecord(
                     session_id=self.session_id,
                     tool_name=str(tool_name),
                     tool_input=str(tool_args),
-                    decision="allow",
-                    stage="rule",
-                    score=1,
-                    latency_ms=12.0,
-                    explanation=f"Inspect tool executed: {tool_name}",
+                    decision=decision_map.get(verdict.decision, "allow"),
+                    stage=stage_map.get(verdict.stage, "rule"),
+                    score=max(1, min(10, round(verdict.risk_score * 10)))
+                    if verdict.risk_score
+                    else 1,
+                    latency_ms=verdict.latency_ms,
+                    explanation=verdict.reason or f"Inspect tool evaluated: {tool_name}",
                 )
                 self.store.record_decision(review)
             except Exception as e:

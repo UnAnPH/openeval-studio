@@ -148,18 +148,23 @@ class RunStore:
 
         # 2. In-memory check across scoped, raw, or any tenant-scoped key
         for key, s in self._runs.items():
+            if not self._watcher._cache_visible(key, s):
+                continue
             for cid in candidates:
                 if (key == cid or key.endswith(f":{cid}")) or (
                     s.run_id in candidates or s.session_id in candidates
                 ):
                     return self._reconcile_and_persist(s)
 
-        # 3. Direct PostgreSQL lookup across all tenants
+        # 3. Direct PostgreSQL lookup for the active tenant
+        from server.db import get_current_user_id
+
         with SessionLocal() as db:
+            user_id = get_current_user_id(db)
             for cid in candidates:
                 row = db.execute(
-                    text("SELECT payload FROM sessions WHERE id = :id"),
-                    {"id": cid},
+                    text("SELECT payload FROM sessions WHERE id = :id AND user_id = :uid"),
+                    {"id": cid, "uid": user_id},
                 ).fetchone()
                 if row and row[0]:
                     try:
@@ -208,20 +213,15 @@ class RunStore:
         is_demo_user = current_user_slug.get() == "demo"
 
         with SessionLocal() as db:
-            if is_demo_user:
-                eval_rows = db.execute(
-                    text(
-                        "SELECT payload FROM sessions WHERE (agent_type = 'inspect_eval' OR id LIKE 'eval-%') ORDER BY created_at DESC LIMIT 100"
-                    )
-                ).fetchall()
-            else:
-                user_id = get_current_user_id(db)
-                eval_rows = db.execute(
-                    text(
-                        "SELECT payload FROM sessions WHERE user_id = :uid AND (agent_type = 'inspect_eval' OR id LIKE 'eval-%') ORDER BY created_at DESC LIMIT 100"
-                    ),
-                    {"uid": user_id},
-                ).fetchall()
+            user_id = get_current_user_id(db)
+            eval_rows = db.execute(
+                text(
+                    "SELECT payload FROM sessions WHERE user_id = :uid "
+                    "AND (agent_type = 'inspect_eval' OR id LIKE 'eval-%') "
+                    "ORDER BY created_at DESC LIMIT 100"
+                ),
+                {"uid": user_id},
+            ).fetchall()
             for r in eval_rows:
                 if r[0]:
                     try:
@@ -233,9 +233,9 @@ class RunStore:
                     except Exception:
                         pass
 
-        # Include in-memory sessions (demo runs only visible in demo mode)
-        for s in self._runs.values():
-            if not is_demo_user and getattr(s, "org_id", "") == "demo":
+        # Include in-memory sessions visible to the active tenant
+        for key, s in self._runs.items():
+            if not self._watcher._cache_visible(key, s):
                 continue
             if s.session_id not in seen:
                 all_sessions.append(self._reconcile_and_persist(s))

@@ -25,7 +25,13 @@ variable "admin_username" {
 variable "ssh_public_key_path" {
   type        = string
   default     = "~/.ssh/id_rsa.pub"
-  description = "Path to your local SSH public key."
+  description = "Path to your local SSH public key (used if admin_cidr is set)."
+}
+
+variable "admin_cidr" {
+  type        = list(string)
+  default     = []
+  description = "CIDR blocks allowed for SSH access (default empty [] leaves SSH closed; set to your IP e.g. ['203.0.113.50/32'] to enable)."
 }
 
 variable "dns_label" {

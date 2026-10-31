@@ -34,6 +34,7 @@ from engine.watcher_sdk import WatcherClient
 from schemas.models import ModelSpec, get_available_models
 from schemas.task_spec import load_task_spec
 from schemas.watcher_models import ReviewDecision, ReviewRecord, ReviewStage, Session
+from server.annotation_service import AnnotationPayload
 from server.auth import (
     SESSION_COOKIE_NAME,
     resolve_api_key_user,
@@ -228,48 +229,14 @@ class _AuthMiddleware(BaseHTTPMiddleware):
             surface_header == "demo" or path.startswith("/demo") or path.startswith("/api/demo")
         )
 
-        # Demo surface read requests strictly view the demo user's rows,
-        # Demo surface read requests and ephemeral evaluation launches execute under demo user context
+        # Demo surface: unauthenticated read/search/compare runs under the demo user tenant.
         if is_demo_surface:
-            is_permitted_demo_action = (
-                method in ("GET", "HEAD", "OPTIONS")
-                or path
-                in (
-                    "/api/eval/run",
-                    "/api/eval/launch",
-                    "/api/eval/runs",
-                    "/api/eval/runs/clear",
-                    "/api/eval/stop_all",
-                    "/api/eval/search",
-                    "/api/v1/watcher/graders/audit-session",
-                    "/api/v1/watcher/graders/backtest",
-                    "/api/v1/watcher/reviews/resolve-all",
-                    "/api/v1/watcher/gate/resolve",
-                    "/api/v1/watcher/policy/reset",
-                    "/api/v1/watcher/policy/rule",
-                    "/api/v1/watcher/policy/threshold",
-                    "/api/v1/watcher/policy/thresholds",
-                    "/api/v1/watcher/config",
-                    "/api/v1/watcher/sessions/clear",
-                    "/api/v1/search/fragments",
-                )
-                or path.startswith("/api/v1/watcher/graders/definitions/")
-                or path.startswith("/api/eval/compare/")
-                or path.startswith("/api/v1/search/")
-                or (
-                    path.startswith("/api/eval/runs/")
-                    and (
-                        path.endswith("/stop")
-                        or path.endswith("/delete")
-                        or path.endswith("/report/revise")
-                        or method == "DELETE"
-                    )
-                )
-                or (
-                    path.startswith("/api/v1/watcher/sessions/")
-                    and (path.endswith("/resolve") or method == "DELETE")
-                )
-            )
+            is_read_method = method in ("GET", "HEAD", "OPTIONS")
+            is_demo_search_or_compare = path in (
+                "/api/eval/search",
+                "/api/v1/search/fragments",
+            ) or path.startswith("/api/eval/compare/")
+            is_permitted_demo_action = is_read_method or is_demo_search_or_compare
             if is_permitted_demo_action:
                 demo_uid = _USER_ID_CACHE.get("demo")
                 if demo_uid is None:
@@ -664,7 +631,7 @@ def _verdicts_from_store_reviews(limit: int = 40) -> list[dict[str, Any]]:
                 timestamp=str(r[11] or ""),
             )
             if r[12]:
-                setattr(rev, "request_id", str(r[12]))
+                rev.request_id = str(r[12])
             if not _is_interception_candidate(rev):
                 continue
 
@@ -2024,16 +1991,16 @@ async def scan_and_ingest_local_agent_logs(
     }
 
 
+# NOTE: Annotation endpoints below are API-only and NOT enabled in the UI (no frontend caller).
 @app.post("/api/v1/sessions/{session_id}/annotate")
 async def annotate_session(
     session_id: str,
-    payload: dict[str, Any],
+    payload: AnnotationPayload,
 ) -> dict[str, Any]:
     """Collaborative human annotation, verdict overrides, and audit trails."""
-    from server.annotation_service import AnnotationPayload, AnnotationService
+    from server.annotation_service import AnnotationService
 
-    annotation = AnnotationPayload.model_validate(payload)
-    session = AnnotationService.annotate_session(session_id, annotation)
+    session = AnnotationService.annotate_session(session_id, payload)
     if not session:
         raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
     metrics = AnnotationService.compute_reactive_metrics()
@@ -2071,7 +2038,6 @@ class GraderBacktestRequest(BaseModel):
 @app.get("/api/v1/watcher/graders/definitions")
 async def list_grader_definitions() -> list[dict[str, Any]]:
     """Retrieve the 11 Canonical Graders with 15-part prompt definitions for the active user."""
-    from server.watcher_store import get_watcher_store
 
     store = get_watcher_store()
     graders = store.get_grader_definitions()
@@ -2087,7 +2053,6 @@ async def update_grader_definition_endpoint(
     grader_name: str, payload: GraderUpdatePayload
 ) -> dict[str, Any]:
     """Save user-customized prompt components for a canonical grader."""
-    from server.watcher_store import get_watcher_store
 
     store = get_watcher_store()
     updated = store.update_grader_definition(grader_name, payload.updates)
@@ -2099,7 +2064,6 @@ async def update_grader_definition_endpoint(
 @app.post("/api/v1/watcher/graders/definitions/{grader_name}/reset")
 async def reset_grader_definition_endpoint(grader_name: str) -> dict[str, Any]:
     """Reset a canonical grader's prompt components back to defaults for active user."""
-    from server.watcher_store import get_watcher_store
 
     store = get_watcher_store()
     reset_g = store.reset_grader_definition(grader_name)
@@ -2137,7 +2101,6 @@ class GraderAuditSessionRequest(BaseModel):
 async def audit_session_with_grader(req: GraderAuditSessionRequest) -> dict[str, Any]:
     """Audit a real monitored agent session using a canonical safety grader."""
     from engine.graders_suite import parse_c1_c15_output
-    from server.watcher_store import get_watcher_store
 
     store = get_watcher_store()
     session = store.get_session(req.session_id)

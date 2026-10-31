@@ -111,7 +111,8 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
   const handleResolveAll = async () => {
     try {
       setIsResolving(true);
-      await fetch('/api/v1/watcher/reviews/resolve-all', { method: 'POST' });
+      const res = await fetch('/api/v1/watcher/reviews/resolve-all', { method: 'POST' });
+      if (!res.ok) throw new Error(`resolve-all failed: HTTP ${res.status}`);
     } catch (err) {
       console.error('Failed to resolve all reviews:', err);
     } finally {
@@ -121,7 +122,7 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
 
   const handleResolveSingle = async (v: WatcherVerdict) => {
     try {
-      await fetch('/api/v1/watcher/gate/resolve', {
+      const res = await fetch('/api/v1/watcher/gate/resolve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -131,6 +132,7 @@ export const FirewallGateView: React.FC<FirewallGateViewProps> = ({
           note: 'Approved manually from Sentinel Firewall Gate',
         }),
       });
+      if (!res.ok) throw new Error(`gate/resolve failed: HTTP ${res.status}`);
     } catch (err) {
       console.error('Failed to resolve review:', err);
     }

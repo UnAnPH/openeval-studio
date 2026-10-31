@@ -903,7 +903,7 @@ def safety_firewall_approver() -> Any:
         args = raw_args if isinstance(raw_args, dict) else {}
 
         verdict = evaluate_action_safety(tool_name, args)
-        if verdict.decision == "deny":
+        if verdict.decision in ("deny", "escalate"):
             return Approval(
                 decision="reject",
                 explanation=verdict.reason,

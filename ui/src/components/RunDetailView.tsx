@@ -219,7 +219,7 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
     }
 
     try {
-      await fetch(`/api/eval/runs/${encodeURIComponent(run.run_id)}/report/revise`, {
+      const res = await fetch(`/api/eval/runs/${encodeURIComponent(run.run_id)}/report/revise`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -230,6 +230,7 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
           passed_override: passed,
         }),
       });
+      if (!res.ok) throw new Error(`report/revise failed: HTTP ${res.status}`);
     } catch (e) {
       console.warn('Saved run outcome override offline:', e);
     }
@@ -256,7 +257,7 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
     }
 
     try {
-      await fetch(`/api/eval/runs/${encodeURIComponent(run.run_id)}/report/revise`, {
+      const res = await fetch(`/api/eval/runs/${encodeURIComponent(run.run_id)}/report/revise`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -266,6 +267,7 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
           overridden_verdicts: updatedOverrides,
         }),
       });
+      if (!res.ok) throw new Error(`report/revise failed: HTTP ${res.status}`);
     } catch (e) {
       console.warn('Saved metric override offline:', e);
     }
@@ -839,7 +841,7 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
             setHumanReviewer(reviewer);
             setHumanReviewNotes(notes);
             try {
-              await fetch(`/api/eval/runs/${encodeURIComponent(run.run_id)}/report/revise`, {
+              const res = await fetch(`/api/eval/runs/${encodeURIComponent(run.run_id)}/report/revise`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -849,6 +851,7 @@ ${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
                   overridden_verdicts: overrideScores,
                 }),
               });
+              if (!res.ok) throw new Error(`report/revise failed: HTTP ${res.status}`);
             } catch (e) {
               console.warn('Saved review offline:', e);
             }

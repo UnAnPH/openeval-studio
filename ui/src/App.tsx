@@ -293,7 +293,9 @@ export function App() {
         fetch('/api/health').catch(() => null),
         fetch('/api/v1/watcher/interceptions?limit=40').catch(() => null),
       ]);
-      if (healthRes && healthRes.ok) {
+      if (!healthRes || !healthRes.ok) {
+        setServerConnected(false);
+      } else {
         setServerConnected(true);
       }
       if (interceptRes && interceptRes.ok) {
@@ -327,10 +329,10 @@ export function App() {
       const demoActive = isDemoSurface();
       setIsDemo(demoActive);
       setIsDemoSeed(demoActive);
-      if (healthRes && healthRes.ok) {
-        setServerConnected(true);
-      } else {
+      if (!healthRes || !healthRes.ok) {
         setServerConnected(false);
+      } else {
+        setServerConnected(true);
       }
 
       if (!demoActive) {
@@ -1038,7 +1040,27 @@ export function App() {
 
   // Delete individual run
   const handleDeleteRun = async (runId: string) => {
-    // 1. Record tombstone in memory and localStorage
+    let postOk = false;
+    let deleteOk = false;
+    try {
+      const postRes = await fetch(`/api/eval/runs/${encodeURIComponent(runId)}/delete`, {
+        method: 'POST',
+      }).catch(() => null);
+      postOk = Boolean(postRes?.ok);
+      const deleteRes = await fetch(`/api/eval/runs/${encodeURIComponent(runId)}`, {
+        method: 'DELETE',
+      }).catch(() => null);
+      deleteOk = Boolean(deleteRes?.ok);
+    } catch (err) {
+      console.error('Failed to delete run on server:', err);
+    }
+
+    if (!postOk && !deleteOk) {
+      console.error(`Delete failed for run ${runId}; keeping local history entry.`);
+      alert(`Could not delete run ${runId} on the server. It was kept in your history.`);
+      return;
+    }
+
     deletedRunIdsRef.current.add(runId);
     try {
       localStorage.setItem('openeval_deleted_run_ids', JSON.stringify(Array.from(deletedRunIdsRef.current)));
@@ -1046,7 +1068,6 @@ export function App() {
       console.warn('Failed to persist deleted run ID to localStorage', e);
     }
 
-    // 2. Optimistically update local state immediately
     setRunsHistory((prev) => prev.filter((r) => r.run_id !== runId));
     if (activeRunId === runId) {
       setActiveRunId(null);
@@ -1057,14 +1078,6 @@ export function App() {
     if (selectedDetailRunId === runId) {
       setSelectedDetailRunId(null);
       setRoute('runs');
-    }
-
-    // 3. Call backend delete (supports both POST and DELETE verbs)
-    try {
-      await fetch(`/api/eval/runs/${encodeURIComponent(runId)}/delete`, { method: 'POST' }).catch(() => null);
-      await fetch(`/api/eval/runs/${encodeURIComponent(runId)}`, { method: 'DELETE' }).catch(() => null);
-    } catch (err) {
-      console.warn('Backend delete notification completed with offline state preserved:', err);
     }
   };
 

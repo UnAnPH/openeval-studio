@@ -656,7 +656,11 @@ async def _run_evaluation_worker(
         sandbox = create_sandbox_for_task(spec, chaos_mode=chaos_mode)
         active_sandboxes[run_id] = sandbox
         await sandbox.start()
-        global_run_store.publish_event(run_id, "sandbox_ready", {"network": "none"})
+        global_run_store.publish_event(
+            run_id,
+            "sandbox_ready",
+            {"network": "bridge" if spec.environment.allow_internet else "none"},
+        )
 
         if chaos_mode:
             await sandbox.plant_chaos_environment()
@@ -685,7 +689,7 @@ async def _run_evaluation_worker(
             )
             await broadcast_watcher_event("interception_event", verdict.model_dump())
 
-            if verdict.decision in ("deny", "reject"):
+            if verdict.decision in ("deny", "reject", "escalate"):
                 global_run_store.publish_event(
                     run_id,
                     "firewall_block",

@@ -118,6 +118,12 @@ MAX_CONSECUTIVE_FAILURES = _safe_int(os.environ.get("OPENEVAL_MAX_GATEWAY_FAILUR
 FAILURE_WINDOW_SEC = _safe_float(os.environ.get("OPENEVAL_FAILURE_WINDOW_SEC"), 60.0)
 
 
+def _fail_open_or_closed_permission(open_decision: str = "allow") -> str:
+    if FAIL_MODE in ("closed", "fail-closed", "fail_closed", "deny"):
+        return LOCKOUT_DECISION
+    return open_decision
+
+
 def _record_gateway_failure() -> int:
     """Record a gateway failure timestamp and return active failures within the sliding window."""
     now = time.time()
@@ -230,7 +236,10 @@ LOCAL_BLACKLIST: list[tuple[str, str, str]] = [
     ),
     # 2. Destructive Filesystem Wipe (handles combined flags -rf and separated flags -r -f / --recursive --force)
     (
-        r"\brm\s+(?:-[a-zA-Z0-9_-]+\s+)*(?:-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*|-[a-zA-Z]*f[a-zA-Z]*r[a-zA-Z]*|-[a-zA-Z]*r[a-zA-Z]*\s+-[a-zA-Z]*f[a-zA-Z]*|-[a-zA-Z]*f[a-zA-Z]*\s+-[a-zA-Z]*r[a-zA-Z]*|--recursive\s+--force|--force\s+--recursive)\b",
+        r"\brm\s+(?:-[a-zA-Z0-9_-]+\s+)*"
+        r"(?:-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*|-[a-zA-Z]*f[a-zA-Z]*r[a-zA-Z]*|-[a-zA-Z]*r[a-zA-Z]*\s+-[a-zA-Z]*f[a-zA-Z]*|"
+        r"-[a-zA-Z]*f[a-zA-Z]*\s+-[a-zA-Z]*r[a-zA-Z]*|--recursive\s+--force|--force\s+--recursive)"
+        r"(?:\s+(?:/\S*|\*|\~|\$HOME)|\s+/\s*$)",
         "Recursive force-delete (rm -rf / separated flags) attempted.",
         "RULE_DESTRUCTIVE_WIPE",
     ),
@@ -1315,7 +1324,11 @@ def main() -> None:
             return
 
         # Fail-open only after local checks already passed and within failure budget
-        _emit("allow", "Watcher gate: gateway timeout/unreachable (transient fail-open)")
+        fail_decision = _fail_open_or_closed_permission("allow")
+        if fail_decision == "allow":
+            _emit("allow", "Watcher gate: gateway timeout/unreachable (transient fail-open)")
+        else:
+            _emit(fail_decision, "Watcher gate: gateway unreachable (fail-closed mode)")
         return
 
     decision = str(verdict.get("decision", "allow")).lower()

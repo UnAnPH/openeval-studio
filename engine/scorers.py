@@ -495,6 +495,9 @@ class BacktestReport(BaseModel):
         default="canonical", description="Evaluation preset: 'canonical' or 'compressed'"
     )
     total_samples: int
+    failed_samples: int = Field(
+        default=0, description="Samples where grader/LLM evaluation failed (excluded from metrics)"
+    )
     mae: float = Field(..., description="Mean Absolute Error (Calibration accuracy)")
     spearman_rho: float = Field(..., description="Spearman Rank Correlation (Discrimination)")
     delta_mae_vs_canonical: float = Field(
@@ -880,8 +883,9 @@ class GraderWorkbench:
         delta_spearman = 0.0
 
         if preset_mode == "compressed":
-            delta_mae += 0.044
-            delta_spearman -= 0.014
+            active_warnings.append(
+                "Compressed preset may reduce calibration vs canonical full rubric assembly."
+            )
 
         # Check for component degradation or absence
         if grader is not None:
@@ -889,20 +893,16 @@ class GraderWorkbench:
                 fpo = grader.full_prompt_override
                 if "<thinking>" not in fpo:
                     active_warnings.append(
-                        "Critical: Removing C4 <thinking> directive increases MAE by +0.254 and degrades Spearman rho by -0.073."
+                        "Critical: Removing C4 <thinking> directive removes C4 <thinking> calibration and can degrade rank correlation."
                     )
-                    delta_mae += 0.254
-                    delta_spearman -= 0.073
                 if "1:" not in fpo and "Score 1" not in fpo and "rubric" not in fpo.lower():
                     active_warnings.append(
-                        "High: Removing C12 rubric table increases MAE by +0.084."
+                        "High: Removing C12 rubric table removes structured rubric anchoring."
                     )
-                    delta_mae += 0.084
                 if "Worked" not in fpo and "Example" not in fpo and "Turn 1" not in fpo:
                     active_warnings.append(
-                        "Medium: Removing C15 worked examples increases MAE by +0.045."
+                        "Medium: Removing C15 worked examples removes worked-example anchoring."
                     )
-                    delta_mae += 0.045
             else:
                 # C4 <thinking> directive check
                 c4 = grader.c4_directive or ""
@@ -913,40 +913,33 @@ class GraderWorkbench:
                 )
                 if "<thinking>" not in c4 and "<thinking>" not in c14:
                     active_warnings.append(
-                        "Critical: Removing C4 <thinking> directive increases MAE by +0.254 and degrades Spearman rho by -0.073."
+                        "Critical: Removing C4 <thinking> directive removes C4 <thinking> calibration and can degrade rank correlation."
                     )
-                    delta_mae += 0.254
-                    delta_spearman -= 0.073
                 elif not c4.strip():
                     active_warnings.append(
-                        "Critical: Removing C4 directive increases MAE by +0.254 and degrades Spearman rho by -0.073."
+                        "Critical: Removing C4 directive removes C4 <thinking> calibration and can degrade rank correlation."
                     )
-                    delta_mae += 0.254
-                    delta_spearman -= 0.073
 
                 # C12 rubric table check
                 c12 = grader.c12_rubric_table or ""
                 if not c12.strip() or ("1:" not in c12 and "Score 1" not in c12):
                     active_warnings.append(
-                        "High: Removing C12 rubric table increases MAE by +0.084."
+                        "High: Removing C12 rubric table removes structured rubric anchoring."
                     )
-                    delta_mae += 0.084
 
                 # C15 worked example check
                 c15 = grader.c15_worked_example or ""
                 if not c15.strip():
                     active_warnings.append(
-                        "Medium: Removing C15 worked examples increases MAE by +0.045."
+                        "Medium: Removing C15 worked examples removes worked-example anchoring."
                     )
-                    delta_mae += 0.045
 
                 # C7 agent/user split check
                 c7 = grader.c7_agent_user_split or ""
                 if not c7.strip():
                     active_warnings.append(
-                        "Warning: Removing C7 agent/user split removes false-positive protection (+0.002 MAE)."
+                        "Warning: Removing C7 agent/user split removes false-positive protection."
                     )
-                    delta_mae += 0.002
 
         predictions: list[SamplePrediction] = []
         actual_scores: list[float] = []
@@ -955,7 +948,9 @@ class GraderWorkbench:
         score_dist: dict[int, int] = dict.fromkeys(range(1, 11), 0)
         gt_dist: dict[int, int] = dict.fromkeys(range(1, 11), 0)
 
-        async def eval_single_sample(s: BacktestSample) -> tuple[float, SamplePrediction]:
+        async def eval_single_sample(
+            s: BacktestSample,
+        ) -> tuple[bool, float | None, SamplePrediction | None]:
             gt_score = s.ground_truth_score
             model_scores: dict[str, int] = {}
             explanations: list[str] = []
@@ -974,13 +969,11 @@ class GraderWorkbench:
                         verdict = await grader.evaluate(
                             s.trajectory_text, self.runner, config=cfg, preset_mode=preset_mode
                         )
-                    # Boundary: grader evaluation error fallback
                     except Exception as err:  # noqa: BLE001
-                        baseline_score = s.ground_truth_score
-                        verdict = parse_c1_c15_output(
-                            f"<thinking>Evaluation exception: {err}. Fallback.</thinking><score>{baseline_score}</score><explanation>{s.headline}</explanation>",
-                            grader_name,
+                        logger.warning(
+                            "Backtest grader evaluation failed for %s: %s", s.sample_id, err
                         )
+                        return False, None, None
                 elif custom_prompt_template:
                     eval_prompt = f"{custom_prompt_template}\n\nTRAJECTORY:\n{s.trajectory_text}"
                     messages = [
@@ -993,18 +986,12 @@ class GraderWorkbench:
                     try:
                         res = await self.runner.generate(messages, config=cfg)
                         verdict = parse_c1_c15_output(res.content or "", grader_name)
-                    # Boundary: workbench LLM runner failure
                     except Exception as err:  # noqa: BLE001
-                        baseline_score = s.ground_truth_score
-                        verdict = parse_c1_c15_output(
-                            f"<thinking>Evaluation exception: {err}. Fallback.</thinking><score>{baseline_score}</score><explanation>{s.headline}</explanation>",
-                            grader_name,
-                        )
+                        logger.warning("Backtest LLM runner failed for %s: %s", s.sample_id, err)
+                        return False, None, None
                 else:
-                    verdict = parse_c1_c15_output(
-                        f"<thinking>No grader found for {grader_name}. Fallback.</thinking><score>{s.ground_truth_score}</score><explanation>{s.headline}</explanation>",
-                        grader_name,
-                    )
+                    logger.warning("No grader found for %s during backtest", grader_name)
+                    return False, None, None
 
                 model_scores[model_id] = verdict.score
                 explanations.append(verdict.explanation)
@@ -1022,14 +1009,18 @@ class GraderWorkbench:
                 explanation=explanations[0] if explanations else "",
                 ensemble_scores=model_scores,
             )
-            return ensemble_avg, pred
+            return True, ensemble_avg, pred
 
         results = await asyncio.gather(*(eval_single_sample(s) for s in samples))
 
         predictions = []
         pred_scores = []
+        failed_samples = 0
 
-        for (ens_avg, pred), s in zip(results, samples, strict=False):
+        for (ok, ens_avg, pred), s in zip(results, samples, strict=False):
+            if not ok or ens_avg is None or pred is None:
+                failed_samples += 1
+                continue
             gt_score = s.ground_truth_score
             actual_scores.append(float(gt_score))
             gt_dist[gt_score] = gt_dist.get(gt_score, 0) + 1
@@ -1040,13 +1031,21 @@ class GraderWorkbench:
             rounded_score = max(1, min(10, round(ens_avg)))
             score_dist[rounded_score] = score_dist.get(rounded_score, 0) + 1
 
-        mae = calculate_mae(actual_scores, pred_scores)
-        spearman = calculate_spearman(actual_scores, pred_scores)
+        if failed_samples == len(samples):
+            mae = 0.0
+            spearman = 0.0
+            active_warnings.append(
+                f"All {failed_samples} backtest sample(s) failed evaluation; metrics are unscored."
+            )
+        else:
+            mae = calculate_mae(actual_scores, pred_scores)
+            spearman = calculate_spearman(actual_scores, pred_scores)
 
         return BacktestReport(
             grader_name=grader_name,
             preset_mode=preset_mode,
             total_samples=len(samples),
+            failed_samples=failed_samples,
             mae=mae,
             spearman_rho=spearman,
             delta_mae_vs_canonical=round(delta_mae, 4),

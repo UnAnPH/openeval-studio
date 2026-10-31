@@ -97,6 +97,16 @@ def export_session_to_eval_log(session: Session, output_path: Path | str | None 
             "total_tokens": session.total_tokens,
             "total_duration_sec": session.total_duration_sec,
             "gate_decisions": [d.model_dump(by_alias=True) for d in decisions],
+            "trajectory_messages": [m.model_dump() for m in session.trajectory.messages],
+            "steps": [
+                s.model_dump() if hasattr(s, "model_dump") else s for s in (session.steps or [])
+            ],
+            "audit_verdicts": [
+                v.model_dump() if hasattr(v, "model_dump") else v
+                for v in (session.audit_verdicts or [])
+            ],
+            "title": session.title,
+            "org_id": session.org_id,
         },
     )
 
@@ -116,9 +126,10 @@ def export_session_to_eval_log(session: Session, output_path: Path | str | None 
             metric_name = getattr(verdict, "metric_name", None) or (
                 verdict.get("metric_name") if isinstance(verdict, dict) else f"audit_{idx}"
             )
-            score_val = getattr(verdict, "score", None) or (
-                verdict.get("score") if isinstance(verdict, dict) else 1.0
-            )
+            raw_score = getattr(verdict, "score", None)
+            if raw_score is None and isinstance(verdict, dict):
+                raw_score = verdict.get("score")
+            score_val = 1.0 if raw_score is None else float(raw_score)
             explanation = getattr(verdict, "reasoning", "") or (
                 verdict.get("reasoning", "") if isinstance(verdict, dict) else ""
             )
@@ -199,6 +210,11 @@ def import_eval_log_to_session(eval_log: EvalLog | Path | str) -> Session | None
     task_id = meta.get("task_id") or (log.eval.task if log.eval else "eval_task")
     model = meta.get("model") or (log.eval.model if log.eval else "unknown")
 
+    from schemas.watcher_models import Message, Trajectory
+
+    traj_msgs_raw = meta.get("trajectory_messages") or []
+    trajectory_messages = [Message.model_validate(m) for m in traj_msgs_raw]
+
     session = Session(
         session_id=session_id,
         run_id=meta.get("run_id", session_id),
@@ -212,7 +228,10 @@ def import_eval_log_to_session(eval_log: EvalLog | Path | str) -> Session | None
         reward=meta.get("reward"),
         total_tokens=meta.get("total_tokens", 0),
         total_duration_sec=meta.get("total_duration_sec", 0.0),
+        title=meta.get("title"),
+        org_id=meta.get("org_id", "default_org"),
+        trajectory=Trajectory(messages=trajectory_messages, reviews=list(decisions)),
+        steps=meta.get("steps") or [],
+        audit_verdicts=meta.get("audit_verdicts") or [],
     )
-    # Sync reviews on trajectory as well
-    session.trajectory.reviews = list(decisions)
     return session

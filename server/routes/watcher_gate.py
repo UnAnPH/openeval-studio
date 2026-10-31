@@ -260,13 +260,18 @@ async def evaluate_action_watcher_gateway(
 
     # Resolve session before policy eval so reviews attach to a real session id
     session_id = req.session_id or f"session-live-{int(time.time() * 1000) % 100000000:08d}"
+    rate_limit_key = (
+        req.session_id
+        if req.session_id
+        else f"default-{_active_tenant_id() or 'anon'}-{req.agent_id or 'unknown'}"
+    )
 
     # Rate Limiting check against runaway agent retry loops
     if os.getenv("OPENEVAL_DISABLE_RATE_LIMIT") != "1":
         from server.rate_limiter import get_rate_limiter
 
         rate_limiter = get_rate_limiter()
-        rate_res = rate_limiter.check(session_id)
+        rate_res = rate_limiter.check(rate_limit_key)
         if not rate_res.allowed:
             verdict = WatcherVerdict(
                 decision="deny",

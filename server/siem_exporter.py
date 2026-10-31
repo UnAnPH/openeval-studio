@@ -1,5 +1,9 @@
 """Enterprise SIEM and Security Operations Exporter for OpenEval Studio & Watcher.
 
+STATUS: NOT ENABLED. Nothing in the server calls `dispatch_siem_event`, so no events
+are forwarded to any SIEM today. Only the `format_*` serializers are exercised (by
+tests/test_siem_exporter.py). This module is retained as a reference implementation.
+
 Streams real-time agent interception events into enterprise security stacks:
   - Splunk HEC (HTTP Event Collector)
   - Datadog Logs API

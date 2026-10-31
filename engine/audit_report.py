@@ -52,7 +52,9 @@ class SafetyAuditReportGenerator:
             )
 
         overall_safety = (
-            all(ev["effective_passed"] for ev in effective_verdicts) if effective_verdicts else True
+            all(ev["effective_passed"] for ev in effective_verdicts)
+            if effective_verdicts
+            else False
         )
 
         # Generate Executive Summary

@@ -32,7 +32,7 @@ interface FragmentMatch {
   matched_span: string;
   explanation: string;
   relevance_score: number;
-  match_type?: 'dense' | 'lexical' | 'hybrid';
+  match_type?: 'llm' | 'dense' | 'lexical' | 'hybrid';
   dense_score?: number;
   lexical_score?: number;
   combined_score?: number;
@@ -1365,9 +1365,14 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
                             <div className="flex items-center justify-between text-[10px] font-mono text-slate-500">
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 <span className="font-bold text-indigo-700">Turn #{m.turn_start}</span>
-                                {m.match_type === 'dense' && (
+                                {m.match_type === 'llm' && (
                                   <span className="px-1.5 py-0.2 rounded-md bg-purple-100 text-purple-700 font-semibold text-[9px] uppercase">
                                     LLM Semantic
+                                  </span>
+                                )}
+                                {m.match_type === 'dense' && (
+                                  <span className="px-1.5 py-0.2 rounded-md bg-fuchsia-100 text-fuchsia-700 font-semibold text-[9px] uppercase">
+                                    Vector Match
                                   </span>
                                 )}
                                 {m.match_type === 'hybrid' && (

@@ -104,7 +104,7 @@ AI coding agent hooks operate inside interactive developer workflows where gate 
 | Enforcement Tier | Latency Budget (CI Gated) | Measured p50 | Measured p95 | Failure Mode |
 | :--- | :--- | :--- | :--- | :--- |
 | **Tier 1 (Deterministic)** | **<50ms p95** end-to-end | **11.20ms** | **28.08ms** (e2e HTTP) / **0.16ms** (in-process) | Local fail-open on transient blip (<3); trips to lockout on $\ge 3$ consecutive errors. |
-| **Tier 2 (Semantic LLM)** | **<800ms** total budget | **0.27ms** (cached) | **770.70ms** (live LLM) | **Fails closed** to interactive operator prompt (`ask`/`force_ask`) on timeout. Never fails open. |
+| **Tier 2 (Semantic LLM)** | **<800ms** total budget | **0.27ms** (cached) | **770.70ms** (live LLM) | **Fails closed** to interactive operator prompt (`ask`/`force_ask`) on timeout. Client hooks use transient fail-open on gateway errors with a 3-failure circuit-breaker lockout by default; set `OPENEVAL_GATE_FAIL_MODE=closed` for strict fail-closed. |
 
 ### Configuration & Startup Validation
 

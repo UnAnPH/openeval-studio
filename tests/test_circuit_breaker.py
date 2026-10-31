@@ -23,6 +23,7 @@ import pytest
 SCRIPTS_DIR = Path(__file__).parent.parent / "scripts"
 ANTIGRAVITY_GATE = SCRIPTS_DIR / "antigravity_watcher_gate.py"
 CURSOR_GATE = SCRIPTS_DIR / "cursor_watcher_gate.py"
+CLAUDE_GATE = SCRIPTS_DIR / "claude_code_watcher_hook.py"
 
 
 @pytest.fixture
@@ -166,3 +167,52 @@ def test_cursor_circuit_breaker_trips_to_ask_on_repeated_failures(temp_circuit_f
     res2 = _run_cursor_gate(payload, env)
     assert res2["permission"] == "ask"
     assert "CIRCUIT BREAKER TRIPPED" in res2.get("user_message", "")
+
+
+def _run_claude_gate(payload: dict, env_overrides: dict[str, str]) -> dict:
+    env = {**os.environ, **env_overrides}
+    proc = subprocess.run(
+        [sys.executable, str(CLAUDE_GATE)],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        check=True,
+        env=env,
+    )
+    return json.loads(proc.stdout.strip())
+
+
+def test_claude_circuit_breaker_trips_after_max_failures(temp_circuit_file: Path):
+    """Claude hook must lock out after consecutive gateway failures."""
+    env = {
+        "OPENEVAL_WATCHER_URL": "http://127.0.0.1:59999/unreachable",
+        "OPENEVAL_CIRCUIT_STATE_FILE": str(temp_circuit_file),
+        "OPENEVAL_MAX_GATEWAY_FAILURES": "2",
+        "OPENEVAL_FAILURE_WINDOW_SEC": "60",
+    }
+    payload = {
+        "tool_name": "Bash",
+        "tool_input": {"command": "echo safe"},
+        "session_id": uuid.uuid4().hex,
+    }
+    res1 = _run_claude_gate(payload, env)
+    assert res1["hookSpecificOutput"]["permissionDecision"] == "allow"
+    res2 = _run_claude_gate(payload, env)
+    assert res2["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+def test_cursor_fail_closed_on_first_gateway_failure(temp_circuit_file: Path):
+    """Fail-closed mode must deny preToolUse path edits on first transport failure."""
+    env = {
+        "OPENEVAL_WATCHER_URL": "http://127.0.0.1:59999/unreachable",
+        "OPENEVAL_CIRCUIT_STATE_FILE": str(temp_circuit_file),
+        "OPENEVAL_FAIL_MODE": "closed",
+    }
+    payload = {
+        "hook_event_name": "preToolUse",
+        "tool_name": "Write",
+        "tool_input": {"path": "src/app.py"},
+        "conversation_id": uuid.uuid4().hex,
+    }
+    res = _run_cursor_gate(payload, env)
+    assert res["permission"] == "deny"

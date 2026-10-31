@@ -130,7 +130,7 @@ export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({
   return (
     <div className="space-y-5 font-sans w-full max-w-full pb-10">
       {/* Human Auditor Sign-Off & Review — temporarily hidden */}
-      {false && (
+      {Boolean(import.meta.env.VITE_ENABLE_HUMAN_SIGNOFF) && (
       <div className={`${compact ? 'bg-canvas/50 rounded-xl border border-border-subtle/80 p-3.5 space-y-3.5' : 'bg-white rounded-2xl border border-border-subtle shadow-sm p-5 space-y-4'}`}>
         <div className={`flex ${compact ? 'flex-col gap-2.5' : 'flex-col sm:flex-row sm:items-center justify-between gap-3'} border-b border-border-subtle pb-3`}>
           <div className="flex items-center gap-2 min-w-0">

@@ -164,7 +164,18 @@ class VerifierRunner:
             "/workspace/solution/solve.sh", timeout_sec=task.verifier.timeout_sec, user="root"
         )
         if sol_exec.exit_code != 0:
-            logger.warning("Oracle solve.sh exited with code %d", sol_exec.exit_code)
+            duration_ms = round(sol_exec.duration_ms or 0.0, 2)
+            output = sol_exec.stdout
+            if sol_exec.stderr:
+                output = f"{output}\n[stderr]: {sol_exec.stderr}" if output else sol_exec.stderr
+            return EvaluationScore(
+                reward=0.0,
+                passed=False,
+                test_output=output.strip(),
+                exit_code=sol_exec.exit_code,
+                duration_ms=duration_ms,
+                failure_reason=f"Oracle solve.sh failed with exit code {sol_exec.exit_code}",
+            )
 
         return await self.grade_container(sandbox, task)
 

@@ -363,7 +363,12 @@ class UniversalAgentLogLoader:
 
         # Prefer parent transcript id (folder name) over subagent stem
         parent = path.parent.name
-        if parent.startswith("openeval_ingest_") or parent in ("agent-transcripts", "subagents", "tmp", ""):
+        if parent.startswith("openeval_ingest_") or parent in (
+            "agent-transcripts",
+            "subagents",
+            "tmp",
+            "",
+        ):
             session_id = path.stem
         else:
             session_id = parent
@@ -590,13 +595,16 @@ class UniversalAgentLogLoader:
 
         tail_lines = lines[-max_tail_steps:]
         conv_id = path.parent.parent.parent.name
-        if not conv_id or conv_id == "/" or len(conv_id) < 8 or conv_id.startswith("openeval_ingest_"):
+        if (
+            not conv_id
+            or conv_id == "/"
+            or len(conv_id) < 8
+            or conv_id.startswith("openeval_ingest_")
+        ):
             import re
+
             match = re.search(r"([0-9a-fA-F-]{8,36})", path.name)
-            if match:
-                conv_id = match.group(1)
-            else:
-                conv_id = path.stem.replace("antigravity-", "")
+            conv_id = match.group(1) if match else path.stem.replace("antigravity-", "")
         session_id = f"antigravity-{conv_id[:8]}"
 
         if not cls._ag_titles:

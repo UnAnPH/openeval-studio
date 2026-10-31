@@ -104,6 +104,99 @@ FAIL_MODE = (
     .strip()
     .lower()
 )
+
+CIRCUIT_STATE_FILE = Path(
+    os.environ.get(
+        "OPENEVAL_CIRCUIT_STATE_FILE",
+        str(Path.home() / ".openeval" / "circuit_breaker.json"),
+    )
+)
+MAX_CONSECUTIVE_FAILURES = _safe_int(os.environ.get("OPENEVAL_MAX_GATEWAY_FAILURES"), 3)
+FAILURE_WINDOW_SEC = _safe_float(os.environ.get("OPENEVAL_FAILURE_WINDOW_SEC"), 60.0)
+
+
+def _record_gateway_failure() -> int:
+    now = time.time()
+    failures: list[float] = []
+    lock_file = CIRCUIT_STATE_FILE.with_suffix(".lock")
+    try:
+        CIRCUIT_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(lock_file, "w", encoding="utf-8") as lf:
+            with contextlib.suppress(OSError, ImportError):
+                import fcntl
+
+                fcntl.flock(lf.fileno(), fcntl.LOCK_EX)
+            try:
+                if CIRCUIT_STATE_FILE.exists():
+                    data = json.loads(CIRCUIT_STATE_FILE.read_text(encoding="utf-8"))
+                    failures = [
+                        _safe_float(ts)
+                        for ts in data.get("failures", [])
+                        if (now - _safe_float(ts)) < FAILURE_WINDOW_SEC
+                    ]
+            except (OSError, ValueError):
+                failures = []
+            failures.append(now)
+            try:
+                tmp = CIRCUIT_STATE_FILE.with_name(f"{CIRCUIT_STATE_FILE.name}.{os.getpid()}.tmp")
+                tmp.write_text(
+                    json.dumps({"failures": failures, "updated_at": now}), encoding="utf-8"
+                )
+                os.replace(tmp, CIRCUIT_STATE_FILE)
+            except OSError:
+                pass
+            with contextlib.suppress(OSError, ImportError):
+                import fcntl
+
+                fcntl.flock(lf.fileno(), fcntl.LOCK_UN)
+    except OSError:
+        failures.append(now)
+    return len(failures)
+
+
+def _reset_gateway_failures() -> None:
+    lock_file = CIRCUIT_STATE_FILE.with_suffix(".lock")
+    try:
+        if CIRCUIT_STATE_FILE.exists() or lock_file.exists():
+            CIRCUIT_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            with open(lock_file, "w", encoding="utf-8") as lf:
+                with contextlib.suppress(OSError, ImportError):
+                    import fcntl
+
+                    fcntl.flock(lf.fileno(), fcntl.LOCK_EX)
+                if CIRCUIT_STATE_FILE.exists():
+                    with contextlib.suppress(OSError):
+                        CIRCUIT_STATE_FILE.unlink()
+                with contextlib.suppress(OSError, ImportError):
+                    import fcntl
+
+                    fcntl.flock(lf.fileno(), fcntl.LOCK_UN)
+    except OSError:
+        pass
+
+
+def _fail_open_or_closed_permission(open_permission: str = "allow") -> str:
+    if FAIL_MODE in ("closed", "fail-closed", "fail_closed", "deny"):
+        return "deny"
+    return open_permission
+
+
+def _handle_gateway_transport_failure() -> None:
+    recent_failures = _record_gateway_failure()
+    if recent_failures >= MAX_CONSECUTIVE_FAILURES:
+        _emit(
+            LOCKOUT_PERMISSION,
+            f"[OPENEVAL CIRCUIT BREAKER TRIPPED]: Watcher Gateway unreachable "
+            f"({recent_failures} consecutive failures in {int(FAILURE_WINDOW_SEC)}s).",
+        )
+        return
+    closed_perm = _fail_open_or_closed_permission("allow")
+    if closed_perm == "allow":
+        _emit("allow")
+    else:
+        _emit(closed_perm, "Watcher gate: gateway unreachable (fail-closed mode)")
+
+
 LOG_PATH = Path.home() / ".openeval" / "claude-watcher-gate.log"
 
 
@@ -131,7 +224,13 @@ def _get_headers(req_id: str | None = None) -> dict[str, str]:
 
 
 LOCAL_BLACKLIST = [
-    (r"\brm\s+-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*\b", "Recursive force-delete"),
+    (
+        r"\brm\s+(?:-[a-zA-Z0-9_-]+\s+)*"
+        r"(?:-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*|-[a-zA-Z]*f[a-zA-Z]*r[a-zA-Z]*|-[a-zA-Z]*r[a-zA-Z]*\s+-[a-zA-Z]*f[a-zA-Z]*|"
+        r"-[a-zA-Z]*f[a-zA-Z]*\s+-[a-zA-Z]*r[a-zA-Z]*|--recursive\s+--force|--force\s+--recursive)"
+        r"(?:\s+(?:/\S*|\*|\~|\$HOME)|\s+/\s*$)",
+        "Recursive force-delete",
+    ),
     (r"\bsudo\b", "sudo privilege escalation"),
     (r"git\s+push\s+.*--(force|force-with-lease)\b", "git force push"),
     (r"curl\s+.*\|\s*(ba)?sh", "curl | bash"),
@@ -388,6 +487,7 @@ def main() -> None:
         )
         with urllib.request.urlopen(req, timeout=TIMEOUT_SEC) as resp:
             verdict = json.loads(resp.read().decode("utf-8"))
+        _reset_gateway_failures()
     except urllib.error.HTTPError as err:
         if err.code == 422:
             try:
@@ -411,11 +511,11 @@ def main() -> None:
             )
             return
         _log("server_error", error=str(err))
-        _emit("allow")
+        _handle_gateway_transport_failure()
         return
     except Exception as err:  # noqa: BLE001  # Boundary: network transport failure during evaluate call
         _log("server_unreachable", error=str(err))
-        _emit("allow")
+        _handle_gateway_transport_failure()
         return
 
     decision = str(verdict.get("decision", "allow")).lower()

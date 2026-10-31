@@ -59,7 +59,7 @@ uv run python scripts/hermetic_eval_smoke.py
 1. Set `GEMINI_API_KEY` or `OPENAI_API_KEY` in `.env`  
 2. UI → **Evaluate → Launch** → pick a small local task (e.g. `cancel-async-tasks`)  
 3. If the key is missing, the run **fails** (no fake green pass)  
-4. On success: **Runs** → trajectory → **Compare** / annotate in **Sessions**
+4. On success: **Runs** → trajectory → **Compare** / annotate via `POST /api/v1/sessions/{id}/annotate` (API-only)
 
 ## 4. Claude Code / Cursor hooks
 

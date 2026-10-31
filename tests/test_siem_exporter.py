@@ -1,4 +1,8 @@
-"""Unit tests for Enterprise SIEM and Security Operations Exporter."""
+"""Unit tests for Enterprise SIEM and Security Operations Exporter.
+
+NOTE: The exporter is NOT enabled (never dispatched by the server); these tests cover
+payload formatting only, not delivery.
+"""
 
 from engine.approval_policy import WatcherVerdict
 from server.siem_exporter import format_datadog_log, format_splunk_hec_event, format_syslog_rfc5424

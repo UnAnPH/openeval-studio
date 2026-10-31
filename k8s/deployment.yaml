@@ -23,6 +23,11 @@ spec:
         - name: openeval-app
           image: ghcr.io/unanph/openeval-studio:latest
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
           ports:
             - containerPort: 8000
               name: http

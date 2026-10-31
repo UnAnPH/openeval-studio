@@ -506,10 +506,13 @@ class WatcherStore:
                     and session_id.startswith("eval-")
                     and current_user_slug.get() == "demo"
                 ):
-                    # If not found for active user, check if this is an eval run across tenants (demo only)
+                    # Demo eval fallback: same tenant only (demo user's eval rows)
                     row = db.execute(
-                        text("SELECT payload FROM sessions WHERE id = :id AND id LIKE 'eval-%'"),
-                        {"id": session_id},
+                        text(
+                            "SELECT payload FROM sessions WHERE id = :id "
+                            "AND user_id = :uid AND id LIKE 'eval-%'"
+                        ),
+                        {"id": session_id, "uid": user_id},
                     ).fetchone()
             finally:
                 db.rollback()

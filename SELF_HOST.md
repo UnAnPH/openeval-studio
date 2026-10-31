@@ -79,6 +79,18 @@ docker compose -f docker-compose.prod.yml ps
 docker compose -f docker-compose.prod.yml logs -f app
 ```
 
+### Docker socket access (eval sandboxes)
+
+The production stack can run **isolated eval sandboxes** via the Docker API ([`sandbox/docker_runner.py`](sandbox/docker_runner.py)). That requires talking to a Docker daemon, which is a high-privilege capability on the host.
+
+**Tradeoff:** Mounting `/var/run/docker.sock` directly into the `app` container gives any process inside `app` effective **host-root-equivalent** control (start privileged containers, bind-mount host paths, etc.). The production image also runs as non-root (`openeval`, UID 1000), so a raw host socket mount often fails with permission denied unless the container user matches the host `docker` group.
+
+**What we ship:** [`docker-compose.prod.yml`](docker-compose.prod.yml) runs [`tecnativa/docker-socket-proxy`](https://github.com/Tecnativa/docker-socket-proxy) as `docker-proxy`. Only that service mounts the host socket (read-only). The `app` service sets `DOCKER_HOST=tcp://docker-proxy:2375` and does **not** mount `/var/run/docker.sock`. The proxy environment enables a minimal API surface: `CONTAINERS=1`, `IMAGES=1`, `EXEC=1`, `POST=1` (adjust if your sandbox needs fewer verbs).
+
+**If you do not need sandboxes in production:** Remove `docker-proxy`, drop `DOCKER_HOST` from `app`, and do not mount the socket anywhere. The runtime gate and PostgreSQL stack do not require Docker.
+
+**Manual hardening:** Keep the real socket on the proxy only; disable unused proxy flags (for example `BUILD`, `SWARM`, `VOLUMES`) and restrict compose networks so only `app` can reach `docker-proxy:2375`.
+
 ---
 
 ## 4. Cloud Deployment (AWS London `eu-west-2`)

@@ -286,6 +286,10 @@ class Session(BaseModel):
 
     # Evaluation / Benchmark Metrics (First-class)
     passed: bool | None = Field(default=None)
+    automated_passed: bool | None = Field(
+        default=None,
+        description="Original automated pass verdict before human override",
+    )
     reward: float | None = Field(default=None)
     total_tokens: int = Field(default=0)
     total_duration_sec: float = Field(default=0.0)

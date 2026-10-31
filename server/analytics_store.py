@@ -4,6 +4,7 @@ Ingests Inspect AI .eval archives via evals_df() and samples_df() into DuckDB
 for sub-millisecond aggregate queries on pass rates, cost Pareto frontiers, and error distributions.
 """
 
+import contextlib
 import logging
 from pathlib import Path
 from typing import Any
@@ -20,10 +21,8 @@ class DuckDBTraceEngine:
     def __init__(self, logs_dir: Path, db_path: str = ":memory:") -> None:
         self.logs_dir = logs_dir
         self.con = duckdb.connect(database=db_path)
-        try:
+        with contextlib.suppress(Exception):
             self.con.execute("SET max_memory = '128MB'; SET threads = 1;")
-        except Exception:
-            pass
         self._init_tables()
         self.sync_logs()
 

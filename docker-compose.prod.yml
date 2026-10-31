@@ -14,12 +14,29 @@ services:
     networks:
       - openeval-net
 
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    container_name: openeval-docker-proxy
+    restart: unless-stopped
+    environment:
+      CONTAINERS: "1"
+      IMAGES: "1"
+      EXEC: "1"
+      POST: "1"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - openeval-net
+
   app:
     image: ghcr.io/unanph/openeval-studio:${IMAGE_TAG:-latest}
     container_name: openeval-studio
     restart: unless-stopped
     depends_on:
       - postgres
+      - docker-proxy
+    environment:
+      DOCKER_HOST: tcp://docker-proxy:2375
     env_file:
       - path: /etc/openeval.env
         required: false
@@ -33,7 +50,6 @@ services:
       - ./scripts:/app/scripts:ro
       - ./tasks:/app/tasks:ro
       - ./fixtures:/app/fixtures:ro
-      - /var/run/docker.sock:/var/run/docker.sock
     command: >
       sh -c "uv run alembic upgrade head && uv run uvicorn server.app:app --host 0.0.0.0 --port 8000"
     networks:

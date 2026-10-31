@@ -1,5 +1,9 @@
 """Collaborative Annotation & Reactive Metrics Engine for OpenEval & Watcher.
 
+STATUS: NOT ENABLED IN THE UI. This service is reachable only through the API
+(`POST /api/v1/sessions/{id}/annotate`, `GET /api/v1/metrics/reactive`); no frontend
+component calls it. It is single-reviewer / last-write-wins, not truly collaborative.
+
 Enables researchers and security reviewers to:
   1. Override automated verdict (PASS <-> FAIL) with audit trails.
   2. Apply inline behavioral tags (@scheming, @eval_awareness, @unfaithful_cot).
@@ -77,6 +81,9 @@ class AnnotationService:
 
         now_iso = datetime.now(UTC).isoformat()
 
+        if session.automated_passed is None and session.passed is not None:
+            session.automated_passed = session.passed
+
         if payload.human_verdict is not None:
             session.human_verdict_override = payload.human_verdict
             session.passed = payload.human_verdict == "PASS"
@@ -86,8 +93,7 @@ class AnnotationService:
             session.human_reviewer = payload.reviewer
             session.human_review_notes = payload.notes
 
-        if payload.tags:
-            # Store in audit verdicts
+        if payload.human_verdict is not None or payload.notes is not None or payload.tags:
             audit_entry = {
                 "reviewer": payload.reviewer,
                 "timestamp": now_iso,
@@ -127,8 +133,8 @@ class AnnotationService:
             if s.passed is not None or s.human_verdict_override is not None:
                 evaluated += 1
 
-                # Raw baseline pass
-                if s.passed is True and s.human_verdict_override is None:
+                baseline = s.automated_passed if s.automated_passed is not None else s.passed
+                if baseline is True:
                     raw_passed += 1
 
                 # Effective pass (taking human override if present)

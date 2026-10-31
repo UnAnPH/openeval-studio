@@ -46,7 +46,7 @@ class FragmentMatch(BaseModel):
         description="Executive 1-sentence summary of why this fragment matches the query",
     )
     relevance_score: float = Field(default=1.0, ge=0.0, le=1.0)
-    match_type: Literal["dense", "lexical", "hybrid"] = "hybrid"
+    match_type: Literal["llm", "dense", "lexical", "hybrid"] = "hybrid"
     dense_score: float = Field(default=0.0, description="Cosine similarity score (0.0 - 1.0)")
     lexical_score: float = Field(
         default=0.0, description="Normalized lexical term-overlap score (not true BM25)"
@@ -79,7 +79,11 @@ class TranscriptFragmentSearchEngine:
                     tc_name = getattr(tc, "tool_name", "") or ""
                     args = getattr(tc, "arguments", None) or {}
                     raw_in = getattr(tc, "raw_input", None) or ""
-                    args_str = " ".join(f"{k}: {v}" for k, v in args.items()) if isinstance(args, dict) else str(args)
+                    args_str = (
+                        " ".join(f"{k}: {v}" for k, v in args.items())
+                        if isinstance(args, dict)
+                        else str(args)
+                    )
                     text_parts.append(f"Tool {tc_name}: {args_str} {raw_in}".strip())
 
                 # Index tool results (especially security firewall blocks & stderr)
@@ -97,12 +101,12 @@ class TranscriptFragmentSearchEngine:
                 for rev in msg_reviews:
                     decision = getattr(rev, "decision", "") or ""
                     rule_violation = (
-                        getattr(rev, "rule_violation", "")
-                        or getattr(rev, "rule_id", "")
-                        or ""
+                        getattr(rev, "rule_violation", "") or getattr(rev, "rule_id", "") or ""
                     )
                     explanation = getattr(rev, "explanation", "") or ""
-                    text_parts.append(f"Security Policy [{decision}]: {rule_violation} - {explanation}")
+                    text_parts.append(
+                        f"Security Policy [{decision}]: {rule_violation} - {explanation}"
+                    )
 
                 full_text = "\n".join(text_parts).strip()
                 if full_text:
@@ -203,10 +207,7 @@ Do not include markdown fences like ```json, just return the raw JSON array stri
                 or getattr(record, "id", None)
                 or getattr(record, "run_id", "session")
             )
-            project = (
-                getattr(record, "project_name", None)
-                or getattr(record, "task_id", "unnamed")
-            )
+            project = getattr(record, "project_name", None) or getattr(record, "task_id", "unnamed")
             agent_model = getattr(record, "model", "unknown")
 
             results: list[FragmentMatch] = []
@@ -239,7 +240,7 @@ Do not include markdown fences like ```json, just return the raw JSON array stri
                         matched_span=span,
                         explanation=explanation,
                         relevance_score=score,
-                        match_type="dense",
+                        match_type="llm",
                         dense_score=score,
                         lexical_score=score,
                         combined_score=score,
@@ -272,24 +273,46 @@ Do not include markdown fences like ```json, just return the raw JSON array stri
         is_issue_query = any(
             k in clean_lower
             for k in [
-                "issue", "problem", "error", "block", "fail", "wrong",
-                "what happened", "why", "bug", "fault", "crash", "stuck",
-                "violation", "where is", "where was"
+                "issue",
+                "problem",
+                "error",
+                "block",
+                "fail",
+                "wrong",
+                "what happened",
+                "why",
+                "bug",
+                "fault",
+                "crash",
+                "stuck",
+                "violation",
+                "where is",
+                "where was",
             ]
         )
 
         # Tokenize query preserving terms like .env, aws, db, etc.
         raw_tokens = [
-            t.lower()
-            for t in re.findall(r"[a-zA-Z0-9_\-\.]+", query_clean)
-            if len(t) >= 2
+            t.lower() for t in re.findall(r"[a-zA-Z0-9_\-\.]+", query_clean) if len(t) >= 2
         ]
         query_terms = raw_tokens if raw_tokens else [query_clean.lower()]
         security_query = is_issue_query or any(
             k in clean_lower
             for k in [
-                "leak", "secret", "credential", "env", "token", "password", "key",
-                "exfiltrat", "block", "firewall", "violation", "dump", "sudo", "bypass"
+                "leak",
+                "secret",
+                "credential",
+                "env",
+                "token",
+                "password",
+                "key",
+                "exfiltrat",
+                "block",
+                "firewall",
+                "violation",
+                "dump",
+                "sudo",
+                "bypass",
             ]
         )
 
@@ -346,7 +369,6 @@ Do not include markdown fences like ```json, just return the raw JSON array stri
                 or getattr(record, "id", None)
                 or getattr(record, "run_id", "")
             )
-            is_active_session = bool(session_id and rec_id == session_id)
             chunks = cls._extract_text_chunks(record)
             for chunk in chunks:
                 text_lower = chunk["text"].lower()
@@ -360,7 +382,7 @@ Do not include markdown fences like ```json, just return the raw JSON array stri
                         + re.escape(clean_term)
                         + r"(?:s|ed|ing)?(?:$|[\s_./\-\"\\`])"
                     )
-                    if re.search(pattern, text_lower) or term in text_lower:
+                    if re.search(pattern, text_lower):
                         matches += 1
 
                 token_ratio = matches / max(1, len(query_terms))
@@ -437,10 +459,7 @@ Do not include markdown fences like ```json, just return the raw JSON array stri
                 or getattr(rec, "id", None)
                 or getattr(rec, "run_id", "session")
             )
-            project = (
-                getattr(rec, "project_name", None)
-                or getattr(rec, "task_id", "unnamed")
-            )
+            project = getattr(rec, "project_name", None) or getattr(rec, "task_id", "unnamed")
             model_name = getattr(rec, "model", "unknown")
             text = cand["text"]
             turn = cand["turn"]

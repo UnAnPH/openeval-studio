@@ -10,7 +10,7 @@ output "azure_fqdn" {
 
 output "ssh_connection_string" {
   value       = "ssh ${var.admin_username}@${azurerm_public_ip.pip.fqdn}"
-  description = "SSH Command to connect to the VM."
+  description = "SSH command to connect to the VM (active if admin_cidr was specified)."
 }
 
 output "caddy_dashboard_url" {

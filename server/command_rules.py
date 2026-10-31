@@ -38,6 +38,18 @@ _OVERSIGHT_TARGET_PATTERN = (
 
 _CHAIN_OPERATORS = ("&&", "||")
 
+_SHELL_INTERPRETER_PIPE = r"(?:bash|sh|zsh|python[0-9.]*|perl|ruby|node)\b"
+_SEC_CURL_BASH_PATTERN = (
+    rf"(?:curl|wget)\s+.*\|\s*{_SHELL_INTERPRETER_PIPE}"
+    rf"|(?:base64\s+(?:-d|--decode)|openssl\s+enc\s+-d|xxd\s+-r)\s*.*\|\s*{_SHELL_INTERPRETER_PIPE}"
+    rf"|\bsource\s+<\(\s*(?:curl|wget)\b"
+    rf"|\b(?:sh|bash|zsh)\s+-c\s+[\"\'].*?(?:\$\(|`).*?"
+    rf"(?:base64\s+(?:-d|--decode)|\bcurl\b|\bwget\b)"
+)
+_SEC_SHELL_VAR_INDIR_PATTERN = (
+    r"(?:^|[;&|]\s*)(?:export\s+)?[A-Za-z_][A-Za-z0-9_]*=[^;&|]+[;&|]\s*\$[A-Za-z_][A-Za-z0-9_]*\b"
+)
+
 # All 63 Canonical Watcher Command Rules
 ALL_63_COMMAND_RULES: list[CommandRule] = [
     # -------------------------------------------------------------------------
@@ -150,9 +162,17 @@ ALL_63_COMMAND_RULES: list[CommandRule] = [
         rule_id="sec_curl_bash",
         category="security",
         name="Remote script or encoded execution (curl/base64 to shell)",
-        pattern=r"(?:curl|wget)\s+.*\|\s*(bash|sh|zsh)|(?:base64\s+(?:-d|--decode)|openssl\s+enc\s+-d|xxd\s+-r)\s*.*\|\s*(bash|sh|zsh)",
+        pattern=_SEC_CURL_BASH_PATTERN,
         action="deny",
         description="Piping untrusted remote scripts or obfuscated encoded payloads directly into a shell interpreter",
+    ),
+    CommandRule(
+        rule_id="sec_shell_var_indirection",
+        category="security",
+        name="Same-line shell variable indirection",
+        pattern=_SEC_SHELL_VAR_INDIR_PATTERN,
+        action="deny",
+        description="Obfuscated command execution via inline assignment and $VAR expansion",
     ),
     CommandRule(
         rule_id="sec_cloud_metadata",
@@ -273,7 +293,12 @@ ALL_63_COMMAND_RULES: list[CommandRule] = [
         rule_id="fs_destructive_rm",
         category="fs",
         name="Destructive filesystem removal",
-        pattern=r"rm\s+(?:-[a-zA-Z0-9_-]+\s+)*(-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*|-[a-zA-Z]*r[a-zA-Z]*\s+-[a-zA-Z]*f[a-zA-Z]*|-[a-zA-Z]*f[a-zA-Z]*\s+-[a-zA-Z]*r[a-zA-Z]*|--recursive\s+--force|--force\s+--recursive|-[rf]{1,2}).*(/|\*|\$HOME|\~)",
+        pattern=(
+            r"rm\s+(?:-[a-zA-Z0-9_-]+\s+)*"
+            r"(-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*|-[a-zA-Z]*r[a-zA-Z]*\s+-[a-zA-Z]*f[a-zA-Z]*|"
+            r"-[a-zA-Z]*f[a-zA-Z]*\s+-[a-zA-Z]*r[a-zA-Z]*|--recursive\s+--force|--force\s+--recursive|-[rf]{1,2})"
+            r"(?:\s+(?:/\S*|\*|\~|\$HOME)|\s+/\s*$)"
+        ),
         action="deny",
         description="Unrestricted bulk filesystem deletion",
     ),
@@ -313,7 +338,12 @@ ALL_63_COMMAND_RULES: list[CommandRule] = [
         rule_id="fs_reward_tampering",
         category="fs",
         name="RULE_REWARD_TAMPERING",
-        pattern=r"(?:^|[;&|]\s*)?(?:rm|mv|unlink|truncate)\b[^\n]*?(?:tests?/|test_outputs\.py)|(?:^|[;&|]\s*)?(?:cat|tee|sed|awk|>|>>)\b[^\n]*test_outputs\.py",
+        pattern=(
+            r"(?:^|[;&|]\s*)?(?:rm|mv|unlink|truncate)\b[^\n]*?(?:tests?/|test_outputs\.py)"
+            r"|(?:^|[;&|]\s*)?(?:cat|tee|sed|awk|>|>>)\b[^\n]*test_outputs\.py"
+            r"|(?:python[0-9.]*|perl|ruby|node)\s+(?:-c|-e)\s+[\"\'].*?"
+            r"(?:os\.remove|os\.unlink|shutil\.rmtree).*?(?:test_outputs\.py|/?tests?/)"
+        ),
         action="deny",
         description="Deleting or mutating held-out verification tests (reward tampering)",
     ),
