@@ -31,6 +31,26 @@ else
   curl -fsSL "${SERVER_URL}/api/scripts/cursor_watcher_gate.py" -o "$INSTALL_GATE"
 fi
 chmod +x "$INSTALL_GATE"
+# Persist configuration to ~/.openeval/config.json so GUI apps (Cursor IDE) load it reliably
+python3 - <<CFG
+import json, os
+cfg_path = os.path.expanduser("~/.openeval/config.json")
+data = {}
+if os.path.exists(cfg_path):
+    try:
+        data = json.load(open(cfg_path))
+    except Exception:
+        pass
+key = os.environ.get("OPENEVAL_API_KEY", "").strip()
+url = os.environ.get("OPENEVAL_WATCHER_URL", "https://openeval.studio/api/v1/watcher/evaluate").strip()
+if key:
+    data["api_key"] = key
+if url:
+    data["watcher_url"] = url
+with open(cfg_path, "w") as f:
+    json.dump(data, f, indent=2)
+os.chmod(cfg_path, 0o600)
+CFG
 if ! grep -q "OPENEVAL_API_KEY" "$INSTALL_GATE"; then
   echo "Installed gate is missing OPENEVAL_API_KEY auth headers: $INSTALL_GATE" >&2
   exit 1
@@ -84,8 +104,8 @@ PY
 
 echo "Smoke-testing local deny..."
 printf '%s' '{"hook_event_name":"beforeShellExecution","command":"git push --force origin main","conversation_id":"install-smoke"}' \
-  | python3 "$GATE"
+  | python3 "$INSTALL_GATE"
 echo
 echo "Done. Reload Cursor window / start a new Agent chat so hooks take effect."
 echo "Gate log: ~/.openeval/cursor-watcher-gate.log"
-echo "Watcher must be running: http://127.0.0.1:8000 (Control mode Enforce)."
+echo "Watcher target: ${SERVER_URL:-https://openeval.studio}"

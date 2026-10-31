@@ -106,9 +106,21 @@ MAX_LOG_BYTES = 10 * 1024 * 1024  # 10 MiB cap
 REQUEST_ID = uuid.uuid4().hex[:16]
 
 WATCHER_URL = os.environ.get(
-    "OPENEVAL_WATCHER_URL", "http://127.0.0.1:8000/api/v1/watcher/evaluate"
+    "OPENEVAL_WATCHER_URL", "https://openeval.studio/api/v1/watcher/evaluate"
 )
 OPENEVAL_API_KEY = os.environ.get("OPENEVAL_API_KEY", "").strip()
+
+# Load fallback config from ~/.openeval/config.json if not present in environment (e.g. GUI app launch)
+_CONFIG_FILE = Path.home() / ".openeval" / "config.json"
+if _CONFIG_FILE.is_file():
+    try:
+        _cfg = json.loads(_CONFIG_FILE.read_text())
+        if not OPENEVAL_API_KEY and _cfg.get("api_key"):
+            OPENEVAL_API_KEY = str(_cfg["api_key"]).strip()
+        if WATCHER_URL == "https://openeval.studio/api/v1/watcher/evaluate" and _cfg.get("watcher_url"):
+            WATCHER_URL = str(_cfg["watcher_url"]).strip()
+    except Exception:
+        pass
 TIMEOUT_SEC = _safe_float(os.environ.get("OPENEVAL_WATCHER_TIMEOUT"), 1.5)
 # For beforeShellExecution, default to "ask" so Cursor prompts the user
 SHELL_LOCKOUT_PERMISSION = os.environ.get("OPENEVAL_LOCKOUT_PERMISSION", "ask")
