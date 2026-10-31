@@ -1367,7 +1367,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
       {/* Ingest Agent Log Modal */}
       {showIngestModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl border border-border-subtle shadow-xl max-w-lg w-full p-6 space-y-4">
+          <div className="bg-white rounded-2xl border border-border-subtle shadow-xl max-w-2xl w-full p-6 space-y-4 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-purple-50 text-brand-purple flex items-center justify-center shrink-0">
@@ -1505,6 +1505,97 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
                     )}
                   </div>
                 )}
+
+                {/* Where to find your local agent transcript logs */}
+                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                      <Folder className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Where to find your local agent transcript files</span>
+                    </div>
+                    <span className="text-[10px] font-mono font-medium text-slate-500 bg-white px-2 py-0.5 rounded-md border border-slate-200 inline-flex items-center gap-1 self-start sm:self-auto">
+                      macOS: <kbd className="font-semibold text-slate-700">⌘ + Shift + G</kbd> to paste
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {/* Antigravity */}
+                    <div className="bg-white p-2.5 rounded-lg border border-slate-200/80 shadow-2xs space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-slate-900 flex items-center gap-1">
+                          <Zap className="w-3 h-3 text-indigo-500" /> Antigravity
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard('~/.gemini/antigravity/brain/', 'path-ag')}
+                          className="text-[10px] text-indigo-600 hover:text-indigo-800 font-semibold inline-flex items-center gap-1 cursor-pointer"
+                        >
+                          {copiedId === 'path-ag' ? <Check className="w-2.5 h-2.5 text-emerald-600" /> : <Copy className="w-2.5 h-2.5" />}
+                          <span>{copiedId === 'path-ag' ? 'Copied' : 'Copy'}</span>
+                        </button>
+                      </div>
+                      <code className="text-[10px] font-mono text-slate-600 block truncate bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100" title="~/.gemini/antigravity/brain/">
+                        ~/.gemini/antigravity/brain/
+                      </code>
+                      <p className="text-[10px] text-slate-500 leading-tight">
+                        Select <span className="font-mono text-indigo-600 font-semibold">transcript.jsonl</span> inside any session folder.
+                      </p>
+                    </div>
+
+                    {/* Cursor */}
+                    <div className="bg-white p-2.5 rounded-lg border border-slate-200/80 shadow-2xs space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-slate-900 flex items-center gap-1">
+                          <Code2 className="w-3 h-3 text-indigo-500" /> Cursor
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard('~/.cursor/projects/', 'path-cursor')}
+                          className="text-[10px] text-indigo-600 hover:text-indigo-800 font-semibold inline-flex items-center gap-1 cursor-pointer"
+                        >
+                          {copiedId === 'path-cursor' ? <Check className="w-2.5 h-2.5 text-emerald-600" /> : <Copy className="w-2.5 h-2.5" />}
+                          <span>{copiedId === 'path-cursor' ? 'Copied' : 'Copy'}</span>
+                        </button>
+                      </div>
+                      <code className="text-[10px] font-mono text-slate-600 block truncate bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100" title="~/.cursor/projects/">
+                        ~/.cursor/projects/
+                      </code>
+                      <p className="text-[10px] text-slate-500 leading-tight">
+                        Select any <span className="font-mono text-indigo-600 font-semibold">.jsonl</span> in <span className="font-mono">agent-transcripts/</span>.
+                      </p>
+                    </div>
+
+                    {/* Claude Code */}
+                    <div className="bg-white p-2.5 rounded-lg border border-slate-200/80 shadow-2xs space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-slate-900 flex items-center gap-1">
+                          <Terminal className="w-3 h-3 text-indigo-500" /> Claude Code
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard('~/.claude/projects/', 'path-claude')}
+                          className="text-[10px] text-indigo-600 hover:text-indigo-800 font-semibold inline-flex items-center gap-1 cursor-pointer"
+                        >
+                          {copiedId === 'path-claude' ? <Check className="w-2.5 h-2.5 text-emerald-600" /> : <Copy className="w-2.5 h-2.5" />}
+                          <span>{copiedId === 'path-claude' ? 'Copied' : 'Copy'}</span>
+                        </button>
+                      </div>
+                      <code className="text-[10px] font-mono text-slate-600 block truncate bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100" title="~/.claude/projects/">
+                        ~/.claude/projects/
+                      </code>
+                      <p className="text-[10px] text-slate-500 leading-tight">
+                        Select any session <span className="font-mono text-indigo-600 font-semibold">.jsonl</span> file.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="text-[11px] text-slate-600 bg-indigo-50/60 border border-indigo-100 rounded-lg p-2 flex items-start gap-2">
+                    <span className="text-indigo-600 text-xs shrink-0 font-bold">💡</span>
+                    <span className="leading-snug">
+                      <strong>Finder / File Picker Tip:</strong> After clicking the browse area above, press <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[10px] font-mono shadow-2xs font-semibold">⌘ + Shift + G</kbd> on macOS (or <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[10px] font-mono shadow-2xs font-semibold">Ctrl + L</kbd> on Linux) to open the "Go to Folder" prompt, paste the path, and pick your transcript.
+                    </span>
+                  </div>
+                </div>
               </div>
             ) : (
               <div className="space-y-2">
