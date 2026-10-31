@@ -1882,7 +1882,7 @@ async def watcher_doctor() -> dict[str, Any]:
 class SearchFragmentsPayload(BaseModel):
     query: str
     max_fragments: int = 15
-    model: str = "google/gemini-2.5-flash"
+    model: str = "google/gemini-3.5-flash-lite"
     session_id: str | None = None
     scope: Literal["session", "all"] = "session"
 

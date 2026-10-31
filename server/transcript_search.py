@@ -6,11 +6,14 @@ Combines:
   3. Hybrid score fusion: CombinedScore = 0.6 * CosineSimilarity + 0.4 * LexicalNorm
 """
 
+import json
 import logging
+import os
 import re
 from pathlib import Path
 from typing import Any, Literal
 
+from google import genai
 from pydantic import BaseModel, ConfigDict, Field
 
 from server.inspect_loader import list_inspect_run_records
@@ -130,12 +133,131 @@ class TranscriptFragmentSearchEngine:
         return chunks
 
     @classmethod
+    def _llm_search_session_turns(
+        cls,
+        record: Any,
+        query: str,
+        max_fragments: int = 5,
+        model_name: str = "gemini-3.5-flash-lite",
+    ) -> list[FragmentMatch] | None:
+        """Use Gemini LLM to semantically analyze session turns and identify exact answers to natural language queries."""
+        api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        if not api_key or api_key == "mock-key":
+            return None
+
+        chunks = cls._extract_text_chunks(record)
+        if not chunks:
+            return None
+
+        # Build concise turn summaries for the LLM
+        lines = []
+        for c in chunks:
+            text_preview = c["text"].replace("\n", " ")
+            if len(text_preview) > 350:
+                text_preview = text_preview[:350] + "..."
+            lines.append(f"Turn #{c['turn']} [{c['role']}]: {text_preview}")
+
+        turns_text = "\n".join(lines)
+        prompt = f"""You are an expert AI Safety & Code Evaluation Search Assistant.
+The user is viewing an agent transcript and has entered this search query:
+User Query: "{query}"
+
+Here are the chronological conversation turns:
+{turns_text}
+
+Analyze the turns to identify the 1-4 most relevant turns that answer or address the user's query.
+If the query asks about an issue, error, block, violation, or bug (e.g. "Where is the issue", "why was it blocked", "what went wrong"), prioritize the exact turns where the fault, firewall block, or problematic action occurred.
+
+Respond ONLY with a valid JSON array of objects with the following schema:
+[
+  {{
+    "turn": <int turn number>,
+    "matched_span": "<exact quote or concise excerpt of the key sentence, max 180 chars>",
+    "explanation": "<1 clear sentence explaining why this turn addresses the user query>",
+    "relevance_score": <float between 0.7 and 1.0>
+  }}
+]
+Do not include markdown fences like ```json, just return the raw JSON array string."""
+
+        try:
+            model_target = model_name.replace("google/", "").replace("models/", "")
+            if model_target in ("gemini-2.5-flash", "gemini-2.5-flash-lite"):
+                model_target = "gemini-3.5-flash-lite"
+
+            client = genai.Client(api_key=api_key)
+            res = client.models.generate_content(
+                model=model_target,
+                contents=prompt,
+                config={"response_mime_type": "application/json"},
+            )
+            raw = (res.text or "").strip()
+            if not raw:
+                return None
+
+            data = json.loads(raw)
+            if not isinstance(data, list):
+                return None
+
+            rec_id = (
+                getattr(record, "session_id", None)
+                or getattr(record, "id", None)
+                or getattr(record, "run_id", "session")
+            )
+            project = (
+                getattr(record, "project_name", None)
+                or getattr(record, "task_id", "unnamed")
+            )
+            agent_model = getattr(record, "model", "unknown")
+
+            results: list[FragmentMatch] = []
+            chunk_map = {c["turn"]: c for c in chunks}
+
+            for item in data[:max_fragments]:
+                turn_num = int(item.get("turn", 1))
+                chunk = chunk_map.get(turn_num)
+                role = chunk["role"] if chunk else "assistant"
+                span = str(item.get("matched_span", "")).strip()
+                if not span and chunk:
+                    span = chunk["text"][:180]
+
+                score = float(item.get("relevance_score", 0.95))
+                explanation = str(
+                    item.get(
+                        "explanation",
+                        f"Identified by LLM as matching '{query}' in Turn #{turn_num}.",
+                    )
+                )
+
+                results.append(
+                    FragmentMatch(
+                        session_id=rec_id,
+                        project_or_task=project,
+                        model=agent_model,
+                        turn_start=turn_num,
+                        turn_end=turn_num,
+                        matched_role=role,
+                        matched_span=span,
+                        explanation=explanation,
+                        relevance_score=score,
+                        match_type="dense",
+                        dense_score=score,
+                        lexical_score=score,
+                        combined_score=score,
+                    )
+                )
+
+            return results
+        except Exception as exc:
+            logger.warning("LLM search failed, falling back to hybrid scoring: %s", exc)
+            return None
+
+    @classmethod
     def search_fragments(
         cls,
         query: str,
         logs_dir: Path | None = None,
         max_fragments: int = 15,
-        llm_model: str = "google/gemini-2.5-flash",
+        llm_model: str = "google/gemini-3.5-flash-lite",
         force_fallback_embeddings: bool = False,
         session_id: str | None = None,
         scope: Literal["session", "all"] = "session",
@@ -146,6 +268,16 @@ class TranscriptFragmentSearchEngine:
         if not query_clean:
             return []
 
+        clean_lower = query_clean.lower()
+        is_issue_query = any(
+            k in clean_lower
+            for k in [
+                "issue", "problem", "error", "block", "fail", "wrong",
+                "what happened", "why", "bug", "fault", "crash", "stuck",
+                "violation", "where is", "where was"
+            ]
+        )
+
         # Tokenize query preserving terms like .env, aws, db, etc.
         raw_tokens = [
             t.lower()
@@ -153,8 +285,7 @@ class TranscriptFragmentSearchEngine:
             if len(t) >= 2
         ]
         query_terms = raw_tokens if raw_tokens else [query_clean.lower()]
-        clean_lower = query_clean.lower()
-        security_query = any(
+        security_query = is_issue_query or any(
             k in clean_lower
             for k in [
                 "leak", "secret", "credential", "env", "token", "password", "key",
@@ -163,8 +294,6 @@ class TranscriptFragmentSearchEngine:
         )
 
         if candidate_records is None:
-            # Collect candidate sessions from WatcherStore (already scoped to current user),
-            # plus Global RunStore and Inspect logs for authenticated non-demo tenants.
             from server.db import current_user_slug
 
             watcher_store = get_watcher_store()
@@ -179,7 +308,8 @@ class TranscriptFragmentSearchEngine:
                     candidate_records.extend(inspect_records)
 
         # Apply session scoping if requested
-        if scope == "session" and session_id:
+        scoped_records: list[Any] = []
+        if session_id:
             scoped_records = [
                 r
                 for r in candidate_records
@@ -192,6 +322,17 @@ class TranscriptFragmentSearchEngine:
             ]
             if scoped_records:
                 candidate_records = scoped_records
+
+        # Stage 1: Try true LLM semantic search when searching a session
+        if candidate_records and len(candidate_records) == 1 and not force_fallback_embeddings:
+            llm_matches = cls._llm_search_session_turns(
+                record=candidate_records[0],
+                query=query_clean,
+                max_fragments=max_fragments,
+                model_name=llm_model,
+            )
+            if llm_matches:
+                return llm_matches
 
         embed_svc = TranscriptEmbeddingService.get_instance(
             force_fallback=force_fallback_embeddings
@@ -244,7 +385,11 @@ class TranscriptFragmentSearchEngine:
                         "credential_exfiltration",
                     ]
                 )
-                sec_bonus = 0.15 if (is_security_turn and security_query) else 0.0
+                if is_issue_query and is_security_turn:
+                    sec_bonus = 0.60
+                    matches = max(matches, 1)
+                else:
+                    sec_bonus = 0.15 if (is_security_turn and security_query) else 0.0
 
                 lexical_score = min(1.0, token_ratio * 0.70 + phrase_bonus + sec_bonus)
 
@@ -254,10 +399,6 @@ class TranscriptFragmentSearchEngine:
 
                 # Hybrid fusion: 55% Dense Semantic + 45% Lexical
                 combined = round(0.55 * dense_score + 0.45 * lexical_score, 3)
-
-                # Active session relevance boost when searching in "all" mode
-                if is_active_session and scope == "all":
-                    combined = min(1.0, round(combined * 1.35, 3))
 
                 # Admission threshold
                 if (matches > 0 and combined >= 0.15) or dense_score >= 0.45:

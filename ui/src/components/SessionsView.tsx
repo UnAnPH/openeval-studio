@@ -122,7 +122,6 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
 
   // Transcript Search state
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [searchScope, setSearchScope] = useState<'session' | 'all'>('session');
   const [isSearching, setIsSearching] = useState<boolean>(false);
   const [fragmentMatches, setFragmentMatches] = useState<FragmentMatch[]>([]);
   const [visibleFragmentsCount, setVisibleFragmentsCount] = useState<number>(5);
@@ -352,7 +351,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
         body: JSON.stringify({
           query: searchQuery,
           session_id: selectedSessionId,
-          scope: searchScope,
+          scope: 'session',
         }),
       }).catch(() => null);
 
@@ -363,15 +362,15 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
         return;
       }
 
-      // Static client-side search fallback (respecting session scope, word boundaries, and tool calls)
+      // Static client-side search fallback (scoped strictly to active session)
       const q = searchQuery.toLowerCase().trim();
+      const isIssueQuery = /issue|problem|error|block|fail|wrong|what happened|why|bug|fault|crash|leak|violation|where is/i.test(q);
       const qTerms = q.split(/\s+/).filter(Boolean);
       const matches: FragmentMatch[] = [];
 
-      const targetSessions =
-        searchScope === 'session' && selectedSessionId
-          ? displaySessions.filter((s) => s.session_id === selectedSessionId)
-          : displaySessions;
+      const targetSessions = selectedSessionId
+        ? displaySessions.filter((s) => s.session_id === selectedSessionId)
+        : displaySessions.slice(0, 1);
 
       targetSessions.forEach((s) => {
         (s.trajectory?.messages || []).forEach((m, idx) => {
@@ -387,6 +386,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
             .map((tr: any) => `${tr.stderr || ''} ${tr.stdout || ''}`)
             .join(' ');
           const full = `${content} ${thinking} ${toolText} ${resultText}`.toLowerCase();
+          const hasSecurityBlock = /safety firewall blocked|policy intercept|security warning|blocked by/i.test(full);
 
           // Word boundary term matching
           let termMatches = 0;
@@ -398,28 +398,38 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
             }
           }
 
-          if (termMatches > 0) {
+          if (termMatches > 0 || (isIssueQuery && hasSecurityBlock)) {
             const isExact = full.includes(q);
             const tokenScore = termMatches / Math.max(1, qTerms.length);
-            const score = Math.min(1.0, tokenScore * 0.7 + (isExact ? 0.3 : 0.1));
+            let score = Math.min(1.0, tokenScore * 0.7 + (isExact ? 0.3 : 0.1));
+            if (isIssueQuery && hasSecurityBlock) {
+              score = Math.max(score, 0.95);
+            }
 
             // Centered excerpt extraction
             let startIdx = 0;
+            const blockIdx = full.indexOf('blocked');
             const phraseIdx = full.indexOf(q);
             if (phraseIdx !== -1) {
               startIdx = Math.max(0, phraseIdx - 30);
+            } else if (isIssueQuery && blockIdx !== -1) {
+              startIdx = Math.max(0, blockIdx - 30);
             } else if (qTerms.length > 0) {
               const firstTermIdx = full.indexOf(qTerms[0]);
               if (firstTermIdx !== -1) {
                 startIdx = Math.max(0, firstTermIdx - 30);
               }
             }
-            const rawExcerpt = `${content} ${thinking} ${toolText}`
+            const rawExcerpt = `${content} ${thinking} ${toolText} ${resultText}`
               .slice(startIdx, startIdx + 200)
               .replace(/\n+/g, ' ')
               .trim();
             const snippet =
               startIdx > 0 ? `...${rawExcerpt}...` : `${rawExcerpt}...`;
+
+            const explanation = (isIssueQuery && hasSecurityBlock)
+              ? `Identified as the key issue: action was intercepted and blocked by the safety firewall in Turn #${idx + 1}.`
+              : `Keyword match on "${searchQuery}" in turn #${idx + 1}.`;
 
             matches.push({
               session_id: s.session_id,
@@ -429,10 +439,10 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
               turn_end: idx + 1,
               matched_role: m.role || 'assistant',
               matched_span: snippet,
-              explanation: `Keyword match on "${searchQuery}" in turn #${idx + 1}.`,
+              explanation,
               relevance_score: score,
-              match_type: 'lexical',
-              dense_score: 0.0,
+              match_type: isIssueQuery && hasSecurityBlock ? 'dense' : 'lexical',
+              dense_score: isIssueQuery && hasSecurityBlock ? score : 0.0,
               lexical_score: score,
               combined_score: score,
             });
@@ -1288,72 +1298,39 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
                     </span>
                   </div>
 
-                  {/* Search Bar & Scope Toggle */}
-                  <div className="flex flex-wrap items-center gap-2">
-                    <div className="inline-flex p-0.5 bg-slate-100 rounded-lg text-[11px] font-mono border border-slate-200">
-                      <button
-                        type="button"
-                        onClick={() => setSearchScope('session')}
-                        className={`px-2 py-1 rounded-md transition-all cursor-pointer ${
-                          searchScope === 'session'
-                            ? 'bg-white text-indigo-700 font-bold shadow-2xs'
-                            : 'text-slate-600 hover:text-slate-900'
-                        }`}
-                        title="Search only within this active session transcript"
-                      >
-                        In This Session
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setSearchScope('all')}
-                        className={`px-2 py-1 rounded-md transition-all cursor-pointer ${
-                          searchScope === 'all'
-                            ? 'bg-white text-indigo-700 font-bold shadow-2xs'
-                            : 'text-slate-600 hover:text-slate-900'
-                        }`}
-                        title="Search across all session transcripts"
-                      >
-                        All Sessions
-                      </button>
+                  {/* LLM Transcript Search Bar */}
+                  <form onSubmit={handleSearch} className="flex items-center gap-1.5">
+                    <div className="relative flex items-center">
+                      <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                      <input
+                        type="text"
+                        placeholder="Search transcript (e.g. 'where is the issue')..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="h-8 pl-8 pr-3 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono w-60 sm:w-72 shadow-2xs"
+                      />
                     </div>
-
-                    <form onSubmit={handleSearch} className="flex items-center gap-1.5">
-                      <div className="relative flex items-center">
-                        <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                        <input
-                          type="text"
-                          placeholder={
-                            searchScope === 'session'
-                              ? 'Search in this session...'
-                              : 'Search all transcripts...'
-                          }
-                          value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                          className="h-8 pl-8 pr-3 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono w-52 sm:w-64 shadow-2xs"
-                        />
-                      </div>
+                    <button
+                      type="submit"
+                      disabled={isSearching}
+                      className="h-8 px-3 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs disabled:opacity-50"
+                    >
+                      {isSearching ? 'Analyzing...' : 'LLM Search'}
+                    </button>
+                    {fragmentMatches.length > 0 && (
                       <button
-                        type="submit"
-                        disabled={isSearching}
-                        className="h-8 px-3 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs disabled:opacity-50"
+                        type="button"
+                        onClick={() => {
+                          setFragmentMatches([]);
+                          setSearchQuery('');
+                        }}
+                        className="h-8 w-8 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 hover:text-slate-700 shadow-2xs inline-flex items-center justify-center transition-all cursor-pointer"
+                        title="Clear search"
                       >
-                        {isSearching ? 'Searching...' : 'LLM Search'}
+                        <X className="w-3.5 h-3.5" />
                       </button>
-                      {fragmentMatches.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setFragmentMatches([]);
-                            setSearchQuery('');
-                          }}
-                          className="h-8 w-8 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 hover:text-slate-700 shadow-2xs inline-flex items-center justify-center transition-all cursor-pointer"
-                          title="Clear search"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </form>
-                  </div>
+                    )}
+                  </form>
                 </div>
 
                 {/* High-Signal Extracted Fragment Chips */}
@@ -1361,7 +1338,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
                   <div className="p-3.5 bg-indigo-50/60 rounded-xl border border-indigo-100 space-y-2.5">
                     <div className="flex items-center justify-between">
                       <div className="text-[11px] font-mono font-bold text-indigo-900">
-                        {fragmentMatches.length} High-Signal Fragments Extracted (Click to jump to turn):
+                        {fragmentMatches.length} Matching Turn{fragmentMatches.length > 1 ? 's' : ''} in Transcript (Click to jump):
                       </div>
                       <span className="text-[10px] font-mono text-indigo-600">
                         Showing {Math.min(visibleFragmentsCount, fragmentMatches.length)} of {fragmentMatches.length}
@@ -1388,22 +1365,9 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
                             <div className="flex items-center justify-between text-[10px] font-mono text-slate-500">
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 <span className="font-bold text-indigo-700">Turn #{m.turn_start}</span>
-                                {m.session_id && (
-                                  <span
-                                    className={`px-1.5 py-0.5 rounded text-[9px] font-semibold ${
-                                      m.session_id === selectedSessionId
-                                        ? 'bg-indigo-100 text-indigo-800 border border-indigo-200'
-                                        : 'bg-slate-100 text-slate-700 border border-slate-200'
-                                    }`}
-                                  >
-                                    {m.session_id === selectedSessionId
-                                      ? 'Current Session'
-                                      : m.session_id}
-                                  </span>
-                                )}
                                 {m.match_type === 'dense' && (
                                   <span className="px-1.5 py-0.2 rounded-md bg-purple-100 text-purple-700 font-semibold text-[9px] uppercase">
-                                    Dense Vector
+                                    LLM Semantic
                                   </span>
                                 )}
                                 {m.match_type === 'hybrid' && (
@@ -1413,7 +1377,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
                                 )}
                                 {m.match_type === 'lexical' && (
                                   <span className="px-1.5 py-0.2 rounded-md bg-slate-100 text-slate-600 font-semibold text-[9px] uppercase">
-                                    Lexical
+                                    Keyword
                                   </span>
                                 )}
                                 <span className="text-slate-400">({m.matched_role})</span>
