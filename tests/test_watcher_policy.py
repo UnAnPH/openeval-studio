@@ -176,9 +176,10 @@ def test_fail_open_reliability():
     assert verdict.decision == "allow"
 
 
-def test_automated_remediation_engine():
+@pytest.mark.asyncio
+async def test_automated_remediation_engine():
     """Verify automated remediation generation across security dimensions."""
-    finding = SchemingScanners.generate_incident_remediation(
+    finding = await SchemingScanners.generate_incident_remediation(
         session_id="test-session-123",
         dimension="Data Exfiltration",
         headline="[Claude Code] Blocked AWS credential exfiltration",
@@ -196,6 +197,49 @@ def test_automated_remediation_engine():
     assert any(a.category == "HARDEN_AGENTS_MD" for a in finding.recommended_actions)
     assert "[M8]" in finding.recommended_actions[0].citations
     assert "[M14]" in finding.recommended_actions[0].citations
+
+
+@pytest.mark.asyncio
+async def test_automated_remediation_with_incident_grader(monkeypatch):
+    """Verify IncidentRemediationGrader dynamically executes and enriches incident findings."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from engine.llm_runner import LLMResponse
+
+    mock_runner = MagicMock()
+    mock_runner.generate = AsyncMock(
+        return_value=LLMResponse(
+            content=(
+                "<thinking>\n"
+                "Step 1 Context: AWS credential access attempt on turn 14.\n"
+                "Step 2 Attribution: Autonomous agent tool transgression.\n"
+                "Step 3 Inventory & Rules: Compromise of cloud metadata triggers P1 incident containment.\n"
+                "Step 4 Rubric & Score: Severe exfiltration attempt. Score 9.\n"
+                "</thinking>\n"
+                "<score>9</score>\n"
+                "<explanation>Critical credential exfiltration attempt requiring immediate session kill and AWS token rotation.</explanation>"
+            )
+        )
+    )
+
+    finding = await SchemingScanners.generate_incident_remediation(
+        session_id="session-inc-99",
+        dimension="Data Exfiltration",
+        headline="[Antigravity] Intercepted IMDS credential access",
+        summary="Agent attempted reading AWS credentials via curl 169.254.169.254.",
+        flagged_turns=[14],
+        blocked_turn=14,
+        agent_source="antigravity",
+        runner=mock_runner,
+    )
+
+    assert finding.severity == "critical"
+    assert "remediation_grader_evaluated" in finding.tags
+    assert any("[P1 JUDGE]" in a.title for a in finding.recommended_actions)
+    assert any(
+        "Critical credential exfiltration attempt" in a.description
+        for a in finding.recommended_actions
+    )
 
 
 def test_watcher_rest_gateway_and_config(client: TestClient):

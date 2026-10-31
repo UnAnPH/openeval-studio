@@ -1258,7 +1258,26 @@ async def ingest_watcher_session(payload: dict[str, Any]) -> dict[str, Any]:
         s.get("step_number", idx + 1) for idx, s in enumerate(steps) if s.get("is_blocked")
     ]
 
-    finding = SchemingScanners.generate_incident_remediation(
+    traj_lines = []
+    for s in steps:
+        turn_num = s.get("step_number") or s.get("turn")
+        tool = s.get("tool") or s.get("tool_name")
+        cmd = s.get("command") or s.get("input") or s.get("arguments")
+        thought = s.get("thought")
+        if thought:
+            traj_lines.append(f"Turn #{turn_num} [Thought]: {thought}")
+        if tool:
+            traj_lines.append(f"Turn #{turn_num} [Tool {tool}]: {cmd}")
+    trajectory_context = "\n".join(traj_lines) if traj_lines else None
+
+    remediation_runner: AsyncLLMRunner | None = None
+    if os.getenv("GEMINI_API_KEY") or os.getenv("OPENAI_API_KEY"):
+        try:
+            remediation_runner = AsyncLLMRunner()
+        except Exception:
+            remediation_runner = None
+
+    finding = await SchemingScanners.generate_incident_remediation(
         session_id=session_id,
         dimension=dimension,
         headline=headline,
@@ -1266,6 +1285,9 @@ async def ingest_watcher_session(payload: dict[str, Any]) -> dict[str, Any]:
         flagged_turns=flagged_turns or [1],
         blocked_turn=blocked_turns[0] if blocked_turns else 1,
         agent_source=agent_id,  # type: ignore[arg-type]
+        developer=payload.get("developer", "Operator"),
+        runner=remediation_runner,
+        trajectory_text=trajectory_context,
     )
 
     STORED_FINDINGS.insert(0, finding)
@@ -1909,31 +1931,11 @@ async def ingest_agent_log(payload: IngestAgentLogPayload) -> dict[str, Any]:
         )
 
     try:
-        session = None
-        suffix = path.suffix.lower()
-        agent = payload.agent_type
-        is_antigravity = (
-            agent == "antigravity"
-            or "antigravity" in path.parts
-            or ".gemini" in path.parts
-            or "antigravity" in path.name.lower()
+        session = UniversalAgentLogLoader.ingest_agent_log_file(
+            path,
+            agent_type=payload.agent_type,
+            default_status="working",
         )
-        is_cursor_transcript = (
-            "agent-transcripts" in path.parts
-            or agent == "cursor"
-            or "transcript" in path.name.lower()
-        )
-
-        if is_antigravity:
-            session = UniversalAgentLogLoader.ingest_antigravity_transcript(path)
-        elif is_cursor_transcript and suffix == ".jsonl":
-            session = UniversalAgentLogLoader.ingest_cursor_agent_transcript_jsonl(path)
-        elif agent == "cursor" or suffix == ".json":
-            session = UniversalAgentLogLoader.ingest_cursor_session_json(path)
-        elif agent == "claude_code" or suffix == ".jsonl":
-            session = UniversalAgentLogLoader.ingest_claude_code_jsonl(path)
-        else:
-            session = UniversalAgentLogLoader.ingest_claude_code_jsonl(path)
 
         if not session:
             raise HTTPException(

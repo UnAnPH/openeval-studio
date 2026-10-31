@@ -98,3 +98,43 @@ def test_ingest_claude_projects_native_format(tmp_path: Path) -> None:
     assert session.agent_type == "claude_code"
     assert any(m.role == "user" and "hello" in m.content for m in session.trajectory.messages)
     assert any(tc.tool_name == "Bash" for tc in session.trajectory.tool_calls)
+
+
+def test_auto_upload_filename_routes_cursor_jsonl(tmp_path: Path) -> None:
+    """Uploaded Cursor jsonl must not fall through to Claude parser (empty msgs + wrong label)."""
+    store = WatcherStore(storage_dir=tmp_path / "w", db_path=":memory:")
+    path = tmp_path / "my-cursor-chat.jsonl"
+    path.write_text(
+        json.dumps(
+            {
+                "role": "user",
+                "message": {"content": [{"type": "text", "text": "hello from cursor upload"}]},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    session = UniversalAgentLogLoader.ingest_agent_log_file(path, agent_type="auto", store=store)
+    assert session is not None
+    assert session.agent_type == "cursor"
+    assert session.trajectory.messages[0].content == "hello from cursor upload"
+
+
+def test_auto_upload_marks_session_working(tmp_path: Path) -> None:
+    store = WatcherStore(storage_dir=tmp_path / "w", db_path=":memory:")
+    path = tmp_path / "cursor-upload.jsonl"
+    path.write_text(
+        json.dumps(
+            {
+                "role": "user",
+                "message": {"content": [{"type": "text", "text": "live tab check"}]},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    session = UniversalAgentLogLoader.ingest_agent_log_file(
+        path, agent_type="auto", default_status="working", store=store
+    )
+    assert session is not None
+    assert session.status == "working"

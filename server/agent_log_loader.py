@@ -16,6 +16,7 @@ import os
 import time
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Literal
 from uuid import uuid4
 
 from schemas.watcher_models import (
@@ -30,6 +31,42 @@ from schemas.watcher_models import (
 from server.watcher_store import WatcherStore, get_watcher_store
 
 logger = logging.getLogger("openeval.server.agent_log_loader")
+
+
+AgentLogFormat = Literal["cursor", "claude_code", "antigravity", "unknown"]
+
+
+def sniff_agent_log_format(path: Path, max_lines: int = 40) -> AgentLogFormat:
+    """Detect agent log format from file content (upload paths often lack agent-transcripts/)."""
+
+    suffix = path.suffix.lower()
+    if suffix == ".json":
+        return "cursor"
+    if "antigravity" in path.name.lower() or ".gemini" in path.parts:
+        return "antigravity"
+    if not path.is_file():
+        return "unknown"
+    try:
+        lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+    except OSError:
+        return "unknown"
+    for line in lines[:max_lines]:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(rec, dict):
+            continue
+        if rec.get("type") in ("user", "assistant", "session_start", "tool_use", "tool_call"):
+            return "claude_code"
+        if rec.get("role") in ("user", "assistant", "system", "developer") and isinstance(
+            rec.get("message"), dict
+        ):
+            return "cursor"
+    return "unknown"
 
 
 def _extract_content_parts(
@@ -113,8 +150,56 @@ class UniversalAgentLogLoader:
     _session_cache: dict[str, Session] = {}
 
     @classmethod
+    def ingest_agent_log_file(
+        cls,
+        file_path: Path | str,
+        agent_type: Literal["claude_code", "cursor", "antigravity", "auto"] = "auto",
+        default_status: SessionStatus = "completed",
+        store: WatcherStore | None = None,
+    ) -> Session | None:
+        """Route an on-disk agent log to the correct parser (upload-safe content sniffing)."""
+        path = Path(file_path)
+        suffix = path.suffix.lower()
+        agent = agent_type
+        is_antigravity = (
+            agent == "antigravity"
+            or "antigravity" in path.parts
+            or ".gemini" in path.parts
+            or "antigravity" in path.name.lower()
+        )
+        fmt: AgentLogFormat
+        if agent == "auto":
+            fmt = sniff_agent_log_format(path)
+        elif agent == "antigravity":
+            fmt = "antigravity"
+        else:
+            fmt = agent  # type: ignore[assignment]
+
+        if is_antigravity or fmt == "antigravity":
+            return cls.ingest_antigravity_transcript(path, status=default_status, store=store)
+        if fmt == "cursor" or agent == "cursor":
+            if suffix == ".json":
+                return cls.ingest_cursor_session_json(path, status=default_status, store=store)
+            return cls.ingest_cursor_agent_transcript_jsonl(
+                path, status=default_status, store=store
+            )
+        if fmt == "claude_code" or agent == "claude_code":
+            return cls.ingest_claude_code_jsonl(path, status=default_status, store=store)
+        if suffix == ".jsonl":
+            cursor_session = cls.ingest_cursor_agent_transcript_jsonl(
+                path, status=default_status, store=store
+            )
+            if cursor_session is not None:
+                return cursor_session
+            return cls.ingest_claude_code_jsonl(path, status=default_status, store=store)
+        return cls.ingest_claude_code_jsonl(path, status=default_status, store=store)
+
+    @classmethod
     def ingest_claude_code_jsonl(
-        cls, file_path: Path | str, store: WatcherStore | None = None
+        cls,
+        file_path: Path | str,
+        status: SessionStatus = "completed",
+        store: WatcherStore | None = None,
     ) -> Session | None:
         """Parse a Claude Code session JSONL file into a canonical Session."""
         path = Path(file_path)
@@ -174,19 +259,48 @@ class UniversalAgentLogLoader:
                 continue
 
             if not event_type and "role" in record:
-                # Direct message format
                 role = record.get("role", "assistant")
-                content = record.get("content", "")
-                thinking = record.get("thinking")
-                messages.append(
-                    Message(
-                        role=role
-                        if role in ("user", "assistant", "developer", "system")
-                        else "assistant",
-                        content=str(content),
-                        thinking=thinking,
+                msg_obj = record.get("message")
+                if isinstance(msg_obj, dict):
+                    text_body, tools = _extract_content_parts(msg_obj.get("content", ""))
+                    thinking = record.get("thinking")
+                    step_tcs: list[ToolCall] = []
+                    for name, args, tool_id in tools:
+                        raw_input = str(
+                            args.get("command") or args.get("path") or json.dumps(args)
+                        )[:500]
+                        tc = ToolCall(
+                            tool_id=tool_id or str(uuid4())[:8],
+                            tool_name=name,
+                            arguments=args,
+                            raw_input=raw_input,
+                        )
+                        tool_calls.append(tc)
+                        step_tcs.append(tc)
+                    if text_body or step_tcs:
+                        messages.append(
+                            Message(
+                                role=role
+                                if role in ("user", "assistant", "developer", "system")
+                                else "assistant",
+                                content=text_body
+                                or (f"[{len(step_tcs)} tool call(s)]" if step_tcs else ""),
+                                thinking=thinking,
+                                tool_calls=step_tcs,
+                            )
+                        )
+                else:
+                    content = record.get("content", "")
+                    thinking = record.get("thinking")
+                    messages.append(
+                        Message(
+                            role=role
+                            if role in ("user", "assistant", "developer", "system")
+                            else "assistant",
+                            content=str(content),
+                            thinking=thinking,
+                        )
                     )
-                )
                 continue
 
             if event_type == "session_start":
@@ -249,6 +363,7 @@ class UniversalAgentLogLoader:
         if not title:
             title = f"Claude Code Session {session_id[:8]}"
 
+        now_iso = datetime.now(UTC).isoformat()
         session = Session(
             session_id=session_id,
             title=title,
@@ -258,11 +373,12 @@ class UniversalAgentLogLoader:
             agent_type="claude_code",
             model=model,
             provider="anthropic",
-            status="completed",
+            status=status,
             working_dir=working_dir,
             trajectory=trajectory,
             total_tokens=total_tokens,
-            created_at=datetime.now(UTC).isoformat(),
+            created_at=now_iso,
+            updated_at=now_iso,
         )
 
         active_store = store or get_watcher_store()
@@ -272,7 +388,10 @@ class UniversalAgentLogLoader:
 
     @classmethod
     def ingest_cursor_session_json(
-        cls, file_path: Path | str, store: WatcherStore | None = None
+        cls,
+        file_path: Path | str,
+        status: SessionStatus = "completed",
+        store: WatcherStore | None = None,
     ) -> Session | None:
         """Parse a Cursor composer or workspace session JSON export."""
         path = Path(file_path)
@@ -316,10 +435,11 @@ class UniversalAgentLogLoader:
             model=data.get("model", "gpt-4o"),
             provider="cursor",
             working_dir=data.get("workspaceRoot") or "/workspace",
-            status="completed",
+            status=status,
             trajectory=trajectory,
             total_tokens=data.get("totalTokens", 0),
             created_at=datetime.now(UTC).isoformat(),
+            updated_at=datetime.now(UTC).isoformat(),
         )
 
         active_store = store or get_watcher_store()
@@ -466,10 +586,13 @@ class UniversalAgentLogLoader:
             final_status: SessionStatus = "blocked"
         elif status in ("working", "active", "running"):
             age_sec = time.time() - mtime
-            final_status = "working" if age_sec <= 120 else "closed"
+            final_status = "working" if age_sec <= 15 * 60 else "closed"
         else:
             final_status = status
 
+        now_iso = datetime.now(UTC).isoformat()
+        ts_iso = datetime.fromtimestamp(mtime, UTC).isoformat()
+        use_now = status in ("working", "active", "running")
         session = Session(
             session_id=f"cursor-{session_id[:12]}",
             title=title,
@@ -481,8 +604,8 @@ class UniversalAgentLogLoader:
             provider="cursor",
             status=final_status,
             trajectory=trajectory,
-            created_at=datetime.fromtimestamp(mtime, UTC).isoformat(),
-            updated_at=datetime.fromtimestamp(mtime, UTC).isoformat(),
+            created_at=now_iso if use_now else ts_iso,
+            updated_at=now_iso if use_now else ts_iso,
         )
         active_store = store or get_watcher_store()
         active_store.record_session(session)

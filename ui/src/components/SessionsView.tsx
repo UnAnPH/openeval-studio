@@ -1048,7 +1048,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
                   </a>
                 </div>
 
-                <div className="pt-4 border-t border-slate-100 w-full max-w-lg text-left">
+                {/* <div className="pt-4 border-t border-slate-100 w-full max-w-lg text-left">
                   <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2 text-center">
                     Supported Coding Agents
                   </span>
@@ -1066,7 +1066,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
                       <span className="text-[10px] text-slate-400 block font-mono">Telemetry Hook</span>
                     </div>
                   </div>
-                </div>
+                </div> */}
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-center p-8 bg-white rounded-2xl border border-border-subtle shadow-sm">
