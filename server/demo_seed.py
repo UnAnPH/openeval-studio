@@ -297,7 +297,7 @@ def seed_demo_data(
                 for r_idx, rev in enumerate(session.trajectory.reviews):
                     rev.timestamp = (target_dt + timedelta(seconds=r_idx * 2 + 1)).isoformat()
 
-                ws.record_session(session)
+                ws.record_session(session, is_seeded=True)
                 seeded_sessions += 1
 
                 # Seed reviews into global_watcher_engine for live Control stream

@@ -33,6 +33,7 @@ requires_postgres = pytest.mark.skipif(
 )
 
 
+@requires_postgres
 def test_ingest_cursor_agent_transcript_jsonl(tmp_path: Path) -> None:
     store = WatcherStore(storage_dir=tmp_path / "w", db_path=":memory:")
 
@@ -83,6 +84,7 @@ def test_ingest_cursor_agent_transcript_jsonl(tmp_path: Path) -> None:
     assert session.trajectory.tool_calls[0].tool_name == "Shell"
 
 
+@requires_postgres
 def test_ingest_claude_projects_native_format(tmp_path: Path) -> None:
     store = WatcherStore(storage_dir=tmp_path / "w", db_path=":memory:")
 
@@ -126,6 +128,7 @@ def test_ingest_claude_projects_native_format(tmp_path: Path) -> None:
     assert any(tc.tool_name == "Bash" for tc in session.trajectory.tool_calls)
 
 
+@requires_postgres
 def test_auto_upload_filename_routes_cursor_jsonl(tmp_path: Path) -> None:
     """Uploaded Cursor jsonl must not fall through to Claude parser (empty msgs + wrong label)."""
     store = WatcherStore(storage_dir=tmp_path / "w", db_path=":memory:")
@@ -146,6 +149,7 @@ def test_auto_upload_filename_routes_cursor_jsonl(tmp_path: Path) -> None:
     assert session.trajectory.messages[0].content == "hello from cursor upload"
 
 
+@requires_postgres
 def test_manual_upload_defaults_to_completed_not_live(tmp_path: Path) -> None:
     store = WatcherStore(storage_dir=tmp_path / "w", db_path=":memory:")
     path = tmp_path / "cursor-upload.jsonl"

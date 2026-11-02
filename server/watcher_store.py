@@ -195,12 +195,6 @@ def normalize_session_status(session: Session, stale_timeout_sec: float = 120.0)
     return session
 
 
-def is_seeded_demo_fixture_session_id(session_id: str) -> bool:
-    """True for bundled demo fixture session ids (persisted in PostgreSQL)."""
-    sid = session_id or ""
-    return "demo" in sid or sid.startswith("demo-")
-
-
 class WatcherStore:
     """PostgreSQL 16 multi-tenant store for sessions, trajectories, and reviews."""
 
@@ -481,16 +475,11 @@ class WatcherStore:
         self.broadcast_sync(session.session_id, "session_created", session.model_dump())
         return session
 
-    def _is_ephemeral_demo_session(self, session: Session) -> bool:
-        """Uploaded demo logs (not bundled fixtures) stay in memory only."""
-        if current_user_slug.get() != "demo":
-            return False
-        return not is_seeded_demo_fixture_session_id(session.session_id)
-
-    def record_session(self, session: Session) -> Session:
+    def record_session(self, session: Session, *, is_seeded: bool = False) -> Session:
         """Register or update a session in PostgreSQL for the active user."""
         normalize_session_status(session)
-        if self._is_ephemeral_demo_session(session):
+        is_demo_context = current_user_slug.get() == "demo"
+        if is_demo_context and not is_seeded and not getattr(session, "is_seeded", False):
             session.org_id = "demo"
             with self._lock:
                 self._in_memory_demo_sessions[session.session_id] = session
