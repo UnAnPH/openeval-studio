@@ -1,5 +1,6 @@
 """Tenant isolation for demo auth, run store, and watcher rate-limit keys."""
 
+import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -226,3 +227,39 @@ async def test_rate_limit_uses_stable_key_without_session_id(monkeypatch):
     assert keys_seen[0].startswith("default-")
     assert "stable-agent-1" in keys_seen[0]
     assert not keys_seen[0].startswith("session-live-")
+
+
+@requires_postgres
+def test_owner_does_not_see_ephemeral_demo_uploads(client: TestClient) -> None:
+    content = (
+        json.dumps(
+            {
+                "role": "user",
+                "message": {"content": [{"type": "text", "text": "tenant isolation demo upload"}]},
+            }
+        )
+        + "\n"
+    )
+    resp = client.post(
+        "/api/v1/agent-logs/ingest",
+        headers={"X-OpenEval-Surface": "demo"},
+        json={
+            "filename": "tenant-iso-demo-upload.jsonl",
+            "file_content": content,
+            "agent_type": "auto",
+            "is_demo": True,
+        },
+    )
+    assert resp.status_code == 200
+    session_id = resp.json()["session"]["session_id"]
+
+    with SessionLocal() as db:
+        owner_uid = get_user_id_by_slug(db, "owner")
+        db.rollback()
+
+    current_user_slug.set("owner")
+    current_user_id.set(owner_uid)
+    store = get_watcher_store()
+    assert store.get_session(session_id) is None
+    owner_ids = {s.session_id for s in store.list_sessions(limit=500)}
+    assert session_id not in owner_ids

@@ -91,6 +91,12 @@ export const sessionIsLive = (s: WatcherSession, isDemoActive: boolean = false):
 export const sessionIsClosed = (s: WatcherSession, isDemoActive: boolean = false): boolean =>
   !sessionIsBlocked(s) && !sessionIsLive(s, isDemoActive);
 
+export const isDemoSession = (s: WatcherSession): boolean =>
+  (s.session_id || '').includes('demo') ||
+  (s.session_id || '').startsWith('demo-') ||
+  (s as { org_id?: string }).org_id === 'demo' ||
+  (s as { is_demo?: boolean }).is_demo === true;
+
 interface SessionsViewProps {
   initialSessionId?: string | null;
   isDemoSeed?: boolean;
@@ -151,13 +157,17 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
       if (isInitial) {
         setIsLoading(true);
       }
-      const res = await fetch('/api/v1/watcher/sessions?min_messages=1').catch(() => null);
+      const headers: Record<string, string> = {};
+      if (isDemoActive) {
+        headers['X-OpenEval-Surface'] = 'demo';
+      }
+      const res = await fetch('/api/v1/watcher/sessions?min_messages=1', { headers }).catch(() => null);
       if (res && res.ok) {
         const data: WatcherSession[] = await res.json();
         if (Array.isArray(data)) {
           const validData = isDemoActive
-            ? data.filter((s) => (s.session_id || '').includes('demo') || (s.session_id || '').startsWith('demo-'))
-            : data.filter((s) => !(s.session_id || '').includes('demo') && !(s.session_id || '').startsWith('demo-') && (s as any).org_id !== 'demo');
+            ? data.filter((s) => isDemoSession(s))
+            : data.filter((s) => !isDemoSession(s));
           if (validData.length > 0) {
             setSessions((prev) => {
               const prevSig = prev.map((p) => `${p.session_id}:${p.updated_at || p.created_at || ''}:${p.status || ''}`).join(',');
@@ -261,11 +271,7 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
   // Ensure demo mode only ever shows demo sessions (defense in depth)
   const displaySessions = useMemo(() => {
     if (isDemoActive) {
-      return sessions.filter(
-        (s) =>
-          (s.session_id || '').includes('demo') ||
-          (s.session_id || '').startsWith('demo-')
-      );
+      return sessions.filter((s) => isDemoSession(s));
     }
     return sessions;
   }, [sessions, isDemoActive]);
@@ -464,11 +470,23 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
   const handleIngest = async () => {
     setIsIngesting(true);
     setIngestStatus(null);
+    const ingestHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(isDemoActive ? { 'X-OpenEval-Surface': 'demo' } : {}),
+    };
+    const applyIngestedSession = (session: WatcherSession) => {
+      setSessions((prev) => [
+        session,
+        ...prev.filter((s) => s.session_id !== session.session_id),
+      ]);
+      handleSelectSession(session.session_id);
+    };
     try {
       if (ingestMode === 'upload' || !isLocalEnvironment) {
         if (selectedFiles.length === 0) return;
         let successCount = 0;
         let failCount = 0;
+        let lastSession: WatcherSession | null = null;
         for (let i = 0; i < selectedFiles.length; i++) {
           const file = selectedFiles[i];
           if (selectedFiles.length > 1) {
@@ -478,15 +496,22 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
             const content = await file.text();
             const res = await fetch('/api/v1/agent-logs/ingest', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: ingestHeaders,
               body: JSON.stringify({
                 filename: file.name,
                 file_content: content,
                 agent_type: 'auto',
+                is_demo: isDemoActive,
               }),
             });
-            if (res.ok) successCount++;
-            else failCount++;
+            if (res.ok) {
+              successCount++;
+              const respData = await res.json().catch(() => ({}));
+              if (respData?.session?.session_id) {
+                lastSession = respData.session as WatcherSession;
+                applyIngestedSession(lastSession);
+              }
+            } else failCount++;
           } catch {
             failCount++;
           }
@@ -498,6 +523,9 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
         }
         setSelectedFiles([]);
         fetchSessions(true);
+        if (lastSession) {
+          applyIngestedSession(lastSession);
+        }
         setTimeout(() => {
           setShowIngestModal(false);
           setIngestStatus(null);
@@ -506,16 +534,21 @@ export const SessionsView: React.FC<SessionsViewProps> = ({
         if (!ingestFilePath.trim()) return;
         const res = await fetch('/api/v1/agent-logs/ingest', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: ingestHeaders,
           body: JSON.stringify({
             file_path: ingestFilePath.trim(),
             agent_type: 'auto',
+            is_demo: isDemoActive,
           }),
         });
 
         if (res.ok) {
           setIngestStatus('Successfully ingested agent log!');
           setIngestFilePath('');
+          const respData = await res.json().catch(() => ({}));
+          if (respData?.session?.session_id) {
+            applyIngestedSession(respData.session as WatcherSession);
+          }
           fetchSessions(true);
           setTimeout(() => {
             setShowIngestModal(false);

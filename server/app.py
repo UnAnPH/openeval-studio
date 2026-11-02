@@ -235,6 +235,7 @@ class _AuthMiddleware(BaseHTTPMiddleware):
             is_demo_search_or_compare = path in (
                 "/api/eval/search",
                 "/api/v1/search/fragments",
+                "/api/v1/agent-logs/ingest",
             ) or path.startswith("/api/eval/compare/")
             is_permitted_demo_action = is_read_method or is_demo_search_or_compare
             if is_permitted_demo_action:
@@ -1898,10 +1899,23 @@ class IngestAgentLogPayload(BaseModel):
     file_content: str | None = None
     filename: str | None = None
     agent_type: Literal["claude_code", "cursor", "antigravity", "auto"] = "auto"
+    is_demo: bool = False
+
+
+def _apply_demo_tenant_context() -> None:
+    demo_uid = _USER_ID_CACHE.get("demo")
+    if demo_uid is None:
+        with SessionLocal() as db:
+            try:
+                demo_uid = get_user_id_by_slug(db, "demo")
+            finally:
+                db.rollback()
+    current_user_slug.set("demo")
+    current_user_id.set(demo_uid)
 
 
 @app.post("/api/v1/agent-logs/ingest")
-async def ingest_agent_log(payload: IngestAgentLogPayload) -> dict[str, Any]:
+async def ingest_agent_log(payload: IngestAgentLogPayload, request: Request) -> dict[str, Any]:
     """Ingest Claude Code, Cursor, or Antigravity session logs into canonical Watcher sessions.
 
     Supports both client-side file uploads (via `file_content` + `filename`) and local server files (via `file_path`).
@@ -1910,6 +1924,19 @@ async def ingest_agent_log(payload: IngestAgentLogPayload) -> dict[str, Any]:
     import tempfile
 
     from server.agent_log_loader import UniversalAgentLogLoader
+
+    surface_header = (
+        (
+            request.headers.get("X-OpenEval-Surface")
+            or request.headers.get("x-openeval-surface")
+            or ""
+        )
+        .strip()
+        .lower()
+    )
+    is_demo = payload.is_demo or surface_header == "demo" or current_user_slug.get() == "demo"
+    if is_demo:
+        _apply_demo_tenant_context()
 
     temp_dir = None
     if payload.file_content is not None:
@@ -1942,7 +1969,14 @@ async def ingest_agent_log(payload: IngestAgentLogPayload) -> dict[str, Any]:
                 status_code=400, detail="Failed to parse agent log into canonical session format"
             )
 
-        return {"status": "ingested", "session": session.model_dump()}
+        if is_demo:
+            session.org_id = "demo"
+
+        return {
+            "status": "ingested",
+            "session": session.model_dump(),
+            "is_demo": is_demo,
+        }
     finally:
         if temp_dir and temp_dir.exists():
             shutil.rmtree(temp_dir, ignore_errors=True)

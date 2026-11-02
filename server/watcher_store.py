@@ -195,6 +195,12 @@ def normalize_session_status(session: Session, stale_timeout_sec: float = 120.0)
     return session
 
 
+def is_seeded_demo_fixture_session_id(session_id: str) -> bool:
+    """True for bundled demo fixture session ids (persisted in PostgreSQL)."""
+    sid = session_id or ""
+    return "demo" in sid or sid.startswith("demo-")
+
+
 class WatcherStore:
     """PostgreSQL 16 multi-tenant store for sessions, trajectories, and reviews."""
 
@@ -215,6 +221,9 @@ class WatcherStore:
         self._dirty_sessions: set[str] = set()
         self._debounce_tasks: dict[str, asyncio.Task[Any]] = {}
         self._step_indices: dict[str, int] = {}
+
+        # Ephemeral demo uploads (never written to PostgreSQL)
+        self._in_memory_demo_sessions: dict[str, Session] = {}
 
         # Multi-tenant Policy, WatcherConfig, and Grader Prompt registries
         self._user_policies: dict[int, Policy] = {}
@@ -472,15 +481,33 @@ class WatcherStore:
         self.broadcast_sync(session.session_id, "session_created", session.model_dump())
         return session
 
+    def _is_ephemeral_demo_session(self, session: Session) -> bool:
+        """Uploaded demo logs (not bundled fixtures) stay in memory only."""
+        if current_user_slug.get() != "demo":
+            return False
+        return not is_seeded_demo_fixture_session_id(session.session_id)
+
     def record_session(self, session: Session) -> Session:
         """Register or update a session in PostgreSQL for the active user."""
         normalize_session_status(session)
+        if self._is_ephemeral_demo_session(session):
+            session.org_id = "demo"
+            with self._lock:
+                self._in_memory_demo_sessions[session.session_id] = session
+                self._cache_session(session)
+            return session
         with self._lock:
             self._write_session_to_db(session)
         return session
 
     def get_session(self, session_id: str) -> Session | None:
         """Retrieve a session by ID scoped to the active tenant."""
+        if current_user_slug.get() == "demo":
+            with self._lock:
+                ephemeral = self._in_memory_demo_sessions.get(session_id)
+                if ephemeral is not None:
+                    return normalize_session_status(ephemeral)
+
         key = self.memory_key(session_id)
         with self._lock:
             is_dirty = key in self._dirty_sessions
@@ -634,6 +661,12 @@ class WatcherStore:
                     if s.session_id not in db_ids:
                         normalize_session_status(s)
                         results.append(s)
+                if current_user_slug.get() == "demo":
+                    for s in self._in_memory_demo_sessions.values():
+                        if s.session_id in db_ids:
+                            continue
+                        normalize_session_status(s)
+                        results.append(s)
 
             if agent_type:
                 results = [s for s in results if s.agent_type == agent_type]
@@ -654,6 +687,8 @@ class WatcherStore:
                 db.execute(text("DELETE FROM sessions WHERE user_id = :uid"), {"uid": user_id})
                 db.commit()
         with self._lock:
+            if current_user_slug.get() == "demo":
+                self._in_memory_demo_sessions.clear()
             for key, session in list(self._sessions.items()):
                 if not self._cache_visible(key, session):
                     continue
@@ -670,6 +705,9 @@ class WatcherStore:
         """Delete a single session for the active tenant."""
         with self._lock:
             mem_deleted = self._drop_cached_session(session_id)
+            if session_id in self._in_memory_demo_sessions:
+                self._in_memory_demo_sessions.pop(session_id, None)
+                mem_deleted = True
 
         target = self.storage_dir / f"{session_id}.json"
         if target.exists():
