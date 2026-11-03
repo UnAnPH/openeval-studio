@@ -42,7 +42,7 @@ class LLMConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     model: str = Field(default="gemini-3.1-flash-lite", description="Target model identifier")
-    provider: Literal["google", "openai", "opencode", "custom"] = Field(
+    provider: Literal["google", "openai", "opencode", "anthropic", "custom"] = Field(
         default="google", description="Target LLM API provider"
     )
     temperature: float = Field(
@@ -94,7 +94,7 @@ class AsyncLLMRunner:
     def __init__(
         self,
         api_key: str | None = None,
-        provider: Literal["google", "openai", "opencode", "custom"] = "google",
+        provider: Literal["google", "openai", "opencode", "anthropic", "custom"] = "google",
         base_url: str | None = None,
         openai_client: AsyncOpenAI | None = None,
         genai_client: Any = None,
@@ -108,6 +108,8 @@ class AsyncLLMRunner:
             self.api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "mock-key"
         elif provider == "opencode":
             self.api_key = os.getenv("OPENCODE_API_KEY") or "mock-key"
+        elif provider == "anthropic":
+            self.api_key = os.getenv("ANTHROPIC_API_KEY") or "mock-key"
         else:
             self.api_key = os.getenv("OPENAI_API_KEY") or "mock-key"
 
@@ -186,10 +188,12 @@ class AsyncLLMRunner:
             provider = "openai"
         elif (
             (cfg.model.startswith("gemini-") or "live" in cfg.model)
-            and self.provider not in ("openai", "opencode")
-            and cfg.provider not in ("openai", "opencode")
+            and self.provider not in ("openai", "opencode", "anthropic")
+            and cfg.provider not in ("openai", "opencode", "anthropic")
         ):
             provider = "google"
+        elif cfg.model.startswith("claude-") or cfg.provider == "anthropic":
+            provider = "anthropic"
         elif cfg.provider:
             provider = cfg.provider
         else:
@@ -216,6 +220,17 @@ class AsyncLLMRunner:
                 self.opencode_client = AsyncOpenAI(api_key=opencode_key, base_url=opencode_base)
             return await self._generate_openai(
                 messages, cfg, response_schema, client=self.opencode_client
+            )
+        elif provider == "anthropic":
+            anthropic_key = (self.api_key if self.provider == "anthropic" else None) or os.getenv(
+                "ANTHROPIC_API_KEY"
+            )
+            if not anthropic_key:
+                raise RuntimeError(
+                    f"Anthropic API key not configured for {cfg.model}. Set ANTHROPIC_API_KEY."
+                )
+            return await self._generate_anthropic(
+                messages, cfg, response_schema, api_key=anthropic_key
             )
         else:
             if self.openai_client is None:
@@ -276,17 +291,16 @@ class AsyncLLMRunner:
         )
 
         target_model = cfg.model.replace("google/", "")
-        if (
-            target_model.startswith("opencode/")
-            or target_model
-            in (
-                "glm-5.3-flash-free",
-                "deepseek-v4.1-flash-free",
-                "big-pickle",
-                "nemotron-3-ultra-free",
+        if any(
+            legacy in target_model
+            for legacy in (
+                "2.5-flash-lite",
+                "2.5-flash",
+                "2.5-pro",
+                "2.0-flash",
+                "1.5-flash",
+                "1.5-pro",
             )
-            or target_model.endswith("-free")
-            or any(legacy in target_model for legacy in ("2.0-flash", "1.5-flash", "1.5-pro"))
         ):
             target_model = "gemini-3.1-flash-lite"
         elif target_model == "gemini-3-flash":
@@ -360,43 +374,40 @@ class AsyncLLMRunner:
 
             except Exception as exc:
                 err_str = str(exc)
+                is_rate_limit = (
+                    "429" in err_str
+                    or "RESOURCE_EXHAUSTED" in err_str
+                    or "Quota exceeded" in err_str
+                    or "rate limit" in err_str.lower()
+                )
 
                 # Permanent failures (billing, model deprecation, daily cap)
                 if (
                     "credit_balance_exhausted" in err_str
                     or "insufficient_quota" in err_str
-                    or "404 NOT_FOUND" in err_str
-                    or "no longer available" in err_str
                     or "Daily" in err_str
                     or "PerDay" in err_str
                 ):
-                    raise RuntimeError(f"Google GenAI quota or model unavailable: {exc}") from exc
+                    raise RuntimeError(
+                        f"Rate limit / quota reached for {target_model}: {exc}"
+                    ) from exc
+
+                if "404 NOT_FOUND" in err_str or "no longer available" in err_str:
+                    raise RuntimeError(
+                        f"Google GenAI model unavailable or not found for {target_model}: {exc}"
+                    ) from exc
 
                 attempt += 1
                 if attempt > cfg.max_retries:
+                    if is_rate_limit:
+                        raise RuntimeError(
+                            f"Rate limit / quota reached for {target_model}: {exc}"
+                        ) from exc
                     raise RuntimeError(
-                        f"Google GenAI request failed after {cfg.max_retries} retries: {exc}"
+                        f"Google GenAI request failed for {target_model} after {cfg.max_retries} retries: {exc}"
                     ) from exc
 
-                is_rate_limit = (
-                    "429" in err_str
-                    or "RESOURCE_EXHAUSTED" in err_str
-                    or "Quota exceeded" in err_str
-                )
                 if is_rate_limit:
-                    if target_model == "gemini-3.1-flash-lite":
-                        target_model = "gemini-3.5-flash-lite"
-                        logger.warning(
-                            "Google API rate limit on gemini-3.1-flash-lite. Cascading to gemini-3.5-flash-lite..."
-                        )
-                        continue
-                    elif target_model == "gemini-3.5-flash-lite":
-                        target_model = "gemini-3.7-flash"
-                        logger.warning(
-                            "Google API rate limit on gemini-3.5-flash-lite. Cascading to gemini-3.7-flash..."
-                        )
-                        continue
-
                     delay_match = re.search(
                         r"retry\s+(?:in|Delay['\"]?:\s*['\"])(\d+(?:\.\d+)?)s?",
                         err_str,
@@ -407,18 +418,24 @@ class AsyncLLMRunner:
                     else:
                         backoff = 10.0 + (attempt * 4.0)
                     logger.warning(
-                        "Google API rate limit (429/RESOURCE_EXHAUSTED). Retrying in %.1fs (attempt %d/%d)...",
+                        "Google API rate limit (429/RESOURCE_EXHAUSTED) on %s. Retrying in %.1fs (attempt %d/%d)...",
+                        target_model,
                         backoff,
                         attempt,
                         cfg.max_retries,
                     )
                 else:
                     backoff = min(2.0**attempt, 10.0)
-                    logger.warning("Google API error: %s. Retrying in %.1fs...", exc, backoff)
+                    logger.warning(
+                        "Google API error on %s: %s. Retrying in %.1fs...",
+                        target_model,
+                        exc,
+                        backoff,
+                    )
 
                 await asyncio.sleep(backoff)
 
-        raise RuntimeError("Exhausted retries without response")
+        raise RuntimeError(f"Exhausted retries without response for {target_model}")
 
     @staticmethod
     def _fallback_parse_agent_action(
@@ -895,34 +912,35 @@ class AsyncLLMRunner:
             except Exception as exc:
                 err_str = str(exc)
 
-                # Seamless fallback for OpenCode free tier or upstream availability issues
-                if is_opencode and (
-                    "freetiererror" in err_str.lower()
-                    or "only be used from within opencode" in err_str.lower()
-                    or "model is unavailable" in err_str.lower()
-                    or "upstream request failed" in err_str.lower()
-                    or "401" in err_str
-                    or "403" in err_str
-                    or "404" in err_str
-                    or "429" in err_str
-                    or "connection" in err_str.lower()
-                    or "permissiondenied" in err_str.lower()
-                ):
-                    logger.warning(
-                        "OpenCode API error for %s (%s). Seamlessly falling back to Google GenAI backend...",
-                        cfg.model,
-                        exc,
-                    )
-                    if self.google_client is None:
-                        self.google_client = genai.Client(
-                            api_key=os.getenv("GEMINI_API_KEY")
-                            or os.getenv("GOOGLE_API_KEY")
-                            or "mock-key"
+                is_rate_limit = (
+                    "429" in err_str
+                    or "rate_limit" in err_str.lower()
+                    or "insufficient_quota" in err_str.lower()
+                    or "credit_balance_exhausted" in err_str.lower()
+                )
+
+                # Strict provenance: surface quota/rate limit errors honestly without cross-model fallback
+                if (
+                    "insufficient_quota" in err_str.lower()
+                    or "credit_balance_exhausted" in err_str.lower()
+                    or (
+                        is_opencode
+                        and (
+                            "freetiererror" in err_str.lower()
+                            or "freeusagelimiterror" in err_str.lower()
+                            or "free_usage_limit" in err_str.lower()
+                            or "only be used from within opencode" in err_str.lower()
+                            or "model is unavailable" in err_str.lower()
+                            or "upstream request failed" in err_str.lower()
+                            or "429" in err_str
+                            or "rate_limit" in err_str.lower()
                         )
-                    fallback_cfg = cfg.model_copy(
-                        update={"model": "gemini-3.1-flash-lite", "provider": "google"}
                     )
-                    return await self._generate_google(messages, fallback_cfg, response_schema)
+                ):
+                    prefix = "OpenCode" if is_opencode else "OpenAI"
+                    raise RuntimeError(
+                        f"{prefix} quota/rate limit reached for {cfg.model}: {exc}"
+                    ) from exc
 
                 # If gateway / model fails because response_format is not supported, retry without response_format
                 if "response_format" in kwargs and (
@@ -940,28 +958,18 @@ class AsyncLLMRunner:
 
                 attempt += 1
                 if attempt > cfg.max_retries:
-                    if is_opencode:
-                        logger.warning(
-                            "OpenCode request failed after retries: %s. Seamlessly falling back to Google GenAI backend...",
-                            exc,
-                        )
-                        if self.google_client is None:
-                            self.google_client = genai.Client(
-                                api_key=os.getenv("GEMINI_API_KEY")
-                                or os.getenv("GOOGLE_API_KEY")
-                                or "mock-key"
-                            )
-                        fallback_cfg = cfg.model_copy(
-                            update={"model": "gemini-3.1-flash-lite", "provider": "google"}
-                        )
-                        return await self._generate_google(messages, fallback_cfg, response_schema)
+                    if is_rate_limit:
+                        prefix = "OpenCode" if is_opencode else "OpenAI"
+                        raise RuntimeError(
+                            f"{prefix} quota/rate limit reached for {cfg.model}: {exc}"
+                        ) from exc
                     raise RuntimeError(
-                        f"OpenAI/OpenCode request failed after {cfg.max_retries} retries: {exc}"
+                        f"OpenAI/OpenCode request failed for {cfg.model} after {cfg.max_retries} retries: {exc}"
                     ) from exc
 
                 is_rate_limit = "429" in err_str or "rate_limit" in err_str.lower()
                 backoff = min(2.0**attempt, 10.0) if not is_rate_limit else (5.0 + attempt * 2.0)
-                logger.warning("API error: %s. Retrying in %.1fs...", exc, backoff)
+                logger.warning("API error on %s: %s. Retrying in %.1fs...", cfg.model, exc, backoff)
                 await asyncio.sleep(backoff)
 
         if response is None:
@@ -1015,3 +1023,114 @@ class AsyncLLMRunner:
             ),
             parsed_json=parsed_json,
         )
+
+    async def _generate_anthropic(
+        self,
+        messages: list[ChatMessage],
+        cfg: LLMConfig,
+        response_schema: type[BaseModel] | None = None,
+        api_key: str | None = None,
+    ) -> LLMResponse:
+        """Execute async inference via Anthropic / cross-family frontier provider using litellm."""
+        import litellm
+
+        start_time = time.perf_counter()
+        formatted_msgs = [{"role": m.role, "content": m.content} for m in messages]
+        target_model = cfg.model if "claude" in cfg.model else f"anthropic/{cfg.model}"
+
+        attempt = 0
+        while attempt <= cfg.max_retries:
+            try:
+                resp = await litellm.acompletion(
+                    model=target_model,
+                    messages=formatted_msgs,
+                    api_key=api_key,
+                    temperature=cfg.temperature,
+                    max_tokens=cfg.max_tokens,
+                    timeout=cfg.timeout_sec,
+                )
+                elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+                resp_obj: Any = resp
+                raw_text = resp_obj.choices[0].message.content or ""
+                usage_obj = getattr(resp_obj, "usage", None)
+                prompt_toks = (getattr(usage_obj, "prompt_tokens", 0) or 0) if usage_obj else 0
+                comp_toks = (getattr(usage_obj, "completion_tokens", 0) or 0) if usage_obj else 0
+                tot_toks = (
+                    (getattr(usage_obj, "total_tokens", 0) or 0)
+                    if usage_obj
+                    else (prompt_toks + comp_toks)
+                )
+
+                parsed_json = None
+                if (
+                    response_schema is not None
+                    or raw_text.strip().startswith("{")
+                    or "{" in raw_text
+                ):
+                    clean_str = raw_text.strip()
+                    if clean_str.startswith("```"):
+                        clean_str = re.sub(r"^```(?:json)?\s*\n?", "", clean_str)
+                        clean_str = re.sub(r"\n?```$", "", clean_str).strip()
+                    try:
+                        raw_dict = json.loads(clean_str)
+                        if response_schema is not None:
+                            validated = response_schema.model_validate(raw_dict)
+                            parsed_json = validated.model_dump()
+                        else:
+                            parsed_json = raw_dict
+                    except Exception:
+                        json_match = re.search(r"\{[\s\S]*\}", raw_text)
+                        if json_match:
+                            try:
+                                raw_dict = json.loads(json_match.group(0))
+                                if response_schema is not None:
+                                    validated = response_schema.model_validate(raw_dict)
+                                    parsed_json = validated.model_dump()
+                                else:
+                                    parsed_json = raw_dict
+                            except Exception as parse_err:
+                                logger.warning("JSON parse error: %s", parse_err)
+
+                return LLMResponse(
+                    content=raw_text,
+                    role="assistant",
+                    finish_reason="stop",
+                    usage=LLMUsage(
+                        prompt_tokens=prompt_toks,
+                        completion_tokens=comp_toks,
+                        total_tokens=tot_toks,
+                        latency_ms=round(elapsed_ms, 2),
+                    ),
+                    parsed_json=parsed_json,
+                )
+            except Exception as exc:
+                err_str = str(exc)
+                is_rate_limit = (
+                    "429" in err_str
+                    or "rate_limit" in err_str.lower()
+                    or "insufficient_quota" in err_str.lower()
+                    or "credit" in err_str.lower()
+                )
+                if (
+                    "authentication" in err_str.lower()
+                    or "invalid_api_key" in err_str.lower()
+                    or "permission" in err_str.lower()
+                    or "credit" in err_str.lower()
+                    or "insufficient_quota" in err_str.lower()
+                ):
+                    raise RuntimeError(f"Anthropic API error for {cfg.model}: {exc}") from exc
+
+                attempt += 1
+                if attempt > cfg.max_retries:
+                    if is_rate_limit:
+                        raise RuntimeError(
+                            f"Anthropic quota/rate limit reached for {cfg.model}: {exc}"
+                        ) from exc
+                    raise RuntimeError(
+                        f"Anthropic request failed for {cfg.model} after {cfg.max_retries} retries: {exc}"
+                    ) from exc
+
+                backoff = min(2.0**attempt, 10.0) if not is_rate_limit else (5.0 + attempt * 2.0)
+                await asyncio.sleep(backoff)
+
+        raise RuntimeError(f"Exhausted retries without response for {cfg.model}")

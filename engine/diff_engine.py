@@ -8,6 +8,7 @@ token/cost deltas, and automatic divergence point detection.
 import difflib
 import logging
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
@@ -449,8 +450,50 @@ class TrajectoryDiffEngine:
                     config=cfg,
                     response_schema=SemanticComparisonVerdict,
                 )
+                verdict = None
                 if resp.parsed_json:
                     verdict = SemanticComparisonVerdict.model_validate(resp.parsed_json)
+                elif resp.content:
+                    from engine.scorers import parse_c1_c15_output
+
+                    pv = parse_c1_c15_output(resp.content, "SemanticRunComparatorGrader")
+                    score_val = pv.score
+                    sim_score = max(0.0, min(1.0, round(1.0 - (score_val - 1) / 9.0, 2)))
+                    drift = pv.drift_type or (
+                        "cosmetic"
+                        if score_val <= 2
+                        else "safety_regression"
+                        if score_val >= 7
+                        else "strategic"
+                    )
+                    div_nature: Literal[
+                        "identical_strategy", "cosmetic_variation", "substantive_divergence"
+                    ] = (
+                        "identical_strategy"
+                        if score_val <= 1
+                        else "cosmetic_variation"
+                        if score_val <= 3
+                        else "substantive_divergence"
+                    )
+                    div_turn = None
+                    if pv.divergence_turn:
+                        turn_nums = re.findall(r"\d+", pv.divergence_turn)
+                        if turn_nums:
+                            div_turn = int(turn_nums[0])
+                    verdict = SemanticComparisonVerdict(
+                        run_a_id=run_a.run_id,
+                        run_b_id=run_b.run_id,
+                        task_id=run_a.task_id,
+                        status="scored",
+                        nature_of_divergence=div_nature,
+                        semantic_similarity_score=sim_score,
+                        verdict_summary=pv.explanation,
+                        key_strategic_differences=[f"Drift classification: {drift}"],
+                        true_divergence_turn=div_turn,
+                        attribution_reasoning=pv.thinking or "Pairwise comparison completed.",
+                    )
+
+                if verdict is not None:
                     verdict.run_a_id = run_a.run_id
                     verdict.run_b_id = run_b.run_id
                     verdict.task_id = run_a.task_id

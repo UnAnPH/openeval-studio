@@ -3,8 +3,12 @@ import {
   GRADER_METADATA,
   CATEGORIES,
   QUICK_JUMP_SECTIONS,
+  FAST_TRIAGE_QUICK_JUMP,
+  PAIRWISE_DIFF_QUICK_JUMP,
+  SYNTHESIZER_QUICK_JUMP,
   assembleFullPrompt,
   INITIAL_GRADERS,
+  JUDGE_MODEL_ROSTER,
 } from '../GraderWorkbenchView';
 
 const assertOk = (condition: unknown, msg?: string): void => {
@@ -74,28 +78,150 @@ export function runWorkbenchTests() {
 
   console.log('✓ 3 categories correctly partition the 11 active evaluators (3 + 4 + 4 = 11)');
 
-  // 3. Verify assembleFullPrompt for all 11 graders
+  // 3. Verify assembleFullPrompt: Canonical C1-C15, Lean Trajectory Preset, and Decoupled Specialized Tools
   for (const grader of INITIAL_GRADERS) {
-    const full = assembleFullPrompt(grader);
-    assertOk(full.length > 100, `Full prompt for ${grader.name} should be substantial`);
-    assertOk(full.includes('<thinking>'), `Full prompt for ${grader.name} must include <thinking>`);
-    assertOk(full.includes('<score>'), `Full prompt for ${grader.name} must include <score>`);
-    assertOk(full.includes(grader.c1_axis), `Full prompt for ${grader.name} must include c1_axis`);
-    assertOk(full.includes(grader.c3_definition), `Full prompt for ${grader.name} must include c3_definition`);
-    assertOk(full.includes('### Step 2: Agent Attribution'), `Full prompt for ${grader.name} must include Step 2 Attribution`);
-    assertOk(full.includes('### Step 4: Scoring Rubric'), `Full prompt for ${grader.name} must include Step 4 Rubric`);
-  }
-  console.log('✓ assembleFullPrompt verified for all 11 judges');
+    // 3A. In 'canonical' mode, all 11 evaluators assemble C1-C15 fields
+    const canonical = assembleFullPrompt(grader, 'canonical');
+    assertOk(canonical.length > 100, `Canonical prompt for ${grader.name} should be substantial`);
+    assertOk(canonical.includes('<thinking>'), `Canonical prompt for ${grader.name} must include <thinking>`);
+    assertOk(canonical.includes('<score>'), `Canonical prompt for ${grader.name} must include <score>`);
+    assertOk(canonical.includes(grader.c1_axis), `Canonical prompt for ${grader.name} must include c1_axis`);
+    assertOk(canonical.includes(grader.c3_definition), `Canonical prompt for ${grader.name} must include c3_definition`);
+    assertOk(canonical.includes('### Step 2: Agent Attribution'), `Canonical prompt for ${grader.name} must include Step 2 Attribution`);
+    assertOk(canonical.includes('### Step 4: Scoring Rubric'), `Canonical prompt for ${grader.name} must include Step 4 Rubric`);
 
-  // 4. Verify quick-jump section references
+    // 3B. In default active mode (lean for monitors, specialized for tools):
+    const active = assembleFullPrompt(grader);
+    if (!grader.template_type || grader.template_type === 'apollo_trajectory') {
+      assertOk(active.includes('<thinking>'), `Lean prompt for ${grader.name} must include <thinking>`);
+      assertOk(active.includes('<score>'), `Lean prompt for ${grader.name} must include <score>`);
+      assertOk(active.includes('### Step 1: Agent vs. User Attribution'), `Lean prompt for ${grader.name} must include Step 1 Attribution`);
+      assertOk(active.includes('### Step 3: 1–10 Scoring Rubric & Adjustments'), `Lean prompt for ${grader.name} must include Step 3 Rubric`);
+      assertOk(!active.includes('### Step 1: Context & Environmental Risk Factors'), `Lean prompt for ${grader.name} must drop C5/C6 context questions`);
+    } else if (grader.template_type === 'fast_triage') {
+      assertOk(active.includes('<thinking>'), 'Fast triage must include <thinking>');
+      assertOk(active.includes('<decision_score>'), 'Fast triage must emit <decision_score>');
+      assertOk(active.includes('<threat_category>'), 'Fast triage must emit <threat_category>');
+    } else if (grader.template_type === 'pairwise_diff') {
+      assertOk(active.includes('<thinking>'), 'Pairwise diff must include <thinking>');
+      assertOk(active.includes('<divergence_turn>'), 'Pairwise diff must emit <divergence_turn>');
+      assertOk(active.includes('<drift_type>'), 'Pairwise diff must emit <drift_type>');
+      assertOk(active.includes('<score>'), 'Pairwise diff must emit <score>');
+    } else if (grader.template_type === 'guardrail_synthesizer') {
+      assertOk(active.includes('<thinking>'), 'Guardrail synthesizer must include <thinking>');
+      assertOk(active.includes('<p1_actions>'), 'Guardrail synthesizer must emit <p1_actions>');
+      assertOk(active.includes('<p2_interceptor_rule>'), 'Guardrail synthesizer must emit <p2_interceptor_rule>');
+      assertOk(active.includes('<p2_agents_md_patch>'), 'Guardrail synthesizer must emit <p2_agents_md_patch>');
+      assertOk(!active.includes('<score>'), 'Guardrail synthesizer decoupled from 1-10 rubric <score>');
+
+      // Verify that calling assembleFullPrompt(grader, 'lean') also retains the specialized template
+      const leanModePrompt = assembleFullPrompt(grader, 'lean');
+      assertStrictEqual(leanModePrompt, active, `assembleFullPrompt(grader, 'lean') should return specialized template for ${grader.name}`);
+    }
+  }
+  console.log('✓ assembleFullPrompt verified: canonical baseline, lean trajectory preset, and decoupled specialized tools');
+
+  // 3C. Verify full_prompt_override precedence across all 11 evaluators (trajectory + specialized)
+  for (const grader of INITIAL_GRADERS) {
+    const customOverride = `Custom full prompt override for ${grader.name}`;
+    const overridden = { ...grader, full_prompt_override: customOverride };
+
+    // In default/lean and canonical mode, override must be returned
+    assertStrictEqual(assembleFullPrompt(overridden, 'lean'), customOverride);
+    assertStrictEqual(assembleFullPrompt(overridden, 'canonical'), customOverride);
+
+    // In compressed mode, override is bypassed to generate compressed preset
+    const compressed = assembleFullPrompt(overridden, 'compressed');
+    assertOk(compressed !== customOverride, `Compressed mode must bypass override for ${grader.name}`);
+    assertOk(compressed.includes('<thinking>'), `Compressed mode must retain <thinking> for ${grader.name}`);
+  }
+  console.log('✓ full_prompt_override precedence verified across all 11 evaluators');
+
+  // 4. Verify quick-jump section references for trajectory monitors and decoupled tools
   for (const sec of QUICK_JUMP_SECTIONS) {
-    const sample = assembleFullPrompt(INITIAL_GRADERS[0]);
+    const sample = assembleFullPrompt(INITIAL_GRADERS[0], 'canonical');
     assertOk(
       sample.toLowerCase().includes(sec.search.toLowerCase()),
       `Sample prompt must contain jump search: ${sec.label}`
     );
   }
-  console.log('✓ Quick-jump section anchors verified');
+
+  // Fast triage quick jumps
+  const fastTriageGrader = INITIAL_GRADERS.find((g) => g.template_type === 'fast_triage')!;
+  const fastTriagePrompt = assembleFullPrompt(fastTriageGrader, 'lean');
+  for (const sec of FAST_TRIAGE_QUICK_JUMP) {
+    assertOk(
+      fastTriagePrompt.toLowerCase().includes(sec.search.toLowerCase()),
+      `Fast triage prompt must contain jump search: ${sec.label}`
+    );
+  }
+
+  // Pairwise diff quick jumps
+  const pairwiseGrader = INITIAL_GRADERS.find((g) => g.template_type === 'pairwise_diff')!;
+  const pairwisePrompt = assembleFullPrompt(pairwiseGrader, 'lean');
+  for (const sec of PAIRWISE_DIFF_QUICK_JUMP) {
+    assertOk(
+      pairwisePrompt.toLowerCase().includes(sec.search.toLowerCase()),
+      `Pairwise diff prompt must contain jump search: ${sec.label}`
+    );
+  }
+
+  // Synthesizer quick jumps
+  const synthGrader = INITIAL_GRADERS.find((g) => g.template_type === 'guardrail_synthesizer')!;
+  const synthPrompt = assembleFullPrompt(synthGrader, 'lean');
+  for (const sec of SYNTHESIZER_QUICK_JUMP) {
+    assertOk(
+      synthPrompt.toLowerCase().includes(sec.search.toLowerCase()),
+      `Synthesizer prompt must contain jump search: ${sec.label}`
+    );
+  }
+
+  console.log('✓ Quick-jump section anchors verified across trajectory and specialized tools');
+
+  // 5. Verify Curated Judge Model Roster (Strict Provenance & Multi-Model Ensemble)
+  const expectedModels = [
+    // Google Gemini
+    'gemini-3.5-flash-lite',
+    'gemini-3.5-flash',
+    'gemini-3.1-flash-lite',
+    'gemini-3.7-flash',
+    'gemini-3.8-flash',
+    // OpenCode Models
+    'opencode/glm-5.3-flash-free',
+    'opencode/deepseek-v4.1-flash-free',
+    // Cross-Family Frontier
+    'gpt-4o-mini',
+    'claude-3-5-sonnet',
+  ];
+
+  assertStrictEqual(JUDGE_MODEL_ROSTER.length, expectedModels.length, `Expected exactly ${expectedModels.length} curated judge models`);
+  const rosterIds = new Set(JUDGE_MODEL_ROSTER.map((m) => m.id));
+  assertStrictEqual(rosterIds.size, expectedModels.length, 'Expected all model IDs in JUDGE_MODEL_ROSTER to be unique');
+
+  for (const mId of expectedModels) {
+    const entry = JUDGE_MODEL_ROSTER.find((m) => m.id === mId);
+    assertOk(entry, `Expected model ${mId} to be in JUDGE_MODEL_ROSTER`);
+    if (!entry) continue;
+    assertOk(entry.name.length > 0, `Expected non-empty name for ${mId}`);
+    assertOk(entry.description.length > 0, `Expected non-empty description for ${mId}`);
+    assertOk(
+      ['Google Gemini', 'OpenCode (Free)', 'Cross-Family Frontier'].includes(entry.provider),
+      `Invalid provider ${entry.provider} for ${mId}`
+    );
+  }
+
+  const defaultModel = JUDGE_MODEL_ROSTER.find((m) => m.recommended);
+  assertOk(defaultModel, 'Expected a recommended default model');
+  assertStrictEqual(defaultModel?.id, 'gemini-3.5-flash-lite', 'Expected gemini-3.5-flash-lite as recommended default');
+
+  const geminiModels = JUDGE_MODEL_ROSTER.filter((m) => m.provider === 'Google Gemini');
+  const opencodeModels = JUDGE_MODEL_ROSTER.filter((m) => m.provider === 'OpenCode (Free)');
+  const crossFamilyModels = JUDGE_MODEL_ROSTER.filter((m) => m.provider === 'Cross-Family Frontier');
+
+  assertStrictEqual(geminiModels.length, 5, 'Expected 5 Google Gemini models');
+  assertStrictEqual(opencodeModels.length, 2, 'Expected 2 OpenCode models');
+  assertStrictEqual(crossFamilyModels.length, 2, 'Expected 2 Cross-Family Frontier models');
+  console.log('✓ Curated Judge Model Roster verified across Google Gemini (5), OpenCode (2), and Cross-Family (2)');
 
   console.log('All 11-judge tests PASSED successfully!');
   return true;

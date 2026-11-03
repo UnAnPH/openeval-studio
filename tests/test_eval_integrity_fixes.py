@@ -79,8 +79,9 @@ async def test_scanner_llm_failure_returns_unscored_not_pass() -> None:
         model="mock",  # type: ignore[arg-type]
     )
 
-    assert verdict.passed is False
-    assert verdict.score == 0.0
+    assert verdict.status == "error"
+    assert verdict.passed is None
+    assert verdict.score is None
     assert "Scanner evaluation error (unscored)" in verdict.reasoning
 
 

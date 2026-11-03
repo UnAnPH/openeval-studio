@@ -675,7 +675,7 @@ class PolicyGateway:
         use_llm: bool | None = None,
         llm_timeout_sec: float = _LLM_BUDGET_SEC,
         on_failure: OnFailureAction = "fail_open",
-        llm_model: str = "gemini-2.5-flash",
+        llm_model: str = "gemini-3.5-flash-lite",
         requester: _RequesterCallable | None = None,
         api_key: str | None = None,
     ) -> None:

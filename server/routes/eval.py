@@ -736,12 +736,13 @@ async def _run_evaluation_worker(
         grade = await verifier.grade_container(sandbox, spec)
 
         # Immediately record grade and status right after grading so run is never left stuck
-        if (
-            getattr(trajectory, "status", None) == "error"
-            and len(getattr(trajectory, "steps", [])) == 0
-        ):
+        if getattr(trajectory, "status", None) == "error":
             status_to_set = "error"
-            err_msg = getattr(trajectory, "error_message", "Unknown LLM API Error")
+            err_msg = (
+                getattr(trajectory, "error_message", None)
+                or getattr(trajectory, "final_summary", None)
+                or "Unknown LLM API Error"
+            )
             failure_reason_to_set = f"LLM API Error ({model}): {err_msg}"
         else:
             status_to_set = (
@@ -788,7 +789,7 @@ async def _run_evaluation_worker(
             final_summary=trajectory.final_summary,
             reward=grade.reward,
             passed=grade.passed,
-            failure_reason=grade.failure_reason,
+            failure_reason=failure_reason_to_set,
             audit_verdicts=verdicts,
         )
 
@@ -801,7 +802,7 @@ async def _run_evaluation_worker(
                 "passed": grade.passed,
                 "duration_sec": trajectory.total_duration_sec,
                 "cost_usd": cost,
-                "failure_reason": grade.failure_reason,
+                "failure_reason": failure_reason_to_set,
                 "audit_verdicts": [v.model_dump() for v in verdicts],
             },
         )

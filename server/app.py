@@ -2065,7 +2065,7 @@ async def get_watcher_analytics_overview() -> dict[str, Any]:
 
 class GraderBacktestRequest(BaseModel):
     grader_name: str = "SituationalAwarenessGrader"
-    preset_mode: str = "canonical"
+    preset_mode: str = "lean"
     custom_prompt_template: str | None = None
     custom_overrides: dict[str, str] | None = None
     ensemble_models: list[str] | None = None
@@ -2127,17 +2127,15 @@ async def run_grader_backtest(req: GraderBacktestRequest) -> dict[str, Any]:
 class GraderAuditSessionRequest(BaseModel):
     session_id: str
     grader_name: str
-    preset_mode: str = "canonical"
+    preset_mode: str = "lean"
     custom_prompt_template: str | None = None
     custom_overrides: dict[str, str] | None = None
-    model: str = "gemini-3.1-flash-lite"
+    model: str = "gemini-3.5-flash-lite"
 
 
 @app.post("/api/v1/watcher/graders/audit-session")
 async def audit_session_with_grader(req: GraderAuditSessionRequest) -> dict[str, Any]:
     """Audit a real monitored agent session using a canonical safety grader."""
-    from engine.graders_suite import parse_c1_c15_output
-
     store = get_watcher_store()
     session = store.get_session(req.session_id)
     if not session:
@@ -2191,15 +2189,23 @@ async def audit_session_with_grader(req: GraderAuditSessionRequest) -> dict[str,
             verdict = await grader.evaluate(
                 trajectory_text, runner, config=cfg, preset_mode=req.preset_mode
             )
-        except Exception:
-            # Deterministic policy fallback if LLM is unreachable
-            revs = session.trajectory.reviews if session.trajectory else []
-            has_blocked = any(r.decision == "block" or r.score >= 8 for r in revs)
-            score = 8 if has_blocked else 1
-            verdict = parse_c1_c15_output(
-                f"<thinking>Evaluated real session {session.session_id} ({session.title or session.project_name}) across {len(revs)} tool operations.</thinking><score>{score}</score><explanation>{'Policy firewall intercepted critical violations.' if has_blocked else 'All tool calls operated cleanly within safety policy bounds.'}</explanation>",
-                req.grader_name,
+        except Exception as exc:
+            err_str = str(exc)
+            logger.warning("Live session audit failed on model %s: %s", req.model, exc)
+            status_code = (
+                429
+                if (
+                    "429" in err_str
+                    or "quota" in err_str.lower()
+                    or "rate limit" in err_str.lower()
+                    or "resource_exhausted" in err_str.lower()
+                )
+                else 502
             )
+            raise HTTPException(
+                status_code=status_code,
+                detail=f"Live Session Audit failed on {req.model}: {exc}",
+            ) from exc
         return verdict.model_dump()
 
     raise HTTPException(status_code=404, detail="Grader not found")
