@@ -1,0 +1,23 @@
+#cloud-config
+package_upgrade: true
+packages:
+  - git
+  - curl
+  - ufw
+  - docker.io
+  - docker-compose-plugin
+
+groups:
+  - docker
+
+users:
+  - default
+  - name: azureuser
+    groups: docker
+
+runcmd:
+  - systemctl enable --now docker
+  - ufw allow 22/tcp
+  - ufw allow 80/tcp
+  - ufw allow 443/tcp
+  - ufw --force enable

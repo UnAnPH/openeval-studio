@@ -1,0 +1,126 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "openeval-studio"
+version = "0.1.0"
+description = "High-performance evaluation studio & sandbox engine for frontier AI coding agents"
+readme = "README.md"
+requires-python = ">=3.11, <3.15"
+authors = [
+    { name = "Jayson Andal", email = "jaysonandal@users.noreply.github.com" }
+]
+dependencies = [
+    "pydantic>=2.7.0",
+    "pydantic-settings>=2.2.0",
+    "python-dotenv>=1.0.0",
+    "google-genai>=1.0.0",
+    "openai>=1.30.0",
+    "httpx>=0.27.0",
+    "fastapi>=0.111.0",
+    "uvicorn>=0.30.0",
+    "docker>=7.1.0",
+    "uv>=0.1.0",
+    "inspect-ai>=0.3.260",
+    "inspect-evals>=0.21.0",
+    "litellm>=1.97.0",
+    "duckdb>=1.0.0",
+    "sqlalchemy>=2.0.0",
+    "psycopg[binary]>=3.1.0",
+    "alembic>=1.13.0",
+    "bcrypt>=4.0.0",
+    "redis>=5.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.4.0",
+    "mypy>=1.10.0",
+    "pyright>=1.1.350",
+    "pre-commit>=3.7.0",
+]
+
+[project.scripts]
+watcher = "server.doctor:main"
+openeval = "cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["schemas", "engine", "sandbox", "server"]
+
+[tool.pyright]
+include = ["schemas", "engine", "server", "tests"]
+exclude = ["tasks", "ui", ".venv", ".runs"]
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.12"
+typeCheckingMode = "standard"
+reportMissingImports = true
+reportMissingTypeStubs = false
+reportUnusedVariable = true
+reportUnusedImport = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+exclude = ["tasks", "ui", ".venv", ".agents"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM", "BLE", "ANN401", "TRY"]
+ignore = ["E501", "TRY002", "TRY003", "TRY300", "TRY301"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["ANN401", "BLE001", "TRY"]
+"sandbox/*" = ["ANN401", "BLE001", "TRY"]
+"cli.py" = ["BLE001", "TRY"]
+"inspect_tasks.py" = ["BLE001", "TRY"]
+"engine/approval_policy.py" = ["ANN401", "BLE001", "TRY"]
+"engine/audit_report.py" = ["BLE001", "TRY"]
+"engine/diff_engine.py" = ["ANN401", "BLE001", "TRY"]
+"engine/grader_workbench.py" = ["BLE001", "TRY"]
+"engine/graders/*.py" = ["BLE001", "TRY"]
+"engine/graders_suite.py" = ["BLE001", "TRY"]
+"engine/grounding_judge.py" = ["BLE001", "TRY"]
+"engine/inspect_bridge.py" = ["ANN401", "BLE001", "TRY"]
+"engine/judges.py" = ["BLE001", "TRY"]
+"engine/llm_runner.py" = ["ANN401", "BLE001", "TRY"]
+"engine/react_agent.py" = ["BLE001", "TRY"]
+"engine/scanners.py" = ["BLE001", "TRY"]
+"engine/sweep.py" = ["BLE001", "TRY"]
+"engine/verifier.py" = ["BLE001", "TRY"]
+"server/agent_log_loader.py" = ["ANN401", "BLE001", "TRY"]
+"server/analytics_store.py" = ["BLE001", "TRY"]
+"server/app.py" = ["ANN401", "BLE001", "TRY"]
+"server/auth.py" = ["ANN401", "BLE001", "TRY"]
+"server/db.py" = ["BLE001", "TRY"]
+"server/demo_seed.py" = ["BLE001", "TRY"]
+"server/doctor.py" = ["BLE001", "TRY"]
+"server/event_bus.py" = ["ANN401", "BLE001", "TRY"]
+"server/inspect_loader.py" = ["BLE001", "TRY"]
+"server/mcp_server.py" = ["BLE001", "TRY"]
+"server/routes/*" = ["ANN401", "BLE001", "TRY"]
+"server/search_engine.py" = ["BLE001", "TRY"]
+"server/store.py" = ["ANN401", "BLE001", "TRY"]
+"server/transcript_embeddings.py" = ["BLE001", "TRY"]
+"server/transcript_search.py" = ["ANN401", "BLE001", "TRY"]
+"server/watcher_store.py" = ["ANN401", "BLE001", "TRY"]
+"server/webhook.py" = ["BLE001", "TRY"]
+"scripts/antigravity_watcher_gate.py" = ["ANN401", "BLE001", "TRY"]
+"scripts/generate_*.py" = ["BLE001", "TRY"]
+"scripts/benchmark_gate_latency.py" = ["BLE001", "TRY"]
+"scripts/hermetic_eval_smoke.py" = ["BLE001", "TRY"]
+"scripts/ingest_local_agent_logs.py" = ["BLE001", "TRY"]
+"scripts/sanitize_demo_sessions.py" = ["BLE001", "TRY"]
+"engine/watcher_sdk.py" = ["BLE001", "TRY"]
+"scripts/cloud_switch.py" = ["ANN401", "BLE001", "TRY"]
+"scripts/test_cloud_watcher.py" = ["BLE001", "TRY"]
+"server/agent_daemon.py" = ["BLE001", "TRY"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]

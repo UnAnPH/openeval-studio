@@ -1,0 +1,136 @@
+name: Deploy
+
+on:
+  push:
+    tags: ["prod-*"]
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  checks:
+    name: CI Checks
+    if: startsWith(github.ref, 'refs/tags/prod-') && github.repository == 'UnAnPH/openeval-studio-dev'
+    uses: ./.github/workflows/_checks.yml
+
+  publish-and-deploy:
+    name: Push Image & Deploy to AWS EC2 (London eu-west-2)
+    needs: [checks]
+    if: >-
+      !cancelled() &&
+      needs.checks.result == 'success' &&
+      startsWith(github.ref, 'refs/tags/prod-') &&
+      github.repository == 'UnAnPH/openeval-studio-dev'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build local image for vulnerability scanning
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          load: true
+          tags: openeval-studio:local
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run Trivy Vulnerability Scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: openeval-studio:local
+          format: "table"
+          exit-code: "1"
+          severity: "CRITICAL"
+          ignore-unfixed: true
+          skip-dirs: "app/.venv/lib/python3.12/site-packages/inspect_evals/agentharm/benchmark,app/.venv/lib/python3.12/site-packages/inspect_evals/gdm_self_proliferation/data"
+          skip-files: "app/.venv/lib/python3.12/site-packages/inspect_evals/agentharm/benchmark/benign_grading_functions.py,app/.venv/lib/python3.12/site-packages/inspect_evals/agentharm/benchmark/benign_tools/content/api_keys.json,app/.venv/lib/python3.12/site-packages/inspect_evals/agentharm/benchmark/harmful_grading_functions.py,app/.venv/lib/python3.12/site-packages/inspect_evals/agentharm/benchmark/harmful_tools/content/api_keys.json,app/.venv/lib/python3.12/site-packages/inspect_evals/gdm_self_proliferation/data/sp02/keyfile_template.json"
+
+      - name: Log in to GitHub Container Registry (GHCR)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push Production Image to GHCR
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/unanph/openeval-studio:${{ github.ref_name }}
+            ghcr.io/unanph/openeval-studio:latest
+          cache-from: type=gha
+
+      - name: Sync release files to AWS EC2
+        env:
+          AWS_EC2_HOST: ${{ secrets.AWS_EC2_HOST }}
+          AWS_SSH_PRIVATE_KEY: ${{ secrets.AWS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          trap 'rm -f ~/.ssh/ec2_deploy' EXIT
+          printf '%s\n' "$AWS_SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/ec2_deploy
+          chmod 600 ~/.ssh/ec2_deploy
+          git archive --format=tar.gz HEAD | ssh -i ~/.ssh/ec2_deploy \
+            -o StrictHostKeyChecking=accept-new \
+            -o BatchMode=yes \
+            "ubuntu@${AWS_EC2_HOST}" \
+            "mkdir -p /home/ubuntu/openeval-studio && tar -xzf - -C /home/ubuntu/openeval-studio"
+
+      - name: Deploy via SSH to AWS EC2
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          TAG: ${{ github.ref_name }}
+          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+        with:
+          host: ${{ secrets.AWS_EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.AWS_SSH_PRIVATE_KEY }}
+          envs: TAG,GHCR_PULL_TOKEN,GEMINI_API_KEY,OPENCODE_API_KEY
+          script: |
+            set -e
+            cd /home/ubuntu/openeval-studio
+            rm -f fixtures/demo/evals/regex-log-gemini-3-5-flash-lite.json fixtures/demo/evals/eval-regex-log-gemini-3-5-flash-lite.json
+            echo "IMAGE_TAG=$TAG" > /home/ubuntu/openeval-studio/.release-env
+            if [ -n "$GHCR_PULL_TOKEN" ]; then
+              echo "$GHCR_PULL_TOKEN" | docker login ghcr.io -u unanph --password-stdin
+            fi
+            if [ -n "$GEMINI_API_KEY" ]; then
+              sudo sed -i '/^GEMINI_API_KEY=/d' /etc/openeval.env || true
+              echo "GEMINI_API_KEY=$GEMINI_API_KEY" | sudo tee -a /etc/openeval.env >/dev/null
+            fi
+            if [ -n "$OPENCODE_API_KEY" ]; then
+              sudo sed -i '/^OPENCODE_API_KEY=/d' /etc/openeval.env || true
+              echo "OPENCODE_API_KEY=$OPENCODE_API_KEY" | sudo tee -a /etc/openeval.env >/dev/null
+            fi
+            if ! sudo swapon --show | grep -q '/swapfile'; then
+              sudo fallocate -l 2G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=2048
+              sudo chmod 600 /swapfile
+              sudo mkswap /swapfile
+              sudo swapon /swapfile
+              grep -q '/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab >/dev/null
+            fi
+            df -h / || true
+            docker compose --env-file /etc/openeval.env --env-file .release-env -f docker-compose.prod.yml rm -sf app || true
+            docker container prune -f || true
+            docker image prune -af || true
+            docker builder prune -af || true
+            sudo journalctl --vacuum-time=1d || true
+            sudo apt-get clean || true
+            df -h / || true
+            docker system df || true
+            docker compose --env-file /etc/openeval.env --env-file .release-env -f docker-compose.prod.yml pull
+            docker compose --env-file /etc/openeval.env --env-file .release-env -f docker-compose.prod.yml up -d --remove-orphans
+            docker image prune -f || true

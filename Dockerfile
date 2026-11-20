@@ -1,0 +1,36 @@
+# Stage 1: Build Vite React UI
+FROM node:20-slim AS ui-builder
+WORKDIR /app/ui
+COPY ui/package*.json ./
+RUN npm ci
+COPY ui ./
+RUN npm run build
+
+# Stage 2: Python FastAPI Backend
+FROM python:3.12-slim
+WORKDIR /app
+RUN pip install --no-cache-dir uv
+COPY pyproject.toml uv.lock* README.md ./
+COPY schemas schemas
+COPY engine engine
+COPY server server
+COPY sandbox sandbox
+COPY fixtures fixtures
+COPY scripts scripts
+COPY tasks tasks
+COPY alembic alembic
+COPY alembic.ini cli.py inspect_tasks.py ./
+COPY --from=ui-builder /app/ui/dist /app/ui/dist
+RUN uv sync --no-dev --no-cache && rm -rf /root/.cache
+
+RUN groupadd -r openeval && useradd -m -u 1000 -g openeval -s /bin/sh openeval \
+    && chown -R openeval:openeval /app
+
+ENV HOME=/home/openeval
+ENV OPENEVAL_DEMO_SEED=0
+ENV PORT=8000
+EXPOSE 8000
+
+USER openeval
+
+CMD ["sh", "-c", "uv run uvicorn server.app:app --host 0.0.0.0 --port ${PORT:-8000}"]

@@ -1,0 +1,123 @@
+#cloud-config
+package_upgrade: true
+packages:
+  - git
+  - curl
+  - awscli
+  - docker.io
+  - docker-compose-v2
+
+groups:
+  - docker
+
+users:
+  - default
+  - name: ubuntu
+    groups: docker
+
+write_files:
+  - path: /var/lib/openeval/Caddyfile
+    owner: root:root
+    permissions: "0644"
+    content: |
+      openeval.studio, www.openeval.studio {
+          reverse_proxy app:8000
+      }
+
+      http://16.61.167.2 {
+          reverse_proxy app:8000
+      }
+
+  - path: /opt/openeval/scripts/pg_dump_to_s3.sh
+    owner: root:root
+    permissions: "0755"
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      if [[ -z "$${BACKUP_BUCKET:-}" ]]; then
+        echo "Error: BACKUP_BUCKET is unset." >&2
+        exit 1
+      fi
+      if ! docker exec openeval-postgres pg_isready -U openeval -d openeval >/dev/null 2>&1; then
+        echo "PostgreSQL is not ready or container is not running; skipping backup." >&2
+        exit 0
+      fi
+      DATE_STR=$(date -u +%F)
+      DEST="s3://$${BACKUP_BUCKET}/postgres/$${DATE_STR}.sql.gz"
+      echo "Starting backup to $${DEST}..."
+      docker exec openeval-postgres pg_dump -U openeval openeval | gzip | aws s3 cp - "$${DEST}"
+      echo "Backup completed successfully."
+
+  - path: /etc/systemd/system/openeval-backup.service
+    owner: root:root
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=OpenEval Daily PostgreSQL S3 Backup
+      After=docker.service
+
+      [Service]
+      Type=oneshot
+      EnvironmentFile=-/etc/openeval.env
+      ExecStart=/opt/openeval/scripts/pg_dump_to_s3.sh
+      User=root
+
+  - path: /etc/systemd/system/openeval-backup.timer
+    owner: root:root
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Daily OpenEval PostgreSQL Backup at 03:15 UTC
+
+      [Timer]
+      OnCalendar=*-*-* 03:15:00 UTC
+      Persistent=true
+
+      [Install]
+      WantedBy=timers.target
+
+runcmd:
+  # 1. Configure 2GB swap on the 10GB gp3 root volume
+  - fallocate -l 2G /swapfile
+  - chmod 600 /swapfile
+  - mkswap /swapfile
+  - swapon /swapfile
+  - echo '/swapfile none swap sw 0 0' >> /etc/fstab
+
+  # 2. Prepare persistent data and directory tree
+  - mkdir -p /var/lib/openeval/pg /var/lib/openeval/caddy_data /var/lib/openeval/caddy_config /opt/openeval/scripts /home/ubuntu/openeval-studio
+  - chown -R ubuntu:docker /var/lib/openeval /opt/openeval /home/ubuntu/openeval-studio
+
+  # 3. Generate boot secrets if absent and create /etc/openeval.env
+  - |
+    if [ ! -f /var/lib/openeval/pg_password ]; then
+      openssl rand -hex 24 > /var/lib/openeval/pg_password
+      chmod 0600 /var/lib/openeval/pg_password
+    fi
+    if [ ! -f /var/lib/openeval/session_secret ]; then
+      openssl rand -hex 32 > /var/lib/openeval/session_secret
+      chmod 0600 /var/lib/openeval/session_secret
+    fi
+    PG_PASS=$(tr -d '\r\n' < /var/lib/openeval/pg_password)
+    SESS_SEC=$(tr -d '\r\n' < /var/lib/openeval/session_secret)
+    cat <<EOF > /etc/openeval.env
+    BACKUP_BUCKET=${backup_bucket}
+    OPENEVAL_ENV=production
+    OPENEVAL_DEMO_SEED=1
+    SESSION_SECRET=$SESS_SEC
+    DATABASE_URL=postgresql+psycopg://openeval:$PG_PASS@postgres:5432/openeval
+    PORT=8000
+    EOF
+    chown root:docker /etc/openeval.env
+    chmod 0640 /etc/openeval.env
+
+  # 4. Enable & start Docker and backup timer
+  - systemctl daemon-reload
+  - systemctl enable --now docker
+  - systemctl enable --now openeval-backup.timer
+  - usermod -aG docker ubuntu
+
+  # 5. Clone repo and launch production docker compose stack
+  - su - ubuntu -c "git clone https://github.com/unanph/openeval-studio.git /home/ubuntu/openeval-studio || true"
+  - su - ubuntu -c "cd /home/ubuntu/openeval-studio && docker compose --env-file /etc/openeval.env -f docker-compose.prod.yml pull"
+  - su - ubuntu -c "cd /home/ubuntu/openeval-studio && docker compose --env-file /etc/openeval.env -f docker-compose.prod.yml up -d"

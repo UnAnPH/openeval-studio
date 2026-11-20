@@ -1,0 +1,26 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: openeval-ingress
+  labels:
+    app: openeval-studio
+  annotations:
+    # Compatible with standard Nginx, Traefik (K3s default), or Cloudflare Tunnel
+    traefik.ingress.kubernetes.io/router.entrypoints: web, websecure
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  rules:
+    - host: demo.openeval.studio
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: openeval-service
+                port:
+                  number: 80
+  tls:
+    - hosts:
+        - demo.openeval.studio
+      secretName: openeval-tls-cert

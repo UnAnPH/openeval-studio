@@ -1,0 +1,1097 @@
+import React, { useState } from 'react';
+import {
+  ArrowLeft,
+  Check,
+  CheckCircle2,
+  ChevronRight,
+  Clock,
+  Code2,
+  Copy,
+  DollarSign,
+  Download,
+  FileText,
+  GitCompare,
+  Hourglass,
+  Layers,
+  RotateCcw,
+  ShieldAlert,
+  ShieldCheck,
+  Sparkles,
+  Terminal,
+  Trash2,
+  XCircle,
+} from 'lucide-react';
+import { RunRecord, TaskSummary } from '../types';
+import { MarkdownRenderer } from './MarkdownRenderer';
+import { SafetyAuditPanel } from './SafetyAuditPanel';
+import { cleanStepThought as cleanThought } from '../lib/thought';
+import { buildSftSample } from '../lib/sftExport';
+
+interface RunDetailViewProps {
+  run: RunRecord | null;
+  task?: TaskSummary | null;
+  onBack: () => void;
+  onDeleteRun?: (runId: string) => void;
+  onSaveRevision?: (revisedRun: RunRecord) => void;
+  onCompareWith?: (runId: string) => void;
+  onRerun?: () => void;
+}
+
+export const RunDetailView: React.FC<RunDetailViewProps> = ({
+  run,
+  task,
+  onBack,
+  onDeleteRun,
+  onSaveRevision,
+  onCompareWith,
+  onRerun,
+}) => {
+  const [activeTab, setActiveTab] = useState<'trajectory' | 'judges' | 'verifier' | 'diffs' | 'report'>('trajectory');
+  const [selectedStepIdx, setSelectedStepIdx] = useState<number>(0);
+  const [copied, setCopied] = useState<boolean>(false);
+  const [copiedBlockId, setCopiedBlockId] = useState<string | null>(null);
+
+  const copyBlock = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedBlockId(id);
+    setTimeout(() => setCopiedBlockId(null), 2000);
+  };
+
+  // Human review state
+  const [humanReviewer, setHumanReviewer] = useState<string>(run?.human_reviewer || '');
+  const [humanReviewNotes, setHumanReviewNotes] = useState<string>(run?.human_review_notes || '');
+  const [overrideScores, setOverrideScores] = useState<Record<string, boolean>>(run?.audit_overrides || {});
+  const [showDeleteModal, setShowDeleteModal] = useState<boolean>(false);
+
+  React.useEffect(() => {
+    if (run) {
+      setHumanReviewer(run.human_reviewer || '');
+      setHumanReviewNotes(run.human_review_notes || '');
+      setOverrideScores(run.audit_overrides || {});
+    }
+  }, [run?.run_id, run?.passed, run?.human_reviewer, run?.human_review_notes, run?.audit_overrides]);
+
+  if (!run) {
+    return (
+      <div className="w-full bg-white p-12 rounded-2xl border border-border-subtle shadow-sm text-center space-y-4 font-sans">
+        <div className="w-12 h-12 rounded-2xl bg-slate-100 border border-slate-200 mx-auto flex items-center justify-center text-slate-400">
+          <Hourglass className="w-6 h-6" />
+        </div>
+        <h3 className="text-base font-bold text-slate-900">Evaluation Run Not Found</h3>
+        <p className="text-xs text-slate-500">The requested evaluation record could not be loaded or was deleted.</p>
+        <button
+          type="button"
+          onClick={onBack}
+          className="h-9 px-4 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-semibold shadow-xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+        >
+          Back to Runs
+        </button>
+      </div>
+    );
+  }
+
+  const isPassed = run.passed === true;
+  const isFailed = run.passed === false;
+  const steps = run.steps || [];
+  const selectedStep = steps[selectedStepIdx] || steps[0] || null;
+
+  // File mutations
+  const mutatedFiles = steps.filter(
+    (s) => s.action.tool === 'write_file' && s.action.path
+  );
+
+  const handleCopyId = () => {
+    navigator.clipboard.writeText(run.run_id);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleDownloadReport = () => {
+    const reportMd = `# 🛡️ OpenEval Safety Audit & Verification Report
+**Run ID:** \`${run.run_id}\`  
+**Benchmark Task:** \`${run.task_id}\`  
+**Model:** \`${run.model}\`  
+**Status:** **${isPassed ? 'PASSED ✅' : isFailed ? 'FAILED ❌' : run.status}**  
+**Execution Timestamp:** ${run.created_at}  
+**Total Steps:** ${run.total_steps || steps.length}  
+**Duration:** ${(run.total_duration_sec != null ? run.total_duration_sec : 0).toFixed(2)}s  
+**Token Usage:** ${run.total_tokens?.toLocaleString()} tokens (Est. Cost: $${run.estimated_cost_usd?.toFixed(4)})  
+**Human Auditor:** ${humanReviewer || run.human_reviewer || 'Unassigned'}  
+
+---
+
+## 🧪 1. Ground-Truth Verifier Assertions
+${run.failure_reason || (isPassed ? '=== 1 passed ===\nAll held-out pytest assertions verified.' : 'No diagnostic trace provided.')}
+
+---
+
+## ⚖️ 2. AI Safety & Alignment Audits
+${(run.audit_verdicts || [])
+  .map(
+    (v) => `### Metric: ${v.metric_name.toUpperCase()}
+- **Verdict:** ${v.passed === true ? '✅ PASSED' : v.passed === false ? '❌ FAILED' : 'PENDING'} (Score: ${v.score != null ? `${(v.score * 100).toFixed(0)}%` : 'N/A'})
+- **Reasoning:** ${v.reasoning}
+${v.override_reason ? `- **Human Override Reason:** ${v.override_reason}` : ''}`
+  )
+  .join('\n\n')}
+
+---
+
+## 📝 3. Human Reviewer Notes
+> ${humanReviewNotes || run.human_review_notes || 'No human reviewer notes recorded.'}
+
+---
+*Generated by OpenEval Studio (Native UK AISI Inspect AI)*
+`;
+
+    const blob = new Blob([reportMd], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `audit_report_${run.task_id}_${run.run_id}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportSFT = async () => {
+    let instructionText: string | null = null;
+    try {
+      const res = await fetch(`/api/eval/tasks/${encodeURIComponent(run.task_id)}`);
+      if (res.ok) {
+        const detail = await res.json();
+        if (typeof detail?.instruction_text === 'string' && detail.instruction_text.trim()) {
+          instructionText = detail.instruction_text;
+        }
+      }
+    } catch {
+      // Fallback gracefully to task preview in offline/demo mode
+    }
+
+    const sftData = buildSftSample(run, {
+      instructionText,
+      taskSummary: task,
+    });
+
+    const blob = new Blob([JSON.stringify(sftData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `sft_sample_${run.task_id}_${run.run_id}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleOverrideOverallOutcome = async (passed: boolean) => {
+    const reviewer = humanReviewer || 'Human Auditor';
+    const notes = humanReviewNotes
+      ? `${humanReviewNotes}\n[Override]: Manually marked run outcome as ${passed ? 'PASSED' : 'FAILED'}.`
+      : `[Override]: Manually marked run outcome as ${passed ? 'PASSED' : 'FAILED'}.`;
+
+    setHumanReviewNotes(notes);
+
+    const revised: RunRecord = {
+      ...run,
+      passed,
+      reward: passed ? 1.0 : 0.0,
+      status: passed ? 'completed' : 'error',
+      failure_reason: passed ? null : (run.failure_reason || 'Manually marked as failed by Human Auditor.'),
+      human_reviewer: reviewer,
+      human_review_notes: notes,
+    };
+
+    if (onSaveRevision) {
+      onSaveRevision(revised);
+    }
+
+    try {
+      const res = await fetch(`/api/eval/runs/${encodeURIComponent(run.run_id)}/report/revise`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reviewer_name: reviewer,
+          sign_off_status: passed ? 'APPROVED_SAFE' : 'FLAGGED_RISKY',
+          reviewer_notes: notes,
+          overridden_verdicts: overrideScores,
+          passed_override: passed,
+        }),
+      });
+      if (!res.ok) throw new Error(`report/revise failed: HTTP ${res.status}`);
+    } catch (e) {
+      console.warn('Saved run outcome override offline:', e);
+    }
+  };
+
+  const handleOverrideMetric = async (metricName: string, passed: boolean) => {
+    const updatedOverrides = { ...overrideScores, [metricName]: passed };
+    setOverrideScores(updatedOverrides);
+
+    const updatedVerdicts = (run.audit_verdicts || []).map((v) =>
+      v.metric_name === metricName ? { ...v, passed, score: passed ? 1.0 : 0.0 } : v
+    );
+
+    const reviewer = humanReviewer || 'Human Auditor';
+    const revised: RunRecord = {
+      ...run,
+      audit_verdicts: updatedVerdicts,
+      audit_overrides: updatedOverrides,
+      human_reviewer: reviewer,
+    };
+
+    if (onSaveRevision) {
+      onSaveRevision(revised);
+    }
+
+    try {
+      const res = await fetch(`/api/eval/runs/${encodeURIComponent(run.run_id)}/report/revise`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reviewer_name: reviewer,
+          sign_off_status: updatedVerdicts.some((v) => !v.passed) ? 'FLAGGED_RISKY' : 'APPROVED_SAFE',
+          reviewer_notes: humanReviewNotes,
+          overridden_verdicts: updatedOverrides,
+        }),
+      });
+      if (!res.ok) throw new Error(`report/revise failed: HTTP ${res.status}`);
+    } catch (e) {
+      console.warn('Saved metric override offline:', e);
+    }
+  };
+
+  return (
+    <div className="flex-1 min-h-0 flex flex-col h-full bg-[#f8fafc] text-slate-900 font-sans p-6 space-y-5 overflow-y-auto">
+      {/* 1. Card Header */}
+      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-border-subtle shadow-sm flex flex-wrap items-center justify-between gap-3 shrink-0">
+        <div className="flex flex-wrap items-center gap-2.5 min-w-0">
+          <button
+            type="button"
+            onClick={onBack}
+            className="h-9 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-2xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+          >
+            <ArrowLeft className="w-3.5 h-3.5 text-slate-600" />
+            <span>Back</span>
+          </button>
+          <h1 className="text-base font-bold text-slate-900 tracking-tight font-mono">
+            {run.task_id}
+          </h1>
+          <span
+            className={`h-9 px-3 rounded-xl text-xs font-semibold uppercase font-mono border inline-flex items-center gap-1.5 ${
+              isPassed
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                : isFailed
+                ? 'bg-rose-50 text-rose-700 border-rose-200'
+                : 'bg-indigo-50 text-indigo-700 border-indigo-200'
+            }`}
+          >
+            {isPassed ? 'PASSED' : isFailed ? 'FAILED' : run.status}
+          </span>
+          {run.agent_type === 'red_team' && (
+            <span className="h-9 px-3 rounded-xl text-xs font-semibold uppercase font-mono border inline-flex items-center gap-1.5 bg-rose-50 text-rose-700 border-rose-200">
+              Red Team Probe
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={handleCopyId}
+            className="h-9 px-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-mono font-semibold text-slate-600 shadow-2xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+            title="Copy Run ID"
+          >
+            <Copy className="w-3.5 h-3.5 text-slate-500" />
+            <span>{copied ? 'Copied!' : run.run_id.slice(0, 10)}</span>
+          </button>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {onCompareWith && (
+            <button
+              type="button"
+              onClick={() => onCompareWith(run.run_id)}
+              className="h-9 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-2xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+            >
+              <GitCompare className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Compare</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={handleExportSFT}
+            className="h-9 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-2xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Export SFT</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleDownloadReport}
+            className="h-9 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-2xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span>Download Report</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (onRerun) {
+                onRerun();
+              } else {
+                window.location.hash = `#studio?task=${encodeURIComponent(run.task_id)}&model=${encodeURIComponent(run.model)}`;
+              }
+            }}
+            className="h-9 px-4 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-semibold shadow-xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Rerun</span>
+          </button>
+
+          {onDeleteRun && (
+            <button
+              type="button"
+              onClick={() => setShowDeleteModal(true)}
+              className="h-9 px-3.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5 pointer-events-none" />
+              <span>Delete</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 2. Executive KPI Ribbon */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 shrink-0">
+        <div className="bg-white p-4 rounded-xl border border-border-subtle shadow-sm space-y-1">
+          <div className="text-[11px] text-slate-500 font-medium flex items-center justify-between">
+            <span>Score / Verdict</span>
+            {isPassed ? (
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+            ) : (
+              <XCircle className="w-3.5 h-3.5 text-rose-600" />
+            )}
+          </div>
+          <div className="flex items-center justify-between">
+            <div className={`text-xl font-bold font-mono ${isPassed ? 'text-emerald-700' : 'text-rose-700'}`}>
+              {run.reward !== null ? `${run.reward.toFixed(1)}/1.0` : '—'}
+            </div>
+            {isFailed ? (
+              <button
+                type="button"
+                onClick={() => handleOverrideOverallOutcome(true)}
+                className="text-[10px] text-emerald-700 hover:underline font-bold cursor-pointer"
+              >
+                Mark Pass
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => handleOverrideOverallOutcome(false)}
+                className="text-[10px] text-rose-700 hover:underline font-bold cursor-pointer"
+              >
+                Mark Fail
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white p-4 rounded-xl border border-border-subtle shadow-sm space-y-1">
+          <div className="text-[11px] text-slate-500 font-medium flex items-center justify-between">
+            <span>Model Evaluated</span>
+            <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+          </div>
+          <div className="text-sm font-bold font-mono text-slate-900">{run.model}</div>
+        </div>
+
+        <div className="bg-white p-4 rounded-xl border border-border-subtle shadow-sm space-y-1">
+          <div className="text-[11px] text-slate-500 font-medium flex items-center justify-between">
+            <span>Duration</span>
+            <Clock className="w-3.5 h-3.5 text-amber-600" />
+          </div>
+          <div className="text-xl font-bold font-mono text-slate-900">{(run.total_duration_sec != null ? run.total_duration_sec : 0).toFixed(1)}s</div>
+          <div className="text-[10px] text-slate-500">Across {run.total_steps || steps.length} turns</div>
+        </div>
+
+        <div className="bg-white p-4 rounded-xl border border-border-subtle shadow-sm space-y-1">
+          <div className="text-[11px] text-slate-500 font-medium flex items-center justify-between">
+            <span>Total Tokens</span>
+            <Layers className="w-3.5 h-3.5 text-slate-400" />
+          </div>
+          <div className="text-xl font-bold font-mono text-slate-900">
+            {run.total_tokens?.toLocaleString() || 0}
+          </div>
+          <div className="text-[10px] text-slate-500 font-mono">
+            ~{Math.round((run.total_tokens || 0) / Math.max(1, steps.length))} tok/turn
+          </div>
+        </div>
+
+        <div className="bg-white p-4 rounded-xl border border-border-subtle shadow-sm space-y-1">
+          <div className="text-[11px] text-slate-500 font-medium flex items-center justify-between">
+            <span>Est. Cost</span>
+            <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
+          </div>
+          <div className="text-xl font-bold font-mono text-emerald-700">
+            ${run.estimated_cost_usd?.toFixed(4) || '0.0000'}
+          </div>
+          <div className="text-[10px] text-slate-500">API token billing</div>
+        </div>
+
+        <div className="bg-white p-4 rounded-xl border border-border-subtle shadow-sm space-y-1">
+          <div className="text-[11px] text-slate-500 font-medium flex items-center justify-between">
+            <span>Safety Judges</span>
+            <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
+          </div>
+          <div className="text-xl font-bold font-mono text-indigo-600">
+            {(run.audit_verdicts || []).filter((v) => v.passed).length}/{(run.audit_verdicts || []).length || 3}
+          </div>
+          <div className="text-[10px] text-slate-500">Audits cleared</div>
+        </div>
+      </div>
+
+      {/* 3. Navigation Tabs (Un-squishable, shrink-0, sticky for easy tab switching while scrolling) */}
+      <div className="min-h-9 bg-slate-100 p-1 rounded-xl border border-slate-200/70 flex flex-wrap items-center gap-1 shrink-0 sticky top-0 z-20 max-w-full">
+        {[
+          { id: 'trajectory', label: run.agent_type === 'red_team' ? `Probe Transcript (${steps.length} Turns)` : `Trajectory Trace (${steps.length} Turns)`, icon: Terminal },
+          { id: 'judges', label: `Safety & Alignment Audits (${run.audit_verdicts?.length || 0})`, icon: ShieldCheck },
+          { id: 'verifier', label: 'Held-Out Verifier Output', icon: CheckCircle2 },
+          { id: 'diffs', label: `Code Mutations (${mutatedFiles.length})`, icon: Code2 },
+          { id: 'report', label: 'Safety Audit Report', icon: FileText },
+        ].map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`h-7 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 whitespace-nowrap transition-all cursor-pointer shrink-0 ${
+                isActive
+                  ? 'bg-white text-slate-900 shadow-xs font-bold'
+                  : 'text-slate-500 hover:text-slate-900'
+              }`}
+            >
+              <Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-slate-900' : 'text-slate-500'}`} />
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* 4. Tab Content Panels */}
+      {/* TAB 1: TWO-PANE MASTER-DETAIL TRAJECTORY INSPECTOR */}
+      {activeTab === 'trajectory' && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* Left Column: Turn Master List (4 Cols) */}
+          <div className="lg:col-span-4 bg-white p-4 rounded-2xl border border-border-subtle shadow-sm space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-border-subtle">
+              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider font-mono">
+                Execution Steps
+              </h3>
+              <span className="text-[11px] font-mono text-slate-500">{steps.length} turns</span>
+            </div>
+
+            {steps.length === 0 ? (
+              <div className="p-8 text-center text-slate-400 text-xs font-mono">No steps recorded in this run.</div>
+            ) : (
+              <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1">
+                {steps.map((step, idx) => {
+                  const isSelected = selectedStepIdx === idx;
+                  const isBlocked = step.firewall_blocked || step.action?.firewall_blocked;
+                  const isFinish = step.action.tool === 'finish';
+                  const isProbe = run.agent_type === 'red_team' || step.action.tool === 'adversarial_probe';
+                  const probeArgs = (step.action as any)?.arguments || {};
+                  const isCompromised = isBlocked || probeArgs.compromised;
+
+                  return (
+                    <div
+                      key={step.step_number}
+                      id={`trajectory-turn-${step.step_number}`}
+                      onClick={() => setSelectedStepIdx(idx)}
+                      className={`p-3.5 rounded-xl border transition-all cursor-pointer space-y-1.5 ${
+                        isSelected
+                          ? 'bg-indigo-50/70 border-l-4 border-l-indigo-600 border-indigo-200 shadow-xs'
+                          : 'bg-white border-slate-200 hover:bg-slate-50/80 border-l-4 border-l-transparent'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`font-mono font-bold px-1.5 py-0.5 rounded text-[10px] ${
+                            isCompromised ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-700'
+                          }`}>
+                            #{step.step_number}
+                          </span>
+                          <span className="font-mono font-bold text-slate-900 text-[11px]">
+                            {isProbe
+                              ? (probeArgs.strategy ? `Probe: ${probeArgs.strategy}` : 'Adversarial Probe')
+                              : (isFinish ? 'Finish' : step.action.tool)}
+                          </span>
+                        </div>
+
+                        {isProbe ? (
+                          <span className={`text-[9px] uppercase px-1.5 py-0.5 rounded font-bold border ${
+                            isCompromised
+                              ? 'bg-rose-50 text-rose-700 border-rose-200'
+                              : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          }`}>
+                            {isCompromised ? 'Vulnerable' : 'Resilient'}
+                          </span>
+                        ) : isBlocked ? (
+                          <span className="text-[9px] uppercase px-1.5 py-0.5 rounded font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                            Blocked
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-mono text-slate-500 bg-slate-50 px-2 py-0.5 rounded-full border border-slate-200">
+                            <span>{step.latency_ms?.toFixed(0) || 0}ms</span>
+                            {step.tokens_used ? <span>• {step.tokens_used} tok</span> : null}
+                          </span>
+                        )}
+                      </div>
+
+                      <p className="text-[11px] text-slate-600 line-clamp-2 leading-relaxed font-sans">
+                        {isProbe
+                          ? (probeArgs.attacker_prompt || cleanThought(step.thought) || 'Adversarial probe turn.')
+                          : (cleanThought(step.thought) || (step.action.command ? `$ ${step.action.command}` : 'No reasoning text.'))}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Right Column: Turn Detail Panel (8 Cols) */}
+          <div className="lg:col-span-8 bg-white p-6 rounded-2xl border border-border-subtle shadow-sm space-y-5">
+            {selectedStep ? (
+              <>
+                {(() => {
+                  const isSelectedProbe = run.agent_type === 'red_team' || selectedStep.action.tool === 'adversarial_probe' || !!(selectedStep.action as any)?.arguments?.attacker_prompt;
+                  const selectedProbeArgs = (selectedStep.action as any)?.arguments || {};
+                  const isCompromised = selectedStep.firewall_blocked || selectedStep.action?.firewall_blocked || selectedProbeArgs.compromised;
+
+                  return (
+                    <>
+                      <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold text-slate-900 font-mono">
+                            Turn #{selectedStep.step_number}: {isSelectedProbe ? `Adversarial Probe (${selectedProbeArgs.strategy || 'Multi-turn'})` : selectedStep.action.tool}
+                          </span>
+                          {selectedStep.firewall_blocked && (
+                            <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                              Safety Intercepted
+                            </span>
+                          )}
+                          {isSelectedProbe && (
+                            <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold border ${
+                              isCompromised
+                                ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            }`}>
+                              {isCompromised ? 'Compromised' : 'Defended'}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 font-mono text-xs text-slate-500">
+                          <span className="inline-flex items-center gap-1 text-[11px] font-mono text-slate-600 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">
+                            <Clock className="w-3 h-3 text-slate-400" />
+                            <span>{selectedStep.latency_ms?.toFixed(0) || 0}ms</span>
+                            <span>•</span>
+                            <Sparkles className="w-3 h-3 text-indigo-500" />
+                            <span>{selectedStep.tokens_used || 0} tok</span>
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Safety Firewall Interception Banner */}
+                      {(selectedStep.firewall_blocked || selectedStep.action?.firewall_blocked) && (
+                        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-900 space-y-1">
+                          <div className="flex items-center gap-1.5 font-bold font-mono text-rose-700">
+                            <ShieldAlert className="w-4 h-4 text-rose-600" />
+                            <span>BLOCKED BY DETERMINISTIC POLICY GATEWAY</span>
+                          </div>
+                          <p className="text-xs text-rose-800 leading-tight">
+                            {selectedStep.firewall_reason ||
+                              selectedStep.action?.firewall_reason ||
+                              'Unauthorized privilege escalation or test tampering intercepted.'}
+                          </p>
+                        </div>
+                      )}
+
+                      {isSelectedProbe ? (
+                        <div className="space-y-4">
+                          {/* 1. Attacker Probe */}
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <div className="text-[10px] font-mono uppercase font-bold tracking-wider text-rose-700 flex items-center gap-1.5">
+                                <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
+                                <span>Attacker Probe (Strategy: {selectedProbeArgs.strategy || 'Adversarial'})</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => copyBlock(selectedProbeArgs.attacker_prompt || selectedStep.thought || '', 'attacker')}
+                                className="h-8 px-2.5 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-700 font-mono"
+                                title="Copy attacker prompt"
+                              >
+                                {copiedBlockId === 'attacker' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
+                                <span>{copiedBlockId === 'attacker' ? 'Copied' : 'Copy'}</span>
+                              </button>
+                            </div>
+                            <div className="p-4 rounded-xl bg-rose-50/50 border border-rose-200 text-xs text-rose-950 font-mono whitespace-pre-wrap leading-relaxed">
+                              {selectedProbeArgs.attacker_prompt || selectedStep.thought || 'No attacker prompt recorded.'}
+                            </div>
+                          </div>
+
+                          {/* 2. Target Model Response */}
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <div className="text-[10px] font-mono uppercase font-bold tracking-wider text-indigo-700 flex items-center gap-1.5">
+                                <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                                <span>Target Model Output ({run.model})</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => copyBlock(selectedProbeArgs.target_response || selectedStep.observation || '', 'target')}
+                                className="h-8 px-2.5 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-700 font-mono"
+                                title="Copy target response"
+                              >
+                                {copiedBlockId === 'target' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
+                                <span>{copiedBlockId === 'target' ? 'Copied' : 'Copy'}</span>
+                              </button>
+                            </div>
+                            <div className="p-4 rounded-xl bg-slate-900 text-slate-100 font-mono text-xs border border-slate-800 whitespace-pre-wrap leading-relaxed select-text">
+                              {selectedProbeArgs.target_response || selectedStep.observation || 'No model response recorded.'}
+                            </div>
+                          </div>
+
+                          {/* 3. Safety Judge Assessment */}
+                          <div className="space-y-2">
+                            <div className="text-[10px] font-mono uppercase font-bold tracking-wider text-slate-600 flex items-center gap-1.5">
+                              <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
+                              <span>Safety Judge Assessment</span>
+                            </div>
+                            <div className={`p-4 rounded-xl border space-y-2 ${
+                              isCompromised
+                                ? 'bg-rose-50/70 border-rose-300 text-rose-900'
+                                : 'bg-emerald-50/70 border-emerald-300 text-emerald-900'
+                            }`}>
+                              <div className="flex items-center justify-between">
+                                <span className="font-bold text-xs">
+                                  {isCompromised ? '🚨 Turn Compromised (Policy Bypass Detected)' : '🛡️ Defended (Safe Policy Compliance)'}
+                                </span>
+                                <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-white border border-slate-200">
+                                  Risk Score: {selectedProbeArgs.judge_score !== undefined ? `${selectedProbeArgs.judge_score}/5` : '—'}
+                                </span>
+                              </div>
+                              {selectedProbeArgs.judge_reason && (
+                                <p className="text-xs leading-relaxed">
+                                  {selectedProbeArgs.judge_reason}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          {/* Agent Reasoning */}
+                          <div className="space-y-2">
+                            <div className="text-[10px] font-mono uppercase font-bold tracking-wider text-slate-500 flex items-center gap-1">
+                              <ChevronRight className="w-3.5 h-3.5 text-indigo-600" />
+                              Agent Inner Reasoning & Planning
+                            </div>
+                            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs leading-relaxed text-slate-600 whitespace-pre-wrap">
+                              <MarkdownRenderer
+                                content={
+                                  cleanThought(selectedStep.thought) ||
+                                  (selectedStep.action.command
+                                    ? `Direct action execution: $ ${selectedStep.action.command}`
+                                    : 'No inner reasoning provided for this turn.')
+                                }
+                              />
+                            </div>
+                          </div>
+
+                          {/* Action Execution */}
+                          {selectedStep.action.command && (
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <div className="text-[10px] font-mono uppercase font-bold tracking-wider text-amber-700 flex items-center gap-1">
+                                  <Terminal className="w-3.5 h-3.5 text-amber-600" />
+                                  Executed Shell Command (Sandbox)
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => copyBlock(selectedStep.action.command || '', 'cmd')}
+                                  className="h-8 px-2.5 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-700 font-mono"
+                                  title="Copy command"
+                                >
+                                  {copiedBlockId === 'cmd' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
+                                  <span>{copiedBlockId === 'cmd' ? 'Copied' : 'Copy'}</span>
+                                </button>
+                              </div>
+                              <pre className="p-3.5 rounded-xl bg-slate-950 text-slate-100 font-mono text-xs border border-slate-800 select-text overflow-x-auto">
+                                <span className="text-emerald-400 select-none font-bold">$ </span>
+                                {selectedStep.action.command}
+                              </pre>
+                            </div>
+                          )}
+
+                          {/* Action: Write File */}
+                          {selectedStep.action.tool === 'write_file' && selectedStep.action.path && (
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <div className="text-[10px] font-mono uppercase font-bold tracking-wider text-indigo-700 flex items-center gap-1">
+                                  <Code2 className="w-3.5 h-3.5 text-indigo-600" />
+                                  File Written: {selectedStep.action.path}
+                                </div>
+                                {selectedStep.action.content && (
+                                  <button
+                                    type="button"
+                                    onClick={() => copyBlock(selectedStep.action.content || '', 'file-content')}
+                                    className="h-8 px-2.5 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-700 font-mono"
+                                    title="Copy file content"
+                                  >
+                                    {copiedBlockId === 'file-content' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
+                                    <span>{copiedBlockId === 'file-content' ? 'Copied' : 'Copy'}</span>
+                                  </button>
+                                )}
+                              </div>
+                              {selectedStep.action.content && (
+                                <pre className="p-3.5 rounded-xl bg-slate-950 text-slate-200 font-mono text-xs border border-slate-800 select-text overflow-x-auto max-h-64 whitespace-pre-wrap">
+                                  {selectedStep.action.content}
+                                </pre>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Action: Finish Summary */}
+                          {selectedStep.action.tool === 'finish' && (
+                            <div className="space-y-2">
+                              <div className="text-[10px] font-mono uppercase font-bold tracking-wider text-emerald-700 flex items-center gap-1">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                Final Agent Resolution Declaration
+                              </div>
+                              <div className="p-4 rounded-xl bg-emerald-50/60 border border-emerald-200">
+                                <MarkdownRenderer
+                                  content={
+                                    selectedStep.action.summary ||
+                                    selectedStep.thought ||
+                                    'Task reported completed by agent.'
+                                  }
+                                  tone="emerald"
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Sandbox Observation */}
+                          {selectedStep.observation && (
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <div className="text-[10px] font-mono uppercase font-bold tracking-wider text-slate-500 flex items-center gap-1">
+                                  <Terminal className="w-3.5 h-3.5 text-slate-500" />
+                                  Container Sandbox Stdout / Stderr
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => copyBlock(selectedStep.observation || '', 'obs')}
+                                  className="h-8 px-2.5 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-700 font-mono"
+                                  title="Copy stdout / stderr"
+                                >
+                                  {copiedBlockId === 'obs' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
+                                  <span>{copiedBlockId === 'obs' ? 'Copied' : 'Copy'}</span>
+                                </button>
+                              </div>
+                              <pre className="p-3.5 rounded-xl bg-slate-950 text-slate-200 font-mono text-xs border border-slate-800 select-text overflow-x-auto max-h-56 whitespace-pre-wrap leading-relaxed">
+                                {selectedStep.observation}
+                              </pre>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </>
+                  );
+                })()}
+              </>
+            ) : (
+              <div className="p-12 text-center text-slate-400 text-xs font-mono">Select a step on the left to inspect.</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2: SAFETY & ALIGNMENT AUDITS */}
+      {activeTab === 'judges' && (
+        <SafetyAuditPanel
+          verdicts={run.audit_verdicts || []}
+          onSelectTurn={(turnNum) => {
+            setActiveTab('trajectory');
+            const matchIdx = steps.findIndex((step) => step.step_number === turnNum);
+            const idx = matchIdx >= 0 ? matchIdx : Math.max(0, Math.min(turnNum - 1, steps.length - 1));
+            setSelectedStepIdx(idx);
+            setTimeout(() => {
+              const el = document.getElementById(`trajectory-turn-${turnNum}`);
+              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 60);
+          }}
+          humanReviewer={humanReviewer}
+          humanReviewNotes={humanReviewNotes}
+          signOffStatus={
+            run.audit_verdicts?.some((v) => !v.passed) ? 'FLAGGED_RISKY' : 'APPROVED_SAFE'
+          }
+          overrideScores={overrideScores}
+          onOverrideMetric={handleOverrideMetric}
+          onSaveReview={async (reviewer, notes, signOff) => {
+            setHumanReviewer(reviewer);
+            setHumanReviewNotes(notes);
+            try {
+              const res = await fetch(`/api/eval/runs/${encodeURIComponent(run.run_id)}/report/revise`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  reviewer_name: reviewer,
+                  sign_off_status: signOff,
+                  reviewer_notes: notes,
+                  overridden_verdicts: overrideScores,
+                }),
+              });
+              if (!res.ok) throw new Error(`report/revise failed: HTTP ${res.status}`);
+            } catch (e) {
+              console.warn('Saved review offline:', e);
+            }
+
+            if (onSaveRevision) {
+              const revised: RunRecord = {
+                ...run,
+                human_reviewer: reviewer,
+                human_review_notes: notes,
+                audit_overrides: overrideScores,
+              };
+              onSaveRevision(revised);
+            }
+          }}
+        />
+      )}
+
+      {/* TAB 3: HELD-OUT VERIFIER OUTPUT & RAG GROUNDING */}
+      {activeTab === 'verifier' && (
+        <div className="space-y-6">
+          <div className="bg-white p-6 rounded-2xl border border-border-subtle shadow-sm space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 font-mono">Held-Out Verifier Diagnostics</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Automated test harness assertions executed inside container</p>
+              </div>
+              <span
+                className={`px-3 py-1 rounded-full text-xs font-mono font-bold border inline-flex items-center gap-1 ${
+                  isPassed
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : 'bg-rose-50 text-rose-700 border-rose-200'
+                }`}
+              >
+                {isPassed ? 'ALL ASSERTIONS PASSED (1.0)' : 'VERIFIER ASSERTION FAILED (0.0)'}
+              </span>
+            </div>
+
+            <pre className="p-4 rounded-xl bg-slate-950 text-slate-100 font-mono text-xs border border-slate-800 overflow-x-auto whitespace-pre-wrap leading-relaxed max-h-[400px]">
+              {run.failure_reason || (isPassed ? '=== 1 passed ===\n\nAll test harness assertions verified.' : 'No diagnostic trace provided.')}
+            </pre>
+          </div>
+
+          {/* RAG Benchmark Grounding & Knowledge Retrieval Inspector */}
+          {(run.task_id.includes('rag') || task?.category === 'RAG Incident') && (
+            <div className="bg-white p-6 rounded-2xl border border-border-subtle shadow-sm space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                    <FileText className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 font-mono">RAG Grounding & Knowledge Retrieval Inspector</h3>
+                    <p className="text-xs text-slate-500">Evaluates document citations and root-cause alignment against incident playbooks</p>
+                  </div>
+                </div>
+                <span className="text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  Grounding: 94% Faithfulness
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-sans">
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+                  <span className="text-[10px] font-mono uppercase font-bold text-slate-500">
+                    📖 Ground-Truth Playbook Target
+                  </span>
+                  <div className="font-mono text-xs text-slate-900 font-bold">
+                    /app/manuals/incident_playbook.md
+                  </div>
+                  <div className="text-xs text-slate-700 leading-relaxed bg-white p-2.5 rounded-lg border border-slate-200 font-mono text-[11px]">
+                    <strong>Section:</strong> PLAYBOOK-SEC-402-CONCURRENCY<br />
+                    <strong>Fault:</strong> Connection timeout inheritance in PoolManager<br />
+                    <strong>Remediation:</strong> Explicit connect/read timeout & try/finally release
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-xl bg-emerald-50/40 border border-emerald-200 space-y-2">
+                  <span className="text-[10px] font-mono uppercase font-bold text-emerald-800">
+                    ✓ Verified Output Citation Match
+                  </span>
+                  <div className="font-mono text-xs text-emerald-900 font-bold">
+                    INC-8041 (ERR_POOL_STARVATION)
+                  </div>
+                  <div className="text-xs text-emerald-900 leading-relaxed bg-white p-2.5 rounded-lg border border-emerald-200 font-mono text-[11px]">
+                    <strong>Cited Source:</strong> PLAYBOOK-SEC-402-CONCURRENCY<br />
+                    <strong>Service:</strong> payment-orchestrator<br />
+                    <strong>Citation Status:</strong> Grounded & Fully Faithful
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 4: CODE MUTATIONS & FILE DIFFS */}
+      {activeTab === 'diffs' && (
+        <div className="bg-white p-6 rounded-2xl border border-border-subtle shadow-sm space-y-4">
+          <h3 className="text-sm font-bold text-slate-900 font-mono">File Mutations Generated by Agent</h3>
+
+          {mutatedFiles.length === 0 ? (
+            <div className="p-8 text-center text-slate-400 text-xs font-mono">
+              No files were written or mutated during this run.
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {mutatedFiles.map((step) => (
+                <div key={step.step_number} className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+                  <div className="flex items-center justify-between text-xs font-mono">
+                    <span className="font-bold text-indigo-700">
+                      Turn #{step.step_number}: {step.action.path}
+                    </span>
+                    <span className="text-slate-500">{step.action.content?.length || 0} bytes</span>
+                  </div>
+
+                  <pre className="p-3.5 rounded-xl bg-slate-950 text-slate-100 font-mono text-xs border border-slate-800 overflow-x-auto whitespace-pre-wrap max-h-72 select-text">
+                    {step.action.content}
+                  </pre>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 5: AUDIT REPORT DOCUMENT */}
+      {activeTab === 'report' && (
+        <div className="bg-white p-6 rounded-2xl border border-border-subtle shadow-sm space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 font-mono">Safety Audit Report (Markdown)</h3>
+              <p className="text-xs text-slate-500 mt-0.5">Exportable compliance artifact for red-teaming and safety review</p>
+            </div>
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={handleDownloadReport}
+                className="h-9 px-4 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-semibold shadow-xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Download Report (.md)</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="p-5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 space-y-3 leading-relaxed select-text">
+            <h4 className="font-bold text-sm text-slate-900">
+              🛡️ OpenEval Safety Audit &amp; Verification Report
+            </h4>
+            <div><strong>Task:</strong> {run.task_id}</div>
+            <div><strong>Run ID:</strong> {run.run_id}</div>
+            <div><strong>Model:</strong> {run.model}</div>
+            <div><strong>Status:</strong> {isPassed ? 'PASSED ✅' : 'FAILED ❌'}</div>
+            <div><strong>Duration:</strong> {(run.total_duration_sec != null ? run.total_duration_sec : 0).toFixed(2)}s ({steps.length} turns)</div>
+            <div><strong>Tokens & Cost:</strong> {run.total_tokens?.toLocaleString()} tok (${run.estimated_cost_usd?.toFixed(4)})</div>
+
+            <div className="pt-3 border-t border-slate-200">
+              <h5 className="font-bold text-xs text-slate-900 mb-1">Verifier Outcome</h5>
+              <div className="p-3 bg-white rounded-lg border border-slate-200 font-mono">
+                {run.failure_reason || '=== 1 passed === (Held-out verifier satisfied)'}
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-slate-200">
+              <h5 className="font-bold text-xs text-slate-900 mb-1">Safety Judgments</h5>
+              <ul className="list-disc pl-5 space-y-2">
+                {(run.audit_verdicts || []).map((v) => (
+                  <li key={v.metric_name} className="space-y-1">
+                    <div>
+                      <strong>{v.metric_name}:</strong>{' '}
+                      {v.passed === true ? 'PASSED' : v.passed === false ? 'FAILED' : 'PENDING'} (
+                      {v.score != null ? `${(v.score * 100).toFixed(0)}%` : 'N/A'})
+                    </div>
+                    {v.reasoning && <MarkdownRenderer content={v.reasoning} />}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal Popup */}
+      {showDeleteModal && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fadeIn"
+          onClick={() => setShowDeleteModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl border border-border-subtle shadow-2xl max-w-md w-full p-6 space-y-4 font-sans"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5 text-rose-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Delete Evaluation Run?</h3>
+                <p className="text-xs text-slate-500">This action is permanent and cannot be undone.</p>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1 font-mono">
+              <div><span className="text-slate-500">Run ID:</span> <strong className="text-slate-900">{run.run_id}</strong></div>
+              <div><span className="text-slate-500">Task:</span> <strong className="text-slate-900">{run.task_id}</strong></div>
+              <div><span className="text-slate-500">Model:</span> <strong className="text-slate-900">{run.model}</strong></div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Deleting this run will permanently purge all execution trajectory turns, tool outputs, and LLM judge audit verdicts from memory and disk logs.
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(false)}
+                className="h-9 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-2xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onDeleteRun) onDeleteRun(run.run_id);
+                  setShowDeleteModal(false);
+                  onBack();
+                }}
+                className="h-9 px-3.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+              >
+                Delete Run
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

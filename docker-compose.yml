@@ -1,0 +1,66 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: openeval-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-openeval}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-openeval}
+      POSTGRES_DB: ${POSTGRES_DB:-openeval}
+    ports:
+      - "${POSTGRES_PORT:-127.0.0.1:5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: openeval-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-127.0.0.1:6379}:6379"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENCODE_API_KEY=${OPENCODE_API_KEY:-}
+      - OPENCODE_BASE_URL=${OPENCODE_BASE_URL:-}
+      - OPENEVAL_WATCHER_USE_LLM=${OPENEVAL_WATCHER_USE_LLM:-1}
+      - WATCHER_STORAGE_DIR=/data/watcher
+      - WATCHER_WEBHOOK_URL=${WATCHER_WEBHOOK_URL:-}
+      - OPENEVAL_API_KEY=${OPENEVAL_API_KEY:-}
+      - DATABASE_URL=${DOCKER_DATABASE_URL:-postgresql+psycopg://openeval:openeval@postgres:5432/openeval}
+      - REDIS_URL=${DOCKER_REDIS_URL:-redis://redis:6379/0}
+    volumes:
+      - watcher-data:/data/watcher
+      - ./tasks:/app/tasks:ro
+      - ./server:/app/server:ro
+      - ./engine:/app/engine:ro
+      - ./schemas:/app/schemas:ro
+      - ./fixtures:/app/fixtures:ro
+    command: ["uv", "run", "uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "8000"]
+    depends_on:
+      - postgres
+      - redis
+
+  ui:
+    image: node:20-alpine
+    working_dir: /ui
+    volumes:
+      - ./ui:/ui
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_PROXY=http://api:8000
+    command: ["sh", "-c", "npm install && npm run dev -- --host 0.0.0.0 --port 5173"]
+    depends_on:
+      - api
+
+volumes:
+  watcher-data:
+  pgdata:

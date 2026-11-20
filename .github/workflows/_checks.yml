@@ -1,0 +1,146 @@
+name: Checks
+
+on:
+  workflow_call:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: openeval
+          POSTGRES_PASSWORD: openeval
+          POSTGRES_DB: openeval_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql+psycopg://openeval:openeval@localhost:5432/openeval_test
+      OPENEVAL_AUTH_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Lint with ruff
+        run: uv run ruff check .
+
+      - name: Check formatting with ruff
+        run: uv run ruff format --check .
+
+      - name: Type check with pyright
+        run: uv run pyright
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build UI bundle
+        run: |
+          cd ui
+          npm install
+          npm test
+          npm run build
+
+      - name: Run database migrations
+        run: uv run alembic upgrade head
+
+      - name: Pytest (not slow)
+        run: uv run pytest tests/ -m "not slow" -q --tb=short
+
+      - name: Hermetic eval smoke
+        run: uv run python scripts/hermetic_eval_smoke.py
+
+      - name: Gate demo artifact
+        run: bash scripts/record_gate_demo.sh
+
+      - name: Watcher evaluate smoke (TestClient)
+        run: |
+          uv run python - <<'PY'
+          from fastapi.testclient import TestClient
+          from server.app import app
+          from server.watcher_store import get_watcher_store
+
+          client = TestClient(app)
+          get_watcher_store().reset_policy_to_defaults()
+
+          bad = client.post(
+              "/api/v1/watcher/evaluate",
+              json={
+                  "tool_name": "bash",
+                  "arguments": {"cmd": "sudo rm -rf /"},
+                  "agent_id": "ci",
+                  "session_id": "ci-smoke-1",
+              },
+          )
+          assert bad.status_code == 200, bad.text
+          body = bad.json()
+          assert body["decision"] in ("deny", "escalate"), body
+
+          good = client.post(
+              "/api/v1/watcher/evaluate",
+              json={
+                  "tool_name": "bash",
+                  "arguments": {"cmd": "echo hello"},
+                  "agent_id": "ci",
+                  "session_id": "ci-smoke-2",
+              },
+          )
+          assert good.status_code == 200, good.text
+          assert good.json()["decision"] == "allow", good.json()
+
+          sessions = client.get("/api/v1/watcher/sessions")
+          assert sessions.status_code == 200
+          ids = {s.get("session_id") for s in sessions.json()}
+          assert "ci-smoke-1" in ids, ids
+          print("CI watcher smoke OK")
+          PY
+
+  docker-security-scan:
+    name: Docker Build & Trivy DevSecOps Gate
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build local image for vulnerability scanning
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          load: true
+          tags: openeval-studio:local
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run Trivy Vulnerability Scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: openeval-studio:local
+          format: "table"
+          exit-code: "1"
+          severity: "CRITICAL"
+          ignore-unfixed: true
+          skip-dirs: "app/.venv/lib/python3.12/site-packages/inspect_evals/agentharm/benchmark,app/.venv/lib/python3.12/site-packages/inspect_evals/gdm_self_proliferation/data"
+          skip-files: "app/.venv/lib/python3.12/site-packages/inspect_evals/agentharm/benchmark/benign_grading_functions.py,app/.venv/lib/python3.12/site-packages/inspect_evals/agentharm/benchmark/benign_tools/content/api_keys.json,app/.venv/lib/python3.12/site-packages/inspect_evals/agentharm/benchmark/harmful_grading_functions.py,app/.venv/lib/python3.12/site-packages/inspect_evals/agentharm/benchmark/harmful_tools/content/api_keys.json,app/.venv/lib/python3.12/site-packages/inspect_evals/gdm_self_proliferation/data/sp02/keyfile_template.json"

@@ -1,0 +1,88 @@
+{
+    "meta": {
+        "description": "Phase 2.2 Testcase 1",
+        "queries": 10
+    },
+    "events": [
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 0,
+            "k": 2,
+            "source": 1956,
+            "target": 1923,
+            "overlap_threshold": 34
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 1,
+            "k": 5,
+            "source": 2049,
+            "target": 2136,
+            "overlap_threshold": 27
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 2,
+            "k": 6,
+            "source": 1808,
+            "target": 1334,
+            "overlap_threshold": 69
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 3,
+            "k": 5,
+            "source": 411,
+            "target": 902,
+            "overlap_threshold": 26
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 4,
+            "k": 7,
+            "source": 2614,
+            "target": 164,
+            "overlap_threshold": 52
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 5,
+            "k": 3,
+            "source": 2069,
+            "target": 181,
+            "overlap_threshold": 68
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 6,
+            "k": 6,
+            "source": 1767,
+            "target": 699,
+            "overlap_threshold": 47
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 7,
+            "k": 6,
+            "source": 333,
+            "target": 1090,
+            "overlap_threshold": 41
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 8,
+            "k": 7,
+            "source": 2325,
+            "target": 873,
+            "overlap_threshold": 69
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 9,
+            "k": 7,
+            "source": 1617,
+            "target": 585,
+            "overlap_threshold": 57
+        }
+    ]
+}

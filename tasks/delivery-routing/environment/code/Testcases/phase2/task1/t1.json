@@ -1,0 +1,26 @@
+{
+    "meta": {
+        "description": "Phase 2.1 Testcase 1",
+        "queries": 2
+    },
+    "events": [
+        {
+            "type": "k_shortest_paths",
+            "id": 0,
+            "k": 2,
+            "source": 61,
+            "target": 60,
+            "overlap_threshold": 34,
+            "mode": "distance"
+        },
+        {
+            "type": "k_shortest_paths",
+            "id": 1,
+            "k": 5,
+            "source": 64,
+            "target": 66,
+            "overlap_threshold": 27,
+            "mode": "distance"
+        }
+    ]
+} 

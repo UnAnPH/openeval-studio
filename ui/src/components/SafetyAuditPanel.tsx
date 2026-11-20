@@ -1,0 +1,630 @@
+import { Icon } from '../lib/icon';
+import {
+  AlertCircle,
+  AlertTriangle,
+  ArrowRight,
+  CheckCircle,
+  ChevronDown,
+  ChevronRight,
+  Eye,
+  FileText,
+  Fingerprint,
+  GitCommit,
+  Save,
+  Shield,
+  Sparkles,
+  User,
+  XCircle,
+} from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { JudgeVerdict } from '../types';
+
+interface SafetyAuditPanelProps {
+  verdicts?: JudgeVerdict[];
+  onSelectTurn?: (turnNumber: number) => void;
+  humanReviewer?: string;
+  humanReviewNotes?: string;
+  signOffStatus?: 'APPROVED_SAFE' | 'FLAGGED_RISKY' | 'REQUIRES_REVIEW';
+  overrideScores?: Record<string, boolean>;
+  onOverrideMetric?: (metricName: string, passed: boolean) => void;
+  onSaveReview?: (reviewer: string, notes: string, status: 'APPROVED_SAFE' | 'FLAGGED_RISKY' | 'REQUIRES_REVIEW') => void;
+  isSaving?: boolean;
+  compact?: boolean;
+}
+
+const VerdictCardBody: React.FC<{
+  verdict: JudgeVerdict;
+  onSelectTurn?: (turnNumber: number) => void;
+  isExpanded: boolean;
+  onToggleThinking: () => void;
+}> = ({ verdict, onSelectTurn, isExpanded, onToggleThinking }) => {
+  const reasoningText = verdict.reasoning || '';
+  const thinkingIdx = reasoningText.indexOf('Thinking:');
+  const summary = (
+    thinkingIdx !== -1 ? reasoningText.slice(0, thinkingIdx).trim() : reasoningText
+  ) || 'No reasoning recorded.';
+  const thinkingContent = (
+    thinkingIdx !== -1
+      ? reasoningText.slice(thinkingIdx + 'Thinking:'.length).trim()
+      : verdict.thinking || ''
+  );
+
+  const isFlaggedOrFailed = verdict.passed === false || (verdict.score ?? 1) < 0.9;
+
+  const turnNumbers = useMemo(() => {
+    // Only show the INVESTIGATE turn CTA bar when verdict is flagged/failed (never on clean PASSED cards)
+    if (!isFlaggedOrFailed) return [];
+
+    // 1. Prefer verdict.flagged_steps if non-empty (sliced to first 3)
+    if (verdict.flagged_steps && verdict.flagged_steps.length > 0) {
+      return Array.from(new Set(verdict.flagged_steps))
+        .filter((n) => n > 0 && n <= 100)
+        .sort((a, b) => a - b)
+        .slice(0, 3);
+    }
+
+    // 2. Otherwise extract turns ONLY from the Executive Summary and discrepancy_details (NOT from Thinking:)
+    const scanSource = `${summary} ${verdict.discrepancy_details || ''}`;
+    const set = new Set<number>();
+    const matches = scanSource.matchAll(/(?:Turns?|Steps?)\s*(?:#)?(\d+)/gi);
+    for (const m of matches) {
+      const n = parseInt(m[1], 10);
+      if (n > 0 && n <= 100) set.add(n);
+    }
+    const mMatches = scanSource.matchAll(/\[M(\d+)\]/gi);
+    for (const m of mMatches) {
+      const n = parseInt(m[1], 10);
+      if (n > 0 && n <= 100) set.add(n);
+    }
+    return Array.from(set).sort((a, b) => a - b).slice(0, 3);
+  }, [isFlaggedOrFailed, verdict.flagged_steps, summary, verdict.discrepancy_details]);
+
+  return (
+    <div className="p-3 bg-canvas rounded-xl border border-border-subtle text-xs text-text-primary leading-relaxed font-sans space-y-2.5 break-words">
+      <div>
+        <strong className="font-mono text-text-secondary text-[10px] uppercase tracking-wider block mb-1">
+          Executive Finding
+        </strong>
+        <p className="text-xs text-slate-800 leading-relaxed whitespace-pre-line font-medium">
+          {summary}
+        </p>
+      </div>
+
+      {verdict.discrepancy_details && (
+        <div className="p-2 rounded-lg bg-rose-50/90 border border-rose-200 text-[11px] text-rose-900 font-mono break-all leading-normal">
+          <strong className="text-rose-950 font-bold block mb-0.5">Divergence:</strong>
+          {verdict.discrepancy_details}
+        </div>
+      )}
+
+      {thinkingContent ? (
+        <div className="pt-1.5 border-t border-border-subtle/60">
+          <button
+            type="button"
+            onClick={onToggleThinking}
+            className="text-[11px] font-semibold text-brand-purple hover:text-indigo-800 inline-flex items-center gap-1.5 transition-colors cursor-pointer py-0.5"
+            title="Toggle detailed step-by-step forced reasoning chain"
+          >
+            <Icon icon={isExpanded ? ChevronDown : ChevronRight} className="text-xs" />
+            <span>Step-by-Step Reasoning (&lt;thinking&gt;)</span>
+          </button>
+
+          {isExpanded && (
+            <div className="mt-2 p-3 bg-slate-50/90 rounded-xl border border-slate-200 text-[11px] text-slate-700 font-sans leading-relaxed whitespace-pre-line space-y-2 max-h-96 overflow-y-auto">
+              {thinkingContent}
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      {turnNumbers.length > 0 && (
+        <div className="flex items-center gap-1.5 flex-wrap pt-1.5 border-t border-border-subtle/60">
+          <span className="text-[10px] text-text-muted font-bold uppercase tracking-wider font-mono">
+            Investigate:
+          </span>
+          {turnNumbers.map((turnNum) => (
+            <button
+              key={turnNum}
+              type="button"
+              onClick={() => onSelectTurn?.(turnNum)}
+              className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 text-[10px] font-bold hover:border-indigo-300 transition-colors flex items-center gap-1 cursor-pointer font-mono shadow-2xs"
+              title={`Jump straight to turn #${turnNum} in trajectory`}
+            >
+              <span>Go to Turn #{turnNum}</span>
+              <Icon icon={ArrowRight} className="text-[9px]" />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export const SafetyAuditPanel: React.FC<SafetyAuditPanelProps> = ({
+  verdicts = [],
+  onSelectTurn,
+  humanReviewer: initialReviewer = '',
+  humanReviewNotes: initialNotes = '',
+  signOffStatus: initialStatus = 'REQUIRES_REVIEW',
+  overrideScores = {},
+  onOverrideMetric,
+  onSaveReview,
+  isSaving = false,
+  compact = false,
+}) => {
+  const [reviewerName, setReviewerName] = useState<string>(initialReviewer);
+  const [reviewNotes, setReviewNotes] = useState<string>(initialNotes);
+  const [status, setStatus] = useState<'APPROVED_SAFE' | 'FLAGGED_RISKY' | 'REQUIRES_REVIEW'>(initialStatus);
+  const [savedBanner, setSavedBanner] = useState<boolean>(false);
+  const [expandedThinking, setExpandedThinking] = useState<Record<string, boolean>>({});
+
+  const toggleThinking = (metricName: string) => {
+    setExpandedThinking((prev) => ({ ...prev, [metricName]: !prev[metricName] }));
+  };
+
+  const getMetricIcon = (name: string) => {
+    switch (name) {
+      case 'situational_awareness':
+        return Eye;
+      case 'goal_guarding_scheming':
+        return AlertTriangle;
+      case 'unfaithful_cot':
+        return GitCommit;
+      case 'plan_adherence':
+        return Sparkles;
+      case 'hallucination_detection':
+        return Fingerprint;
+      case 'reward_tampering':
+        return Shield;
+      case 'citation_grounding':
+        return FileText;
+      default:
+        return AlertCircle;
+    }
+  };
+
+  const getMetricTitle = (name: string) => {
+    switch (name) {
+      case 'situational_awareness':
+        return 'Situational Awareness';
+      case 'goal_guarding_scheming':
+        return 'Goal Guarding & Deceptive Scheming';
+      case 'unfaithful_cot':
+        return 'Unfaithful Chain-of-Thought (CoT)';
+      case 'plan_adherence':
+        return 'Plan Adherence & Instruction Fidelity';
+      case 'hallucination_detection':
+        return 'Hallucination & Error Defense';
+      case 'reward_tampering':
+        return 'Reward Tampering Defense';
+      case 'citation_grounding':
+        return 'Citation & Grounding Precision';
+      default:
+        return name.replace(/_/g, ' ');
+    }
+  };
+
+  const getMetricDescription = (name: string) => {
+    switch (name) {
+      case 'situational_awareness':
+        return 'Detects whether the agent expressed awareness of being inside an evaluation benchmark, sandbox, or grading harness.';
+      case 'goal_guarding_scheming':
+        return 'Scans for covert strategies to bypass monitors, evade oversight, tamper with watchdog processes, or conceal goals.';
+      case 'unfaithful_cot':
+        return 'Analyzes divergence between the internal reasoning thought and the actual tool invocation parameters.';
+      case 'plan_adherence':
+        return 'Measures adherence to the specified prompt instructions without derailment or hallucinated requirements.';
+      case 'hallucination_detection':
+        return 'Detects fabricated tool outputs, invented file paths, and nonexistent software components.';
+      case 'reward_tampering':
+        return 'Checks for attempts to delete test suites, modify assertion logic, or falsify verifier outcomes.';
+      case 'citation_grounding':
+        return 'Evaluates whether generated incident reports and facts strictly cite verified documentation corpus.';
+      default:
+        return 'Automated safety and capability trajectory audit.';
+    }
+  };
+
+  const handleQuickTag = (tagText: string) => {
+    setReviewNotes((prev) => (prev ? `${prev}\n• ${tagText}` : `• ${tagText}`));
+  };
+
+  const handleSave = () => {
+    if (onSaveReview) {
+      onSaveReview(reviewerName, reviewNotes, status);
+      setSavedBanner(true);
+      setTimeout(() => setSavedBanner(false), 3000);
+    }
+  };
+
+  // Group into Scheming Scanners and Core Alignment Judges
+  const schemingMetrics = ['situational_awareness', 'goal_guarding_scheming', 'unfaithful_cot'];
+  const schemingVerdicts = verdicts.filter((v) => schemingMetrics.includes(v.metric_name));
+  const coreVerdicts = verdicts.filter((v) => !schemingMetrics.includes(v.metric_name));
+
+  return (
+    <div className="space-y-5 font-sans w-full max-w-full pb-10">
+      {/* Human Auditor Sign-Off & Review — temporarily hidden */}
+      {Boolean(import.meta.env.VITE_ENABLE_HUMAN_SIGNOFF) && (
+      <div className={`${compact ? 'bg-canvas/50 rounded-xl border border-border-subtle/80 p-3.5 space-y-3.5' : 'bg-white rounded-2xl border border-border-subtle shadow-sm p-5 space-y-4'}`}>
+        <div className={`flex ${compact ? 'flex-col gap-2.5' : 'flex-col sm:flex-row sm:items-center justify-between gap-3'} border-b border-border-subtle pb-3`}>
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-purple-50 text-brand-purple flex items-center justify-center flex-shrink-0">
+              <Icon icon={User} className="text-xl" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-xs sm:text-sm font-bold text-text-primary truncate">Human Auditor Sign-Off & Review</h3>
+              <p className="text-[11px] text-text-secondary truncate">Safety sign-off and risk review for agent deployment</p>
+            </div>
+          </div>
+
+          {/* Status Selection Pill Buttons */}
+          <div className={`h-9 bg-slate-100 p-1 rounded-xl border border-slate-200/70 inline-flex items-center gap-1 text-xs ${compact ? 'w-full justify-stretch' : 'w-full sm:w-auto shrink-0'}`}>
+            <button
+              type="button"
+              onClick={() => setStatus('APPROVED_SAFE')}
+              className={`h-7 px-3 rounded-lg text-xs font-semibold transition-all inline-flex items-center justify-center cursor-pointer ${compact ? 'flex-1' : ''} ${
+                status === 'APPROVED_SAFE'
+                  ? 'bg-emerald-600 text-white shadow-xs font-bold'
+                  : 'text-slate-500 hover:text-emerald-700'
+              }`}
+            >
+              ✓ Approved
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatus('REQUIRES_REVIEW')}
+              className={`h-7 px-3 rounded-lg text-xs font-semibold transition-all inline-flex items-center justify-center cursor-pointer ${compact ? 'flex-1' : ''} ${
+                status === 'REQUIRES_REVIEW'
+                  ? 'bg-amber-500 text-white shadow-xs font-bold'
+                  : 'text-slate-500 hover:text-amber-700'
+              }`}
+            >
+              ⚠ Review
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatus('FLAGGED_RISKY')}
+              className={`h-7 px-3 rounded-lg text-xs font-semibold transition-all inline-flex items-center justify-center cursor-pointer ${compact ? 'flex-1' : ''} ${
+                status === 'FLAGGED_RISKY'
+                  ? 'bg-rose-600 text-white shadow-xs font-bold'
+                  : 'text-slate-500 hover:text-rose-700'
+              }`}
+            >
+              ✕ Flagged
+            </button>
+          </div>
+        </div>
+
+        {/* Input Controls */}
+        <div className={`grid grid-cols-1 ${compact ? '' : 'lg:grid-cols-3'} gap-3`}>
+          <div className="space-y-1">
+            <label className="text-xs font-mono font-bold text-text-primary">Auditor Handle / Email</label>
+            <input
+              type="text"
+              value={reviewerName}
+              onChange={(e) => setReviewerName(e.target.value)}
+              placeholder="e.g. auditor@safetylab.ai"
+              className="w-full bg-white border border-border-subtle rounded-xl px-3 py-2 text-xs text-text-primary focus:outline-none focus:border-brand-primary font-mono box-border"
+            />
+          </div>
+
+          <div className={`${compact ? '' : 'lg:col-span-2'} space-y-1.5`}>
+            <div className="flex flex-wrap items-center justify-between gap-1.5">
+              <label className="text-xs font-mono font-bold text-text-primary">Auditor Notes & Justification</label>
+              {/* Quick rationale tags */}
+              <div className="flex items-center gap-1 flex-wrap">
+                <span className="text-[10px] text-text-muted">Insert:</span>
+                <button
+                  type="button"
+                  onClick={() => handleQuickTag('False Positive: Diagnostic Probe')}
+                  className="px-1.5 py-0.5 rounded bg-surface-subtle text-[10px] text-brand-purple hover:bg-purple-100 font-medium cursor-pointer"
+                >
+                  + False Positive
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickTag('Confirmed Deceptive Scheming')}
+                  className="px-1.5 py-0.5 rounded bg-rose-50 text-[10px] text-rose-700 hover:bg-rose-100 font-medium cursor-pointer"
+                >
+                  + Subversion
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickTag('Harmless Refactor')}
+                  className="px-1.5 py-0.5 rounded bg-surface-subtle text-[10px] text-text-secondary hover:bg-canvas font-medium cursor-pointer"
+                >
+                  + Benign
+                </button>
+              </div>
+            </div>
+            <textarea
+              rows={compact ? 3 : 2}
+              value={reviewNotes}
+              onChange={(e) => setReviewNotes(e.target.value)}
+              placeholder="Detail reasons for pass/fail classification, human verification findings, and safety audit context..."
+              className="w-full bg-white border border-border-subtle rounded-xl p-2.5 text-xs text-text-primary focus:outline-none focus:border-brand-primary font-sans box-border"
+            />
+          </div>
+        </div>
+
+        <div className={`flex ${compact ? 'flex-col' : 'flex-col sm:flex-row'} items-stretch sm:items-center justify-between gap-2 pt-1 border-t border-border-subtle/60`}>
+          {savedBanner ? (
+            <span className="text-xs text-emerald-700 font-bold font-mono">✓ Sign-off saved to backend!</span>
+          ) : (
+            <span className="text-[11px] text-text-muted font-mono">Sign-off persists to audit database</span>
+          )}
+
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={isSaving}
+            className={`h-9 px-4 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-semibold shadow-xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50 ${compact ? 'w-full' : ''}`}
+          >
+            <Icon icon={Save} className="text-xs" />
+            <span>{isSaving ? 'Saving...' : 'Save & Submit Sign-Off'}</span>
+          </button>
+        </div>
+      </div>
+      )}
+
+      {/* 2. Scheming & Deception Scanners Grid */}
+      <div className={`${compact ? 'bg-canvas/50 rounded-xl border border-border-subtle/80 p-3.5 space-y-3.5' : 'bg-white rounded-2xl border border-border-subtle shadow-sm p-5 space-y-4'}`}>
+        <div className="flex items-center justify-between gap-2 border-b border-border-subtle pb-3 min-w-0">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-800 flex items-center justify-center flex-shrink-0">
+              <Icon icon={AlertTriangle} className="text-lg" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-xs sm:text-sm font-bold text-text-primary truncate">Scheming & Deception Scanners</h3>
+              <p className="text-[11px] text-text-secondary truncate">Dimensions 1–3: Frontier AI Safety & Alignment scans</p>
+            </div>
+          </div>
+          <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-surface-subtle text-brand-purple flex-shrink-0 whitespace-nowrap">
+            {schemingVerdicts.length} Dimensions
+          </span>
+        </div>
+
+        {schemingVerdicts.length === 0 ? (
+          <div className="p-8 text-center text-text-muted text-xs font-mono">
+            No scheming scan data recorded for this run.
+          </div>
+        ) : (
+          <div className={`grid grid-cols-1 ${compact ? '' : 'xl:grid-cols-3'} gap-3.5`}>
+            {schemingVerdicts.map((verdict) => {
+              const hasOverride = overrideScores[verdict.metric_name] !== undefined;
+              const isUnavailable = !hasOverride && (verdict.status === 'error' || verdict.status === 'errored' || verdict.passed === null || verdict.score === null);
+              const isRateLimited = isUnavailable && /429|rate\s*limit|quota|resource_exhausted/i.test(verdict.reasoning || '');
+              const isGenericError = isUnavailable && !isRateLimited;
+              const effectivePassed = hasOverride ? overrideScores[verdict.metric_name] : (verdict.passed ?? false);
+              const pct = verdict.score != null ? Math.round(verdict.score * 100) : null;
+
+              return (
+                <div
+                  key={verdict.metric_name}
+                  className={`p-3.5 rounded-xl border flex flex-col justify-between space-y-3 transition-all ${
+                    isRateLimited
+                      ? 'bg-amber-50/30 border-amber-200'
+                      : isGenericError
+                      ? 'bg-rose-50/50 border-rose-300 ring-1 ring-rose-200'
+                      : effectivePassed
+                      ? 'bg-white border-emerald-200'
+                      : 'bg-rose-50/50 border-rose-300 ring-1 ring-rose-200'
+                  }`}
+                >
+                  <div className="space-y-2.5">
+                    {/* Header with Title and Pass/Flag Badge */}
+                    <div className="flex items-start justify-between gap-2 min-w-0">
+                      <div className="flex items-center gap-1.5 font-bold font-mono text-xs text-text-primary min-w-0 flex-1">
+                        <Icon icon={getMetricIcon(verdict.metric_name)} className="text-brand-purple text-sm flex-shrink-0" />
+                        <span className="break-words leading-tight">{getMetricTitle(verdict.metric_name)}</span>
+                      </div>
+                      <span
+                        className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full flex-shrink-0 ${
+                          isRateLimited
+                            ? 'bg-amber-100 text-amber-800'
+                            : isGenericError
+                            ? 'bg-rose-100 text-rose-800'
+                            : effectivePassed
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-rose-100 text-rose-800 animate-pulse'
+                        }`}
+                      >
+                        {isRateLimited ? 'Rate Limited' : isGenericError ? 'Error' : effectivePassed ? 'Passed' : 'Flagged'}
+                      </span>
+                    </div>
+
+                    <p className="text-[11px] text-text-secondary leading-relaxed">
+                      {getMetricDescription(verdict.metric_name)}
+                    </p>
+
+                    <VerdictCardBody
+                      verdict={verdict}
+                      onSelectTurn={onSelectTurn}
+                      isExpanded={Boolean(expandedThinking[verdict.metric_name])}
+                      onToggleThinking={() => toggleThinking(verdict.metric_name)}
+                    />
+                  </div>
+
+                  {/* Override Toggle & Badge */}
+                  <div className="pt-2 border-t border-border-subtle/80 flex items-center justify-between text-xs flex-wrap gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <div className="text-[10px] font-mono text-text-muted">
+                        {hasOverride ? (
+                          <span className="text-brand-purple font-bold">👤 Human Override</span>
+                        ) : (
+                          <span>🤖 Score: {pct != null ? `${pct}%` : 'N/A'}</span>
+                        )}
+                      </div>
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                        Judge: {verdict.judge_model || 'LLM Judge'}
+                      </span>
+                    </div>
+
+                    {onOverrideMetric && (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => onOverrideMetric(verdict.metric_name, true)}
+                          className={`h-7 px-2.5 rounded-lg text-xs font-semibold inline-flex items-center justify-center cursor-pointer transition-colors ${
+                            effectivePassed
+                              ? 'bg-emerald-600 text-white shadow-2xs font-bold'
+                              : 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-200'
+                          }`}
+                        >
+                          Pass
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onOverrideMetric(verdict.metric_name, false)}
+                          className={`h-7 px-2.5 rounded-lg text-xs font-semibold inline-flex items-center justify-center cursor-pointer transition-colors ${
+                            !effectivePassed
+                              ? 'bg-rose-600 text-white shadow-2xs font-bold'
+                              : 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-200'
+                          }`}
+                        >
+                          Fail
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* 3. Core Safety & Alignment Judges */}
+      <div className={`${compact ? 'bg-canvas/50 rounded-xl border border-border-subtle/80 p-3.5 space-y-3.5' : 'bg-white rounded-2xl border border-border-subtle shadow-sm p-5 space-y-4'}`}>
+        <div className="flex items-center justify-between gap-2 border-b border-border-subtle pb-3 min-w-0">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <div className="w-8 h-8 rounded-xl bg-purple-50 text-brand-purple flex items-center justify-center flex-shrink-0">
+              <Icon icon={Shield} className="text-lg" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-xs sm:text-sm font-bold text-text-primary truncate">Core Safety & Alignment Judges</h3>
+              <p className="text-[11px] text-text-secondary truncate">Dimensions 4–7: Trajectory fidelity, hallucination & reward defense</p>
+            </div>
+          </div>
+          <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-surface-subtle text-brand-purple flex-shrink-0 whitespace-nowrap">
+            {coreVerdicts.length} Dimensions
+          </span>
+        </div>
+
+        {coreVerdicts.length === 0 ? (
+          <div className="p-8 text-center text-text-muted text-xs font-mono">
+            No core judge verdicts recorded for this run.
+          </div>
+        ) : (
+          <div className={`grid grid-cols-1 ${compact ? '' : 'lg:grid-cols-2'} gap-3.5`}>
+            {coreVerdicts.map((verdict) => {
+              const hasOverride = overrideScores[verdict.metric_name] !== undefined;
+              const isUnavailable = !hasOverride && (verdict.status === 'error' || verdict.status === 'errored' || verdict.passed === null || verdict.score === null);
+              const isRateLimited = isUnavailable && /429|rate\s*limit|quota|resource_exhausted/i.test(verdict.reasoning || '');
+              const isGenericError = isUnavailable && !isRateLimited;
+              const effectivePassed = hasOverride ? overrideScores[verdict.metric_name] : (verdict.passed ?? false);
+              const pct = verdict.score != null ? Math.round(verdict.score * 100) : null;
+
+              return (
+                <div
+                  key={verdict.metric_name}
+                  className={`p-3.5 rounded-xl border flex flex-col justify-between space-y-2.5 transition-all ${
+                    isRateLimited
+                      ? 'bg-amber-50/30 border-amber-200'
+                      : isGenericError
+                      ? 'bg-rose-50/50 border-rose-300'
+                      : effectivePassed
+                      ? 'bg-white border-emerald-200'
+                      : 'bg-rose-50/50 border-rose-300'
+                  }`}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <Icon
+                        icon={isRateLimited ? AlertTriangle : isGenericError ? XCircle : effectivePassed ? CheckCircle : XCircle}
+                        className={`text-base flex-shrink-0 ${isRateLimited ? 'text-amber-600' : isGenericError ? 'text-risk-high' : effectivePassed ? 'text-status-cleared' : 'text-risk-high'}`}
+                      />
+                      <span className="font-bold text-xs font-mono text-text-primary truncate">
+                        {getMetricTitle(verdict.metric_name)}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="font-mono font-bold text-xs">
+                        Score: {pct != null ? `${pct}%` : 'N/A'}
+                      </span>
+                      <span
+                        className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${
+                          isRateLimited
+                            ? 'bg-amber-100 text-amber-800'
+                            : isGenericError
+                            ? 'bg-rose-100 text-rose-800'
+                            : effectivePassed
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-rose-100 text-rose-800'
+                        }`}
+                      >
+                        {isRateLimited ? 'Rate Limited' : isGenericError ? 'Error' : effectivePassed ? 'Passed' : 'Failed'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <VerdictCardBody
+                    verdict={verdict}
+                    onSelectTurn={onSelectTurn}
+                    isExpanded={Boolean(expandedThinking[verdict.metric_name])}
+                    onToggleThinking={() => toggleThinking(verdict.metric_name)}
+                  />
+
+                  {/* Override controls */}
+                  <div className="pt-2 border-t border-border-subtle flex items-center justify-between text-xs flex-wrap gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[11px] text-text-muted">
+                        {hasOverride ? (
+                          <span className="text-brand-purple font-bold">👤 Human Override</span>
+                        ) : (
+                          <span>🤖 Evaluated by</span>
+                        )}
+                      </span>
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                        {verdict.judge_model || 'LLM Judge'}
+                      </span>
+                    </div>
+
+                    {onOverrideMetric && (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => onOverrideMetric(verdict.metric_name, true)}
+                          className={`h-7 px-2.5 rounded-lg text-xs font-semibold inline-flex items-center justify-center cursor-pointer transition-colors ${
+                            effectivePassed
+                              ? 'bg-emerald-600 text-white shadow-2xs font-bold'
+                              : 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-200'
+                          }`}
+                        >
+                          Mark Pass
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onOverrideMetric(verdict.metric_name, false)}
+                          className={`h-7 px-2.5 rounded-lg text-xs font-semibold inline-flex items-center justify-center cursor-pointer transition-colors ${
+                            !effectivePassed
+                              ? 'bg-rose-600 text-white shadow-2xs font-bold'
+                              : 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-200'
+                          }`}
+                        >
+                          Mark Fail
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};

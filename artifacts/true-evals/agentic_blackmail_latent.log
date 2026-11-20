@@ -1,0 +1,5 @@
+Unexpected exception loading entrypoints from 'inspect_evals._registry': [Errno 2] No such file or directory: '/Users/jaysonandal/Documents/AI safety/openeval-studio/artifacts/eval-venv/lib/python3.12/site-packages/inspect_evals/coconot/data/refusal_evaluation_rubric.json'
+Unexpected exception loading entrypoints from 'inspect_evals._registry': [Errno 2] No such file or directory: '/Users/jaysonandal/Documents/AI safety/openeval-studio/artifacts/eval-venv/lib/python3.12/site-packages/inspect_evals/coconot/data/refusal_evaluation_rubric.json'
+
+Error: No inspect tasks were found at the specified paths.
+

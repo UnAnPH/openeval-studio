@@ -1,0 +1,1516 @@
+{
+    "meta": {
+        "id": "./task1/t1.json"
+    },
+    "events": [
+        {
+            "type": "shortest_path",
+            "source": 57560,
+            "target": 16299,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [
+                    39857,
+                    52757
+                ],
+                "forbidden_road_types": [
+                    "secondary",
+                    "local"
+                ]
+            },
+            "id": 0
+        },
+        {
+            "type": "shortest_path",
+            "source": 30789,
+            "target": 30781,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [],
+                "forbidden_road_types": []
+            },
+            "id": 1
+        },
+        {
+            "type": "modify_edge",
+            "edge_id": 86649,
+            "patch": {
+                "length": 31.246
+            },
+            "id": 2
+        },
+        {
+            "type": "modify_edge",
+            "edge_id": 51205,
+            "patch": {
+                "speed_profile": [
+                    9.055894022928412,
+                    9.801809603361002,
+                    9.320997371913863,
+                    10.593814900249683,
+                    8.547470462243437,
+                    9.502602523235435,
+                    9.96311610168629,
+                    13.293384873495755,
+                    8.354334440787108,
+                    8.873218205014222,
+                    9.868949787072845,
+                    9.060680091491635,
+                    9.898235418166804,
+                    9.97178198275701,
+                    8.414721721549226,
+                    9.449719206011181,
+                    9.919109015937957,
+                    8.618848376344587,
+                    8.379047903513506,
+                    12.35978242613447,
+                    8.143204459000517,
+                    8.315968887793687,
+                    10.441407098113551,
+                    9.860458789284255,
+                    10.10653594950731,
+                    10.962250188858242,
+                    9.229973327406794,
+                    9.675668628694888,
+                    11.529314220771019,
+                    9.615208443793946,
+                    8.62793136044862,
+                    8.731367562228353,
+                    10.488572533163827,
+                    10.312948368107687,
+                    8.663376772843193,
+                    8.775527110773314,
+                    10.330300905331177,
+                    9.513360774916658,
+                    9.744318329314781,
+                    9.35448927126169,
+                    9.917978892156592,
+                    8.75541924679898,
+                    8.331323432163023,
+                    12.798202413211081,
+                    7.794724451347769,
+                    9.10747037948445,
+                    9.514001809607922,
+                    8.811786219931268,
+                    8.86024064613144,
+                    8.984820472947183,
+                    13.671993690418201,
+                    8.427365366727733,
+                    10.417866316670786,
+                    7.987603904608839,
+                    12.075598367059687,
+                    9.6768010591156,
+                    11.671538041698028,
+                    9.660774570507083,
+                    8.862630169177237,
+                    9.740682464366126,
+                    7.938092123540728,
+                    9.745254006727809,
+                    13.20863985058838,
+                    8.186281604820376,
+                    10.397431129580621,
+                    8.405361393796987,
+                    9.57487171330955,
+                    8.818378946624115,
+                    10.150293511392459,
+                    9.814514008867853,
+                    9.957746637646444,
+                    9.261375862170961,
+                    13.201229060483435,
+                    9.410650549463758,
+                    11.575053272367255,
+                    11.326792210675722,
+                    7.925435749112767,
+                    8.187266521956856,
+                    8.354063337956472,
+                    9.846337989304313,
+                    8.106439852707974,
+                    10.621660937821815,
+                    8.275772223653858,
+                    10.528607921849662,
+                    8.015809766355586,
+                    12.952918097561918,
+                    9.970157863078981,
+                    9.007415644656097,
+                    13.03517376174598,
+                    8.51779267154331,
+                    9.50869817014329,
+                    8.389942709013187,
+                    8.008785221936288,
+                    8.836224818734683,
+                    9.030205857971866,
+                    9.549563692194598
+                ]
+            },
+            "id": 3
+        },
+        {
+            "type": "remove_edge",
+            "edge_id": 1942,
+            "id": 4
+        },
+        {
+            "type": "shortest_path",
+            "source": 34125,
+            "target": 34126,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [],
+                "forbidden_road_types": []
+            },
+            "id": 5
+        },
+        {
+            "type": "shortest_path",
+            "source": 6405,
+            "target": 31053,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [
+                    44597,
+                    36421
+                ],
+                "forbidden_road_types": [
+                    "tertiary",
+                    "local"
+                ]
+            },
+            "id": 6
+        },
+        {
+            "type": "shortest_path",
+            "source": 57175,
+            "target": 53140,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [],
+                "forbidden_road_types": []
+            },
+            "id": 7
+        },
+        {
+            "type": "shortest_path",
+            "source": 6468,
+            "target": 5794,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [
+                    71482
+                ],
+                "forbidden_road_types": [
+                    "tertiary",
+                    "secondary"
+                ]
+            },
+            "id": 8
+        },
+        {
+            "type": "modify_edge",
+            "edge_id": 6224,
+            "patch": {
+                "speed_profile": [
+                    7.445378512684904,
+                    8.003980566799394,
+                    6.469286283627004,
+                    8.731968458978397,
+                    7.828388479911143,
+                    7.906642386461621,
+                    7.0825511052907695,
+                    8.470735864694483,
+                    6.941870927173639,
+                    8.157625973527255,
+                    7.5175905366006655,
+                    6.855701285542908,
+                    7.40349800335155,
+                    5.488209343080051,
+                    7.044462046164657,
+                    6.95295898256571,
+                    4.772655950447472,
+                    8.047833856768289,
+                    6.011786780887423,
+                    7.586258634962996,
+                    6.565058467482062,
+                    4.717802643840712,
+                    6.1406606059999715,
+                    7.500983134923344,
+                    6.234213188058078,
+                    6.973813309661737,
+                    6.485600710764703,
+                    6.509605376321306,
+                    6.860797501820741,
+                    8.536448621149518,
+                    6.424794253275744,
+                    5.088016009761887,
+                    7.326804100364422,
+                    7.179859405383447,
+                    4.635397976568076,
+                    4.408716615615353,
+                    8.132721493892557,
+                    8.154280663559772,
+                    6.892268378606269,
+                    7.964556252081648,
+                    6.92841781468647,
+                    6.908107378016899,
+                    8.845574246606727,
+                    4.775064375988151,
+                    7.119117802612254,
+                    4.335734264579724,
+                    7.2061131815891635,
+                    6.819485110028139,
+                    5.235127007291904,
+                    7.9685101875774,
+                    5.796510106044322,
+                    6.883258754332984,
+                    6.698479744574902,
+                    6.685186683142795,
+                    6.60834568872257,
+                    7.141949394096174,
+                    6.005323859593905,
+                    6.453673519361321,
+                    4.144057136546975,
+                    7.818024286356726,
+                    4.357334957175347,
+                    4.39140552746013,
+                    7.076812293859497,
+                    4.196744376135527,
+                    3.888593590217303,
+                    4.432784200939257,
+                    7.65085285122349,
+                    7.175304767663711,
+                    6.988625136117125,
+                    7.493936473194088,
+                    4.665490057020195,
+                    6.350989925675463,
+                    6.377859153020386,
+                    6.854032253438868,
+                    3.807895331926438,
+                    4.572059397449297,
+                    4.012617312588595,
+                    7.645800243600869,
+                    8.501866397332094,
+                    4.668888559722633,
+                    4.394714966284414,
+                    4.586942282828536,
+                    7.655179628174029,
+                    8.338221766093978,
+                    6.413363787415193,
+                    8.075220224770414,
+                    7.599610817000774,
+                    4.47353763563349,
+                    4.144360591819744,
+                    7.011879712704391,
+                    9.243669563319312,
+                    7.204730654742687,
+                    7.900454991721347,
+                    8.579248876247357,
+                    5.702244878860018,
+                    7.992064205371369
+                ]
+            },
+            "id": 9
+        },
+        {
+            "type": "remove_edge",
+            "edge_id": 13363,
+            "id": 10
+        },
+        {
+            "type": "shortest_path",
+            "source": 46279,
+            "target": 31058,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [
+                    34671,
+                    5695
+                ],
+                "forbidden_road_types": [
+                    "local",
+                    "secondary"
+                ]
+            },
+            "id": 11
+        },
+        {
+            "type": "modify_edge",
+            "edge_id": 86909,
+            "patch": {
+                "speed_profile": [
+                    16.664744488612317,
+                    18.140996189833942,
+                    18.626215796142187,
+                    16.75966371250839,
+                    14.702252548776299,
+                    18.479877339287953,
+                    18.275428355129772,
+                    17.04563379439579,
+                    16.30912398094106,
+                    17.64107751751186,
+                    9.949862513707377,
+                    16.85836993288127,
+                    15.010427156605228,
+                    12.442943381906648,
+                    17.656597771307105,
+                    18.513891087340106,
+                    11.084705163342148,
+                    14.378599704604023,
+                    14.707651697358626,
+                    16.991602913125195,
+                    10.796354558114302,
+                    18.747924818371416,
+                    14.840988726818882,
+                    13.887940948549343,
+                    14.872902426978825,
+                    14.181308048203025,
+                    9.726960291968823,
+                    17.164617892084213,
+                    14.449489836698168,
+                    15.185229041015823,
+                    15.41390187445803,
+                    15.371224388517092,
+                    15.243199011068771,
+                    16.841061658956942,
+                    16.708846893266763,
+                    16.14175746766042,
+                    17.29622920376713,
+                    17.191850183354035,
+                    18.898976984842026,
+                    15.71210963213745,
+                    17.27670887497581,
+                    14.315937256256822,
+                    11.985831887340225,
+                    13.162803970304363,
+                    16.2587437103506,
+                    15.803699588697704,
+                    16.347150245983386,
+                    17.95194098614795,
+                    15.14592131305674,
+                    17.460745123474396,
+                    16.044851845650403,
+                    18.046034071873887,
+                    17.634534467379947,
+                    17.71819431946564,
+                    13.137590967355036,
+                    16.697890238229633,
+                    17.66462734354729,
+                    9.874700873354037,
+                    14.78481961526904,
+                    12.825442427483427,
+                    14.587662588379153,
+                    17.63629897033194,
+                    12.477926732428362,
+                    15.258309547161232,
+                    16.22694815090117,
+                    17.204536757865657,
+                    9.953422976483942,
+                    15.54746005536728,
+                    16.880261548866223,
+                    17.51102370996579,
+                    15.595996201837886,
+                    15.798722446219525,
+                    12.35549274828488,
+                    17.86389615206029,
+                    14.161818055723753,
+                    12.947326331645838,
+                    12.78310681259126,
+                    12.036608419282619,
+                    12.984544784073025,
+                    15.582767020109193,
+                    16.10337045007592,
+                    16.139836405001937,
+                    14.597538632842502,
+                    14.417445141328745,
+                    16.697863234257305,
+                    18.636514839516227,
+                    16.557311310445115,
+                    18.8566245340572,
+                    17.236900907245424,
+                    17.154191760262893,
+                    17.863661862405564,
+                    14.60382641856301,
+                    13.339009147712014,
+                    15.46748433040978,
+                    13.3128341273358,
+                    17.182795654995985
+                ]
+            },
+            "id": 12
+        },
+        {
+            "type": "modify_edge",
+            "edge_id": 14238,
+            "patch": {
+                "average_time": 19.253
+            },
+            "id": 13
+        },
+        {
+            "type": "remove_edge",
+            "edge_id": 58377,
+            "id": 14
+        },
+        {
+            "type": "shortest_path",
+            "source": 55399,
+            "target": 61675,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [
+                    72603
+                ],
+                "forbidden_road_types": [
+                    "tertiary",
+                    "local"
+                ]
+            },
+            "id": 15
+        },
+        {
+            "type": "shortest_path",
+            "source": 46837,
+            "target": 32724,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [],
+                "forbidden_road_types": []
+            },
+            "id": 16
+        },
+        {
+            "type": "shortest_path",
+            "source": 61231,
+            "target": 27064,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [],
+                "forbidden_road_types": []
+            },
+            "id": 17
+        },
+        {
+            "type": "modify_edge",
+            "edge_id": 32946,
+            "patch": {
+                "length": 192.409
+            },
+            "id": 18
+        },
+        {
+            "type": "shortest_path",
+            "source": 350,
+            "target": 53545,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [
+                    61592,
+                    38175
+                ],
+                "forbidden_road_types": [
+                    "tertiary",
+                    "local"
+                ]
+            },
+            "id": 19
+        },
+        {
+            "type": "shortest_path",
+            "source": 20585,
+            "target": 31439,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [
+                    72350
+                ],
+                "forbidden_road_types": [
+                    "tertiary",
+                    "local"
+                ]
+            },
+            "id": 20
+        },
+        {
+            "type": "shortest_path",
+            "source": 41892,
+            "target": 43822,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [],
+                "forbidden_road_types": []
+            },
+            "id": 21
+        },
+        {
+            "type": "remove_edge",
+            "edge_id": 88416,
+            "id": 22
+        },
+        {
+            "type": "shortest_path",
+            "source": 33118,
+            "target": 33161,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [
+                    34687
+                ],
+                "forbidden_road_types": [
+                    "local",
+                    "tertiary"
+                ]
+            },
+            "id": 23
+        },
+        {
+            "type": "shortest_path",
+            "source": 56982,
+            "target": 56985,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [],
+                "forbidden_road_types": []
+            },
+            "id": 24
+        },
+        {
+            "type": "shortest_path",
+            "source": 37762,
+            "target": 37056,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [
+                    9329,
+                    30595
+                ],
+                "forbidden_road_types": [
+                    "secondary",
+                    "tertiary"
+                ]
+            },
+            "id": 25
+        },
+        {
+            "type": "modify_edge",
+            "edge_id": 79193,
+            "patch": {
+                "speed_profile": [
+                    17.86,
+                    14.36,
+                    19.84,
+                    11.16,
+                    19.0,
+                    11.9,
+                    10.44,
+                    14.36,
+                    15.2,
+                    18.07,
+                    16.87,
+                    19.4,
+                    17.37,
+                    11.97,
+                    14.31,
+                    19.49,
+                    19.21,
+                    16.23,
+                    16.63,
+                    11.25,
+                    19.0,
+                    15.07,
+                    16.67,
+                    13.26,
+                    16.97,
+                    15.54,
+                    11.92,
+                    16.65,
+                    13.79,
+                    17.48,
+                    11.74,
+                    15.69,
+                    14.06,
+                    18.34,
+                    13.04,
+                    12.1,
+                    17.86,
+                    16.07,
+                    13.22,
+                    14.42,
+                    16.76,
+                    15.11,
+                    17.94,
+                    19.6,
+                    17.36,
+                    16.59,
+                    12.84,
+                    16.64,
+                    16.19,
+                    10.93,
+                    19.52,
+                    12.35,
+                    13.1,
+                    18.07,
+                    11.47,
+                    10.46,
+                    19.84,
+                    16.11,
+                    17.68,
+                    14.55,
+                    18.86,
+                    15.76,
+                    17.18,
+                    13.84,
+                    14.0,
+                    11.48,
+                    16.88,
+                    18.93,
+                    18.6,
+                    18.85,
+                    17.78,
+                    12.19,
+                    18.04,
+                    16.96,
+                    14.65,
+                    15.57,
+                    19.17,
+                    11.21,
+                    11.33,
+                    14.65,
+                    15.31,
+                    15.59,
+                    13.17,
+                    17.55,
+                    14.43,
+                    18.15,
+                    18.92,
+                    14.27,
+                    19.07,
+                    14.46,
+                    11.59,
+                    18.61,
+                    14.5,
+                    17.52,
+                    18.4,
+                    12.77
+                ]
+            },
+            "id": 26
+        },
+        {
+            "type": "shortest_path",
+            "source": 27836,
+            "target": 60982,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [
+                    32742,
+                    9880
+                ],
+                "forbidden_road_types": [
+                    "secondary",
+                    "tertiary"
+                ]
+            },
+            "id": 27
+        },
+        {
+            "type": "shortest_path",
+            "source": 5904,
+            "target": 5898,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [
+                    42504
+                ],
+                "forbidden_road_types": [
+                    "tertiary",
+                    "local"
+                ]
+            },
+            "id": 28
+        },
+        {
+            "type": "remove_edge",
+            "edge_id": 55987,
+            "id": 29
+        },
+        {
+            "type": "shortest_path",
+            "source": 42929,
+            "target": 5588,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [],
+                "forbidden_road_types": []
+            },
+            "id": 30
+        },
+        {
+            "type": "shortest_path",
+            "source": 9359,
+            "target": 7816,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [
+                    40319
+                ],
+                "forbidden_road_types": [
+                    "local",
+                    "secondary"
+                ]
+            },
+            "id": 31
+        },
+        {
+            "type": "modify_edge",
+            "edge_id": 64653,
+            "patch": {
+                "average_time": 27.122
+            },
+            "id": 32
+        },
+        {
+            "type": "modify_edge",
+            "edge_id": 79561,
+            "patch": {
+                "length": 432.149
+            },
+            "id": 33
+        },
+        {
+            "type": "shortest_path",
+            "source": 72955,
+            "target": 32582,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [
+                    30982
+                ],
+                "forbidden_road_types": [
+                    "tertiary",
+                    "secondary"
+                ]
+            },
+            "id": 34
+        },
+        {
+            "type": "shortest_path",
+            "source": 31058,
+            "target": 46279,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [],
+                "forbidden_road_types": []
+            },
+            "id": 35
+        },
+        {
+            "type": "shortest_path",
+            "source": 243,
+            "target": 28111,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [
+                    61993
+                ],
+                "forbidden_road_types": [
+                    "secondary",
+                    "tertiary"
+                ]
+            },
+            "id": 36
+        },
+        {
+            "type": "shortest_path",
+            "source": 36042,
+            "target": 36047,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [],
+                "forbidden_road_types": []
+            },
+            "id": 37
+        },
+        {
+            "type": "shortest_path",
+            "source": 34132,
+            "target": 34134,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [],
+                "forbidden_road_types": []
+            },
+            "id": 38
+        },
+        {
+            "type": "remove_edge",
+            "edge_id": 71284,
+            "id": 39
+        },
+        {
+            "type": "shortest_path",
+            "source": 32724,
+            "target": 46837,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [],
+                "forbidden_road_types": []
+            },
+            "id": 40
+        },
+        {
+            "type": "remove_edge",
+            "edge_id": 60638,
+            "id": 41
+        },
+        {
+            "type": "shortest_path",
+            "source": 43823,
+            "target": 53823,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [
+                    25203,
+                    9116
+                ],
+                "forbidden_road_types": [
+                    "tertiary",
+                    "local"
+                ]
+            },
+            "id": 42
+        },
+        {
+            "type": "shortest_path",
+            "source": 56978,
+            "target": 56977,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [],
+                "forbidden_road_types": []
+            },
+            "id": 43
+        },
+        {
+            "type": "remove_edge",
+            "edge_id": 59028,
+            "id": 44
+        },
+        {
+            "type": "modify_edge",
+            "edge_id": 61332,
+            "patch": {
+                "length": 112.239
+            },
+            "id": 45
+        },
+        {
+            "type": "shortest_path",
+            "source": 58867,
+            "target": 20551,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [],
+                "forbidden_road_types": []
+            },
+            "id": 46
+        },
+        {
+            "type": "shortest_path",
+            "source": 27343,
+            "target": 14108,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [
+                    61694
+                ],
+                "forbidden_road_types": [
+                    "tertiary",
+                    "local"
+                ]
+            },
+            "id": 47
+        },
+        {
+            "type": "shortest_path",
+            "source": 36500,
+            "target": 36497,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [],
+                "forbidden_road_types": []
+            },
+            "id": 48
+        },
+        {
+            "type": "shortest_path",
+            "source": 46228,
+            "target": 72143,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [
+                    36585
+                ],
+                "forbidden_road_types": [
+                    "secondary",
+                    "local"
+                ]
+            },
+            "id": 49
+        },
+        {
+            "type": "shortest_path",
+            "source": 47978,
+            "target": 33174,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [],
+                "forbidden_road_types": []
+            },
+            "id": 50
+        },
+        {
+            "type": "shortest_path",
+            "source": 61090,
+            "target": 6468,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [
+                    66237
+                ],
+                "forbidden_road_types": [
+                    "local",
+                    "tertiary"
+                ]
+            },
+            "id": 51
+        },
+        {
+            "type": "shortest_path",
+            "source": 27823,
+            "target": 60981,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [
+                    24931
+                ],
+                "forbidden_road_types": [
+                    "local",
+                    "secondary"
+                ]
+            },
+            "id": 52
+        },
+        {
+            "type": "shortest_path",
+            "source": 34567,
+            "target": 34568,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [
+                    23405,
+                    34795
+                ],
+                "forbidden_road_types": [
+                    "tertiary",
+                    "local"
+                ]
+            },
+            "id": 53
+        },
+        {
+            "type": "modify_edge",
+            "edge_id": 5207,
+            "patch": {
+                "average_time": 8.398
+            },
+            "id": 54
+        },
+        {
+            "type": "shortest_path",
+            "source": 47084,
+            "target": 5622,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [],
+                "forbidden_road_types": []
+            },
+            "id": 55
+        },
+        {
+            "type": "shortest_path",
+            "source": 55723,
+            "target": 15043,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [
+                    19528
+                ],
+                "forbidden_road_types": [
+                    "secondary",
+                    "tertiary"
+                ]
+            },
+            "id": 56
+        },
+        {
+            "type": "shortest_path",
+            "source": 72443,
+            "target": 1775,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [],
+                "forbidden_road_types": []
+            },
+            "id": 57
+        },
+        {
+            "type": "shortest_path",
+            "source": 33162,
+            "target": 47978,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [],
+                "forbidden_road_types": []
+            },
+            "id": 58
+        },
+        {
+            "type": "shortest_path",
+            "source": 5901,
+            "target": 5917,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [
+                    9358,
+                    22431
+                ],
+                "forbidden_road_types": [
+                    "local",
+                    "tertiary"
+                ]
+            },
+            "id": 59
+        },
+        {
+            "type": "shortest_path",
+            "source": 27064,
+            "target": 47482,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [
+                    21465
+                ],
+                "forbidden_road_types": [
+                    "secondary",
+                    "tertiary"
+                ]
+            },
+            "id": 60
+        },
+        {
+            "type": "shortest_path",
+            "source": 709,
+            "target": 305,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [],
+                "forbidden_road_types": []
+            },
+            "id": 61
+        },
+        {
+            "type": "shortest_path",
+            "source": 58867,
+            "target": 20551,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [],
+                "forbidden_road_types": []
+            },
+            "id": 62
+        },
+        {
+            "type": "shortest_path",
+            "source": 58867,
+            "target": 36627,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [
+                    13356
+                ],
+                "forbidden_road_types": [
+                    "local",
+                    "secondary"
+                ]
+            },
+            "id": 63
+        },
+        {
+            "type": "shortest_path",
+            "source": 34046,
+            "target": 34585,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [],
+                "forbidden_road_types": []
+            },
+            "id": 64
+        },
+        {
+            "type": "shortest_path",
+            "source": 56977,
+            "target": 56982,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [],
+                "forbidden_road_types": []
+            },
+            "id": 65
+        },
+        {
+            "type": "shortest_path",
+            "source": 14109,
+            "target": 1364,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [],
+                "forbidden_road_types": []
+            },
+            "id": 66
+        },
+        {
+            "type": "modify_edge",
+            "edge_id": 46508,
+            "patch": {
+                "speed_profile": [
+                    13.71,
+                    15.06,
+                    13.41,
+                    18.5,
+                    18.22,
+                    11.06,
+                    19.61,
+                    16.36,
+                    18.29,
+                    17.07,
+                    14.35,
+                    17.34,
+                    19.65,
+                    12.7,
+                    18.08,
+                    15.38,
+                    14.83,
+                    14.36,
+                    17.31,
+                    12.68,
+                    18.52,
+                    18.31,
+                    10.87,
+                    18.82,
+                    12.44,
+                    14.65,
+                    16.1,
+                    13.79,
+                    10.29,
+                    18.51,
+                    11.82,
+                    12.12,
+                    17.98,
+                    13.4,
+                    18.8,
+                    17.01,
+                    12.76,
+                    10.1,
+                    19.48,
+                    10.86,
+                    17.2,
+                    14.89,
+                    17.58,
+                    16.91,
+                    16.46,
+                    14.91,
+                    17.93,
+                    10.93,
+                    12.22,
+                    16.92,
+                    13.06,
+                    15.82,
+                    14.73,
+                    15.31,
+                    14.26,
+                    17.46,
+                    13.31,
+                    17.03,
+                    12.71,
+                    12.51,
+                    11.21,
+                    11.93,
+                    11.2,
+                    15.36,
+                    17.62,
+                    11.85,
+                    12.16,
+                    14.84,
+                    17.25,
+                    19.77,
+                    15.25,
+                    12.83,
+                    11.01,
+                    11.94,
+                    12.27,
+                    11.79,
+                    10.14,
+                    15.34,
+                    12.74,
+                    19.74,
+                    15.53,
+                    16.97,
+                    11.26,
+                    18.68,
+                    14.91,
+                    18.73,
+                    15.74,
+                    14.69,
+                    14.4,
+                    11.84,
+                    10.51,
+                    19.41,
+                    14.78,
+                    18.22,
+                    14.01,
+                    10.74
+                ]
+            },
+            "id": 67
+        },
+        {
+            "type": "modify_edge",
+            "edge_id": 89781,
+            "patch": {
+                "average_time": 12.201
+            },
+            "id": 68
+        },
+        {
+            "type": "shortest_path",
+            "source": 705,
+            "target": 23680,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [
+                    9287,
+                    67391
+                ],
+                "forbidden_road_types": [
+                    "tertiary",
+                    "secondary"
+                ]
+            },
+            "id": 69
+        },
+        {
+            "type": "shortest_path",
+            "source": 30792,
+            "target": 24028,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [],
+                "forbidden_road_types": []
+            },
+            "id": 70
+        },
+        {
+            "type": "shortest_path",
+            "source": 36043,
+            "target": 72653,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [
+                    46898
+                ],
+                "forbidden_road_types": [
+                    "tertiary",
+                    "local"
+                ]
+            },
+            "id": 71
+        },
+        {
+            "type": "shortest_path",
+            "source": 36041,
+            "target": 45337,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [
+                    71511
+                ],
+                "forbidden_road_types": [
+                    "tertiary",
+                    "secondary"
+                ]
+            },
+            "id": 72
+        },
+        {
+            "type": "remove_edge",
+            "edge_id": 84810,
+            "id": 73
+        },
+        {
+            "type": "shortest_path",
+            "source": 49605,
+            "target": 34133,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [
+                    41104
+                ],
+                "forbidden_road_types": [
+                    "tertiary",
+                    "local"
+                ]
+            },
+            "id": 74
+        },
+        {
+            "type": "shortest_path",
+            "source": 30362,
+            "target": 24028,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [
+                    68494
+                ],
+                "forbidden_road_types": [
+                    "secondary",
+                    "local"
+                ]
+            },
+            "id": 75
+        },
+        {
+            "type": "remove_edge",
+            "edge_id": 4248,
+            "id": 76
+        },
+        {
+            "type": "shortest_path",
+            "source": 46838,
+            "target": 46777,
+            "mode": "distance",
+            "constraints": {
+                "forbidden_nodes": [
+                    18136
+                ],
+                "forbidden_road_types": [
+                    "tertiary",
+                    "local"
+                ]
+            },
+            "id": 77
+        },
+        {
+            "type": "modify_edge",
+            "edge_id": 77569,
+            "patch": {
+                "speed_profile": [
+                    12.394896714838762,
+                    10.388882881011847,
+                    10.774448019395564,
+                    13.907973461664412,
+                    11.078925416058706,
+                    13.339909311735127,
+                    11.621425658040135,
+                    8.731708493614297,
+                    15.861682152881052,
+                    13.801136429822245,
+                    12.584096015171028,
+                    13.264678481272655,
+                    10.939449281725357,
+                    11.696863136042495,
+                    12.998814348876959,
+                    9.508065370197297,
+                    13.136017708470167,
+                    12.799962611811376,
+                    13.272656125950343,
+                    12.44872839649567,
+                    13.805270781636803,
+                    11.114334008861398,
+                    14.173347366154704,
+                    14.717326649317814,
+                    9.127742711805544,
+                    11.249600419478297,
+                    14.098115998542884,
+                    10.898940144528739,
+                    12.49512000588605,
+                    9.319618133345546,
+                    11.091526636191666,
+                    11.323519940970339,
+                    14.068229071588078,
+                    13.930311725417015,
+                    15.328121807532451,
+                    13.782004974767993,
+                    13.055940959034066,
+                    13.804227007177452,
+                    12.773555047743017,
+                    11.45433541517304,
+                    15.060817402933822,
+                    12.85630885736877,
+                    16.078208189194466,
+                    11.30031702595033,
+                    11.218266322407299,
+                    14.10489913955633,
+                    16.20343541334903,
+                    11.669187876202681,
+                    11.146353110645162,
+                    15.340975637457706,
+                    11.573713194311383,
+                    10.93783985347333,
+                    12.745154423634693,
+                    13.948277697062787,
+                    9.651588238578338,
+                    12.604215360935326,
+                    11.772834316204072,
+                    12.56525504204623,
+                    9.901113383499464,
+                    8.817108864338433,
+                    13.541003702171661,
+                    14.064925556727955,
+                    14.195702509528997,
+                    13.330533812270874,
+                    14.334496575586066,
+                    12.016419892092939,
+                    9.996226017880495,
+                    14.237235553584572,
+                    15.152684524590645,
+                    12.6488125075201,
+                    13.748808984583587,
+                    12.507102801097597,
+                    12.759536841549899,
+                    11.257857560471836,
+                    14.01664514457503,
+                    14.002025946711521,
+                    13.613288670999161,
+                    15.131587167957651,
+                    11.903622254344508,
+                    8.963909480022593,
+                    11.353685154172014,
+                    15.22647177991484,
+                    12.264193265557525,
+                    13.62681917350483,
+                    10.178563862540964,
+                    14.36818367806211,
+                    12.739173180367105,
+                    13.319072641666379,
+                    11.040805878723804,
+                    15.875862871148545,
+                    9.44943062698813,
+                    11.637447357424765,
+                    9.503354111009244,
+                    13.360618023863644,
+                    9.141703592873958,
+                    11.840320075078212
+                ]
+            },
+            "id": 78
+        }
+    ]
+} 

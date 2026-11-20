@@ -1,0 +1,101 @@
+.PHONY: install
+install:
+	uv sync
+
+.PHONY: db-up
+db-up:
+	docker compose up -d postgres redis
+
+.PHONY: db-down
+db-down:
+	docker compose stop postgres redis
+
+.PHONY: db-migrate
+db-migrate:
+	uv run alembic upgrade head
+
+.PHONY: dev
+dev:
+	uv run uvicorn server.app:app --host 0.0.0.0 --port 8000 --reload
+
+.PHONY: serve
+serve:
+	uv run uvicorn server.app:app --host 0.0.0.0 --port 8000
+
+.PHONY: ui
+ui:
+	cd ui && npm run dev
+
+.PHONY: ingest-logs
+ingest-logs:
+	uv run python scripts/ingest_local_agent_logs.py
+
+.PHONY: install-dev
+install-dev:
+	uv sync --extra dev
+	uv run pre-commit install
+
+.PHONY: type
+type:
+	uv run pyright
+
+.PHONY: build-hooks
+build-hooks:
+	python3 scripts/build_hooks.py
+
+.PHONY: format
+format:
+	uv run ruff check --fix
+	uv run ruff format
+
+.PHONY: check
+check:
+	python3 scripts/build_hooks.py --check
+	uv run ruff check --fix
+	uv run ruff format
+	uv run pyright
+
+.PHONY: test
+test:
+	uv run pytest tests/ -m "not slow"
+
+.PHONY: test-all
+test-all:
+	uv run pytest tests/ -v
+
+.PHONY: ci-smoke
+ci-smoke:
+	uv run pytest tests/ -m "not slow" -q --tb=short
+	uv run python scripts/hermetic_eval_smoke.py
+	bash scripts/record_gate_demo.sh
+
+.PHONY: portfolio
+portfolio:
+	bash scripts/sync_portfolio.sh
+
+.PHONY: portfolio-demo
+portfolio-demo:
+	bash scripts/record_gate_demo.sh
+
+.PHONY: benchmark
+benchmark:
+	uv run python scripts/benchmark_gate_latency.py
+
+.PHONY: cloud-on cloud-up
+cloud-on: cloud-up
+cloud-up:
+	python3 scripts/cloud_switch.py on
+
+.PHONY: cloud-off cloud-down
+cloud-off: cloud-down
+cloud-down:
+	python3 scripts/cloud_switch.py off
+
+.PHONY: cloud-destroy
+cloud-destroy:
+	python3 scripts/cloud_switch.py destroy
+
+.PHONY: cloud-status
+cloud-status:
+	python3 scripts/cloud_switch.py status
+

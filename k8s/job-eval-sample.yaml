@@ -1,0 +1,34 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: inspect-ai-eval-job
+  labels:
+    app: openeval-evaluator
+spec:
+  # Ephemeral: Automatically cleans up pod 300s after evaluation finishes
+  ttlSecondsAfterFinished: 300
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: openeval-evaluator
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: evaluator
+          image: ghcr.io/unanph/openeval-studio:latest
+          command:
+            - "python3"
+            - "inspect_tasks.py"
+          envFrom:
+            - configMapRef:
+                name: openeval-config
+            - secretRef:
+                name: openeval-secrets
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1024Mi

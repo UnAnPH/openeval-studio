@@ -1,0 +1,119 @@
+{
+    "meta": {
+        "id": "qset1"
+    },
+    "events": [
+        {
+            "type": "knn",
+            "id": 0,
+            "poi": "pharmacy",
+            "query_point": {
+                "lat": 19.1246999,
+                "lon": 72.916119
+            },
+            "k": 2,
+            "metric": "shortest_path"
+        },
+        {
+            "id": 1,
+            "type": "modify_edge",
+            "edge_id": 1048,
+            "patch": {
+                "length": 72.49910669239318
+            }
+        },
+        {
+            "type": "knn",
+            "id": 2,
+            "poi": "pharmacy",
+            "query_point": {
+                "lat": 19.1246999,
+                "lon": 72.916119
+            },
+            "k": 2,
+            "metric": "shortest_path"
+        },
+        {
+            "type": "knn",
+            "id": 3,
+            "poi": "hotel",
+            "query_point": {
+                "lat": 19.1224561,
+                "lon": 72.9129643
+            },
+            "k": 8,
+            "metric": "shortest_path"
+        },
+        {
+            "type": "knn",
+            "id": 4,
+            "poi": "atm",
+            "query_point": {
+                "lat": 19.1244727,
+                "lon": 72.9190328
+            },
+            "k": 10,
+            "metric": "shortest_path"
+        },
+        {
+            "type": "knn",
+            "id": 5,
+            "poi": "hotel",
+            "query_point": {
+                "lat": 19.1220681,
+                "lon": 72.9175553
+            },
+            "k": 5,
+            "metric": "shortest_path"
+        },
+        {
+            "id": 6,
+            "type": "modify_edge",
+            "edge_id": 1081,
+            "patch": {
+                "length": 174.00320371908785
+            }
+        },
+        {
+            "type": "knn",
+            "id": 7,
+            "poi": "hotel",
+            "query_point": {
+                "lat": 19.1220681,
+                "lon": 72.9175553
+            },
+            "k": 5,
+            "metric": "shortest_path"
+        },
+        {
+            "type": "knn",
+            "id": 8,
+            "poi": "petrol station",
+            "query_point": {
+                "lat": 19.1248129,
+                "lon": 72.9185175
+            },
+            "k": 13,
+            "metric": "shortest_path"
+        },
+        {
+            "id": 9,
+            "type": "modify_edge",
+            "edge_id": 1037,
+            "patch": {
+                "length": 96.32086649229382
+            }
+        },
+        {
+            "type": "knn",
+            "id": 10,
+            "poi": "petrol station",
+            "query_point": {
+                "lat": 19.1248129,
+                "lon": 72.9185175
+            },
+            "k": 13,
+            "metric": "shortest_path"
+        }
+    ]
+}
