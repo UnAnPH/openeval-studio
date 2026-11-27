@@ -1,0 +1,460 @@
+"""Tests for hosted DEMO seed loader and sanitization integrity."""
+
+import asyncio
+import json
+from pathlib import Path
+
+from starlette.testclient import TestClient
+
+from schemas.watcher_models import Session
+from server.app import (
+    _enrich_verdict_dict,
+    _map_review_decision,
+    _pair_review_with_tool_call,
+    _tool_call_target_text,
+    _verdicts_from_store_reviews,
+    app,
+    list_tasks,
+)
+from server.demo_seed import refresh_demo_timeline, seed_demo_data
+from server.store import RunStore
+from server.watcher_store import WatcherStore
+
+DENYLIST = [
+    "radiosa",
+    "simplecast",
+    "apollo",
+    "jaysonandal",
+    "jayson andal",
+    "/users/jaysonandal",
+]
+
+ENV_LEAK_FIXTURE = (
+    Path(__file__).resolve().parent.parent
+    / "fixtures"
+    / "demo"
+    / "sessions"
+    / "antigravity-demo-env-leak.json"
+)
+
+
+def _load_env_leak_session() -> Session:
+    return Session.model_validate(json.loads(ENV_LEAK_FIXTURE.read_text(encoding="utf-8")))
+
+
+def test_seed_demo_data_loads_sessions_and_evals(tmp_path: Path):
+    """Verify seed_demo_data populates WatcherStore and RunStore from fixtures."""
+    db_path = tmp_path / "test_seed.duckdb"
+    store = WatcherStore(storage_dir=tmp_path / "sessions", db_path=str(db_path))
+    run_store = RunStore(watcher_store=store)
+
+    loaded = seed_demo_data(store=store, run_store=run_store)
+    assert loaded["sessions"] >= 4
+    assert loaded["evals"] >= 3
+
+    # Check sessions
+    sessions = store.list_sessions()
+    session_ids = [s.session_id for s in sessions]
+    assert "antigravity-demo-force-push" in session_ids
+    assert "claude-demo-sudo-escalation" in session_ids
+    assert "cursor-demo-untrusted-script" in session_ids
+    assert "antigravity-demo-benign-build" in session_ids
+
+    # Check runs — real Inspect AI benchmark fixtures and gemini-4-hydrogen runs
+    runs = run_store.list_runs()
+    run_ids = [r.run_id for r in runs]
+    assert "eval-oversight-subversion-20261114-105431-f68a82" in run_ids
+    assert "eval-alignment-faking-20261114-110132-42e24d" in run_ids
+    assert "eval-regex-log-20260912-164108-b4bf74" in run_ids
+    assert "eval-cancel-async-tasks-20261017-100127-e0xw2l" in run_ids
+    assert "eval-cancel-async-tasks-20261114-111118-1fb762" in run_ids
+
+    # Check denylist compliance on all serialized content
+    for s in sessions:
+        dumped = s.model_dump_json().lower()
+        for bad in DENYLIST:
+            assert bad not in dumped, f"Found denylist word '{bad}' in session {s.session_id}"
+
+    for r in runs:
+        dumped = r.model_dump_json().lower()
+        for bad in DENYLIST:
+            assert bad not in dumped, f"Found denylist word '{bad}' in run {r.run_id}"
+
+
+def test_seed_demo_data_is_idempotent(tmp_path: Path):
+    """Calling seed_demo_data multiple times should safely upsert without error."""
+    db_path = tmp_path / "test_idempotent.duckdb"
+    store = WatcherStore(storage_dir=tmp_path / "idempotent_sessions", db_path=str(db_path))
+    run_store = RunStore(watcher_store=store)
+
+    first = seed_demo_data(store=store, run_store=run_store)
+    second = seed_demo_data(store=store, run_store=run_store)
+
+    assert first == second
+    assert len(store.list_sessions()) >= 4
+
+
+def test_demo_sessions_cover_all_hooks_and_long_trajectories():
+    """All five runtime hooks are represented and long trajectories outnumber short ones."""
+    fixture_dir = Path(__file__).resolve().parent.parent / "fixtures" / "demo" / "sessions"
+    files = sorted(fixture_dir.glob("*.json"))
+    assert files, "expected demo session fixtures"
+
+    agent_types: set[str] = set()
+    long_sessions = 0
+    for fixture in files:
+        data = json.loads(fixture.read_text(encoding="utf-8"))
+        session = Session.model_validate(data)
+        agent_types.add(session.agent_type)
+        if len(session.trajectory.messages) >= 10:
+            long_sessions += 1
+
+    assert agent_types == {"antigravity", "claude_code", "cursor", "codex", "opencode"}
+    assert long_sessions >= 14
+    assert long_sessions > len(files) - long_sessions
+
+
+def test_demo_status_endpoint():
+    """Verify /api/health returns demo_seed boolean and /api/demo/status reports status."""
+    with TestClient(app) as client:
+        health_resp = client.get("/api/health")
+        assert health_resp.status_code == 200
+        health_data = health_resp.json()
+        assert "demo_seed" in health_data
+
+        status_resp = client.get("/api/demo/status")
+        assert status_resp.status_code == 200
+        status_data = status_resp.json()
+        assert "demo_mode" in status_data
+        assert "seeded_sessions" in status_data
+        assert "seeded_eval_runs" in status_data
+
+
+def test_demo_mode_isolation_and_new_fixtures(monkeypatch):
+    """Verify demo mode completely isolates host sessions and loads current fixtures."""
+    monkeypatch.setenv("OPENEVAL_DEMO_SEED", "1")
+    monkeypatch.setenv("WATCHER_STORAGE_DIR", "")
+
+    stats = seed_demo_data()
+    assert stats["sessions"] >= 8
+    assert stats["evals"] >= 7
+
+    with TestClient(app) as client:
+        # Check sessions isolation via demo surface
+        demo_headers = {"X-OpenEval-Surface": "demo"}
+        sess_resp = client.get("/api/v1/watcher/sessions", headers=demo_headers)
+        assert sess_resp.status_code == 200
+        sessions = sess_resp.json()
+        session_ids = [s["session_id"] for s in sessions]
+
+        assert "antigravity-demo-env-leak" in session_ids
+        assert "claude-demo-database-migration" in session_ids
+        assert "cursor-demo-rm-rf-blocked" in session_ids
+        assert "antigravity-demo-refactor-approved" in session_ids
+        assert "codex-demo-sandbox-escape" in session_ids
+        assert "opencode-demo-plugin-exfil" in session_ids
+
+        # Ensure no private host transcripts appear
+        for sid in session_ids:
+            assert not sid.startswith("antigravity-") or "demo" in sid
+            assert not sid.startswith("cursor-") or "demo" in sid
+            assert not sid.startswith("claude-") or "demo" in sid
+            assert not sid.startswith("codex-") or "demo" in sid
+            assert not sid.startswith("opencode-") or "demo" in sid
+
+        # Check evals — real Inspect AI runs (no fake nop/oracle)
+        runs_resp = client.get("/api/eval/runs", headers=demo_headers)
+        assert runs_resp.status_code == 200
+        runs = runs_resp.json()
+        run_ids = [r["run_id"] for r in runs]
+
+        assert "eval-oversight-subversion-20261114-105431-f68a82" in run_ids
+        assert "eval-alignment-faking-20261114-110132-42e24d" in run_ids
+        assert "eval-regex-log-20260912-164108-b4bf74" in run_ids
+        assert "eval-cancel-async-tasks-20261017-100127-e0xw2l" in run_ids
+        assert "eval-cancel-async-tasks-20261114-111118-1fb762" in run_ids
+        assert "eval-watch-the-vm-20261016-200343-thjpom" in run_ids
+        assert "eval-alignment-faking-20261017-095840-vhfwfl" in run_ids
+
+        # Interceptions poll must never trigger host scans or leak non-demo sessions
+        intercept_resp = client.get("/api/v1/watcher/interceptions?limit=40", headers=demo_headers)
+        assert intercept_resp.status_code == 200
+        interceptions = intercept_resp.json()
+        assert len(interceptions) > 0
+        for item in interceptions:
+            sess_id = item.get("session_id", "")
+            assert not sess_id.startswith("antigravity-") or "demo" in sess_id
+            assert not sess_id.startswith("cursor-") or "demo" in sess_id
+            assert not sess_id.startswith("claude-") or "demo" in sess_id
+            assert not sess_id.startswith("codex-") or "demo" in sess_id
+            assert not sess_id.startswith("opencode-") or "demo" in sess_id
+
+        # Sessions list must still contain the curated demo sessions
+        sess_resp_after = client.get("/api/v1/watcher/sessions", headers=demo_headers)
+        assert sess_resp_after.status_code == 200
+        after_ids = [s["session_id"] for s in sess_resp_after.json()]
+        assert len(after_ids) >= 8
+        assert "antigravity-demo-env-leak" in after_ids
+        for sid in [
+            "antigravity-demo-env-leak",
+            "claude-demo-database-migration",
+            "cursor-demo-rm-rf-blocked",
+            "antigravity-demo-refactor-approved",
+        ]:
+            assert sid in after_ids
+
+
+def test_unauthenticated_get_with_demo_seed_returns_401(monkeypatch):
+    """Unauthenticated GET /api/v1/watcher/sessions with OPENEVAL_DEMO_SEED=1 and no surface header returns 401."""
+    monkeypatch.setenv("OPENEVAL_DEMO_SEED", "1")
+    monkeypatch.setenv("OPENEVAL_AUTH_DISABLED", "0")
+    seed_demo_data()
+
+    with TestClient(app) as client:
+        # No credentials, no surface header -> 401
+        res = client.get("/api/v1/watcher/sessions")
+        assert res.status_code == 401
+        assert "Authentication required" in res.json().get("detail", "")
+
+        # Same request with X-OpenEval-Surface: demo -> 200 with only demo rows
+        demo_res = client.get("/api/v1/watcher/sessions", headers={"X-OpenEval-Surface": "demo"})
+        assert demo_res.status_code == 200
+        demo_sessions = demo_res.json()
+        assert len(demo_sessions) > 0
+        demo_ids = [s["session_id"] for s in demo_sessions]
+        assert "antigravity-demo-env-leak" in demo_ids
+
+
+def test_alice_cookie_with_demo_seed_returns_only_alice(monkeypatch):
+    """A cookie for user alice on /api/v1/watcher/sessions returns only Alice's rows while seed flag is on."""
+    from sqlalchemy import text
+
+    from schemas.watcher_models import Session
+    from server.db import SessionLocal, current_user_id, current_user_slug
+    from server.watcher_store import get_watcher_store
+
+    monkeypatch.setenv("OPENEVAL_DEMO_SEED", "1")
+    monkeypatch.setenv("OPENEVAL_AUTH_DISABLED", "0")
+    seed_demo_data()
+
+    with SessionLocal() as db:
+        db.execute(text("DELETE FROM users WHERE slug = 'alice_seed_test'"))
+        db.commit()
+
+    with TestClient(app) as client:
+        # Register alice
+        reg = client.post(
+            "/api/auth/register",
+            json={"username": "alice_seed_test", "password": "password123"},
+        )
+        assert reg.status_code == 200
+
+        # Insert a session for alice
+        with SessionLocal() as db:
+            alice_uid = db.execute(
+                text("SELECT id FROM users WHERE slug = 'alice_seed_test'")
+            ).scalar()
+
+        current_user_slug.set("alice_seed_test")
+        current_user_id.set(alice_uid)
+        store = get_watcher_store()
+        alice_session = Session(
+            session_id="alice-custom-session-xyz",
+            agent_type="claude_code",
+            status="active",
+            created_at="2026-09-26T12:00:00Z",
+        )
+        store.record_session(alice_session)
+
+        # GET /api/v1/watcher/sessions using Alice's session cookie (which client persists from register)
+        res = client.get("/api/v1/watcher/sessions")
+        assert res.status_code == 200
+        sessions = res.json()
+        assert len(sessions) == 1
+        assert sessions[0]["session_id"] == "alice-custom-session-xyz"
+
+
+def test_seeding_twice_leaves_owner_unchanged_and_preserves_history():
+    """Seeding twice leaves the owner row count unchanged and does not require in-memory history clear."""
+    from sqlalchemy import text
+
+    from engine.approval_policy import WatcherVerdict, global_watcher_engine
+    from server.db import SessionLocal
+
+    # Add an interception history item
+    test_verdict = WatcherVerdict(
+        decision="deny",
+        stage="stage_2_deterministic",
+        reason="Preserved in-memory item",
+        risk_score=0.9,
+        action_preview="cat /etc/shadow",
+        agent_id="test-agent",
+        session_id="test-preserve-session",
+        is_safe=False,
+    )
+    global_watcher_engine.record_interception(test_verdict)
+
+    with SessionLocal() as db:
+        initial_owner_count = db.execute(
+            text("SELECT count(*) FROM users WHERE slug = 'owner'")
+        ).scalar()
+
+    seed_demo_data()
+    seed_demo_data()
+
+    with SessionLocal() as db:
+        final_owner_count = db.execute(
+            text("SELECT count(*) FROM users WHERE slug = 'owner'")
+        ).scalar()
+
+    assert final_owner_count == initial_owner_count
+    # In-memory history was not cleared by seed_demo_data
+    history = [v.session_id for v in global_watcher_engine.get_history(limit=50)]
+    assert "test-preserve-session" in history
+
+
+def test_refresh_demo_timeline_repopulates_blocked_interceptions(tmp_path: Path):
+    """refresh_demo_timeline re-seeds blocked/escalated reviews into watcher history."""
+    from engine.approval_policy import global_watcher_engine
+
+    store = WatcherStore(
+        storage_dir=tmp_path / "refresh_sessions", db_path=str(tmp_path / "refresh.duckdb")
+    )
+    run_store = RunStore(watcher_store=store)
+    seed_demo_data(store=store, run_store=run_store)
+
+    original_history = list(global_watcher_engine._interception_history)
+    try:
+        global_watcher_engine._interception_history.clear()
+        refresh_demo_timeline(watcher_store=store, run_store=run_store)
+
+        history = list(global_watcher_engine._interception_history)
+        assert history, "refresh_demo_timeline should repopulate demo interceptions"
+        assert all(v.user_id == 1 for v in history)
+        assert any(
+            v.session_id == "antigravity-demo-env-leak" and v.decision == "deny" for v in history
+        )
+    finally:
+        global_watcher_engine._interception_history[:] = original_history
+
+
+def test_promoted_live_demo_sessions_do_not_report_completed_activity(tmp_path: Path):
+    """Demo sessions promoted to live must not report ``Activity: completed``."""
+    store = WatcherStore(
+        storage_dir=tmp_path / "activity_sessions", db_path=str(tmp_path / "activity.duckdb")
+    )
+    run_store = RunStore(watcher_store=store)
+    seed_demo_data(store=store, run_store=run_store)
+
+    # WatcherStore normalizes demo session status for API reads, but the promotion
+    # decision and its live activity label are persisted on the seeded session.
+    sessions = {s.session_id: s for s in store.list_sessions()}
+    promoted = ("antigravity-demo-benign-build", "antigravity-demo-refactor-approved")
+    for session_id in promoted:
+        assert sessions[session_id].current_activity == "Monitoring active tool calls"
+
+    assert sessions["antigravity-demo-env-leak"].current_activity == "completed"
+    assert all(sessions[session_id].current_activity != "completed" for session_id in promoted)
+
+
+def test_rag_task_instruction_preview_strips_leading_html_comment():
+    """Leading HTML comment blocks are stripped from benchmark instruction previews."""
+    tasks = asyncio.run(list_tasks())
+    rag = next(t for t in tasks if t.task_id == "rag-incident-investigation")
+    assert not rag.instruction_preview.lstrip().startswith("<!--")
+    assert "RAG Benchmark Task" not in rag.instruction_preview
+    assert rag.instruction_preview.startswith("Our production payment infrastructure")
+
+
+def test_review_to_tool_call_pairing_is_content_first():
+    """A deny review for ``cat .env`` pairs with the .env call, never the pytest call."""
+    session = _load_env_leak_session()
+    reviews = {rev.id: rev for rev in session.trajectory.reviews}
+    assert len(session.trajectory.reviews) != len(session.trajectory.tool_calls)
+
+    env_call, env_result = _pair_review_with_tool_call(session, reviews["rev-env-03"])
+    assert env_call is not None
+    assert "cat .env" in _tool_call_target_text(env_call)
+    assert "pytest" not in _tool_call_target_text(env_call)
+    assert env_result is not None
+    assert "PASSED" not in (env_result.stdout or "")
+
+    pytest_call, pytest_result = _pair_review_with_tool_call(session, reviews["rev-env-02"])
+    assert pytest_call is not None
+    assert "pytest -v tests/test_database.py" in _tool_call_target_text(pytest_call)
+    assert ".env" not in _tool_call_target_text(pytest_call)
+    assert pytest_result is not None
+    assert "PASSED" in (pytest_result.stdout or "")
+
+    mapped_env, safe_env = _map_review_decision(reviews["rev-env-03"], None, "pending")
+    assert (mapped_env, safe_env) == ("deny", False)
+
+    # Ordinary allows stay allowed instead of being coerced into escalations.
+    mapped_pytest, safe_pytest = _map_review_decision(reviews["rev-env-02"], None, "pending")
+    assert (mapped_pytest, safe_pytest) == ("allow", True)
+
+    # An explicit operator denial is still surfaced as blocked.
+    assert _map_review_decision(reviews["rev-env-02"], "deny", "pending") == ("deny", False)
+    assert _map_review_decision(reviews["rev-env-03"], "allow", "human_approved") == (
+        "allow",
+        True,
+    )
+
+
+def test_enrich_verdict_uses_content_first_pairing():
+    """Enrichment of a pytest review must not inherit the misaligned .env tool result."""
+    session = _load_env_leak_session()
+    row = {
+        "session_id": session.session_id,
+        "review_id": "rev-env-02",
+        "decision": "allow",
+        "full_command": "",
+        "tool_result": "Awaiting execution output from agent transcript...",
+        "action_preview": "run_command: pytest -v tests/test_database.py",
+    }
+
+    enriched = _enrich_verdict_dict(row, session_cache={session.session_id: session})
+
+    assert "pytest -v tests/test_database.py" in enriched["full_command"]
+    assert ".env" not in enriched["full_command"]
+    assert "PASSED" in enriched["tool_result"]
+    assert enriched["tool_result"] != "Execution blocked by Watcher safety gate."
+
+
+def test_control_interceptions_keep_allow_reviews_allowed(tmp_path: Path, monkeypatch):
+    """Control rows pair .env with deny and keep pytest as an ordinary allow."""
+    import sys
+
+    store = WatcherStore(
+        storage_dir=tmp_path / "control_sessions", db_path=str(tmp_path / "control.duckdb")
+    )
+    run_store = RunStore(watcher_store=store)
+    seed_demo_data(store=store, run_store=run_store)
+    server_app = sys.modules["server.app"]
+    monkeypatch.setattr(server_app, "get_watcher_store", lambda: store)
+
+    rows = _verdicts_from_store_reviews(limit=200)
+    env_rows = [
+        row
+        for row in rows
+        if row.get("session_id") == "antigravity-demo-env-leak"
+        and "cat .env" in str(row.get("full_command") or "")
+    ]
+    pytest_rows = [
+        row
+        for row in rows
+        if row.get("session_id") == "antigravity-demo-env-leak"
+        and "pytest -v tests/test_database.py" in str(row.get("full_command") or "")
+    ]
+
+    assert env_rows, "expected the .env review in Control"
+    assert env_rows[0]["decision"] == "deny"
+    assert "PASSED" not in env_rows[0]["tool_result"]
+    assert "blocked" in env_rows[0]["tool_result"].lower()
+
+    assert pytest_rows, "expected the pytest review in Control"
+    for row in pytest_rows:
+        assert row["decision"] != "deny"
+        assert row["tool_result"] != "Execution blocked by Watcher safety gate."
+        assert "PASSED" in row["tool_result"]
+    assert any(row["decision"] == "allow" for row in pytest_rows)

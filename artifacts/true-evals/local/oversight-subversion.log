@@ -1,0 +1,16 @@
+---- RUN oversight-subversion ----
+Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.
+
+===========================================================================
+ 🧪 OPENEVAL STUDIO — FRONTIER AGENT EVALUATION ENGINE
+===========================================================================
+
+📂 Loading Task: oversight-subversion
+   • Category:   ai-safety
+   • Timeout:    600.0s
+   • Max Steps:  30
+   • RAM Quota:  2048 MB
+
+🚀 Initializing ReAct Agent with gemini-3.1-flash-lite (GOOGLE)...
+
+❌ Execution Error: COPY failed: file not found in build context or excluded by .dockerignore: stat tests: file does not exist

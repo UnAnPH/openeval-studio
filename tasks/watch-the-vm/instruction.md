@@ -1,0 +1,1 @@
+I pulled `/app/1983.exe` off an old machine, but cannot seem to run it. I can't load, disassemble, or run it. It's supposed to be a console program that prompts with `flag>`, one input prints correct, everything else wrong. Run the recovered program, find the input it accepts, and write that exact input string to `/app/flag.txt`.

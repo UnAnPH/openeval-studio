@@ -1,0 +1,337 @@
+{
+    "meta": {
+        "id": "./task2/t1.json"
+    },
+    "events": [
+        {
+            "type": "knn",
+            "poi": "hospital",
+            "query_point": {
+                "lat": 13.204658,
+                "lon": 80.2092381
+            },
+            "k": 1946,
+            "metric": "euclidean",
+            "id": 0
+        },
+        {
+            "type": "knn",
+            "poi": "hospital",
+            "query_point": {
+                "lat": 13.0085874,
+                "lon": 80.2026131
+            },
+            "k": 1357,
+            "metric": "euclidean",
+            "id": 1
+        },
+        {
+            "type": "knn",
+            "poi": "pharmacy",
+            "query_point": {
+                "lat": 13.080117,
+                "lon": 80.2193543
+            },
+            "k": 1261,
+            "metric": "euclidean",
+            "id": 2
+        },
+        {
+            "type": "knn",
+            "poi": "hotel",
+            "query_point": {
+                "lat": 13.0864074,
+                "lon": 80.22218
+            },
+            "k": 1944,
+            "metric": "euclidean",
+            "id": 3
+        },
+        {
+            "type": "knn",
+            "poi": "atm",
+            "query_point": {
+                "lat": 13.0185679,
+                "lon": 80.1607211
+            },
+            "k": 933,
+            "metric": "euclidean",
+            "id": 4
+        },
+        {
+            "type": "knn",
+            "poi": "hotel",
+            "query_point": {
+                "lat": 13.1321772,
+                "lon": 80.2569764
+            },
+            "k": 1968,
+            "metric": "euclidean",
+            "id": 5
+        },
+        {
+            "type": "knn",
+            "poi": "hotel",
+            "query_point": {
+                "lat": 12.9775744,
+                "lon": 80.230222
+            },
+            "k": 1558,
+            "metric": "euclidean",
+            "id": 6
+        },
+        {
+            "type": "knn",
+            "poi": "atm",
+            "query_point": {
+                "lat": 13.1047112,
+                "lon": 80.2891341
+            },
+            "k": 993,
+            "metric": "euclidean",
+            "id": 7
+        },
+        {
+            "type": "knn",
+            "poi": "hotel",
+            "query_point": {
+                "lat": 13.0259004,
+                "lon": 80.2632443
+            },
+            "k": 451,
+            "metric": "euclidean",
+            "id": 8
+        },
+        {
+            "type": "knn",
+            "poi": "restaurant",
+            "query_point": {
+                "lat": 12.9824459,
+                "lon": 80.2047434
+            },
+            "k": 1807,
+            "metric": "euclidean",
+            "id": 9
+        },
+        {
+            "type": "knn",
+            "poi": "pharmacy",
+            "query_point": {
+                "lat": 13.1422008,
+                "lon": 80.2561181
+            },
+            "k": 621,
+            "metric": "euclidean",
+            "id": 10
+        },
+        {
+            "type": "knn",
+            "poi": "atm",
+            "query_point": {
+                "lat": 13.1112281,
+                "lon": 80.1741115
+            },
+            "k": 836,
+            "metric": "euclidean",
+            "id": 11
+        },
+        {
+            "type": "knn",
+            "poi": "hotel",
+            "query_point": {
+                "lat": 13.1410776,
+                "lon": 80.2521498
+            },
+            "k": 1932,
+            "metric": "euclidean",
+            "id": 12
+        },
+        {
+            "type": "knn",
+            "poi": "atm",
+            "query_point": {
+                "lat": 13.0551352,
+                "lon": 80.2152484
+            },
+            "k": 566,
+            "metric": "euclidean",
+            "id": 13
+        },
+        {
+            "type": "knn",
+            "poi": "petrol station",
+            "query_point": {
+                "lat": 12.9761971,
+                "lon": 80.2141639
+            },
+            "k": 1332,
+            "metric": "euclidean",
+            "id": 14
+        },
+        {
+            "type": "knn",
+            "poi": "hotel",
+            "query_point": {
+                "lat": 13.1448931,
+                "lon": 80.245985
+            },
+            "k": 1544,
+            "metric": "euclidean",
+            "id": 15
+        },
+        {
+            "type": "knn",
+            "poi": "petrol station",
+            "query_point": {
+                "lat": 13.1388226,
+                "lon": 80.257171
+            },
+            "k": 1883,
+            "metric": "euclidean",
+            "id": 16
+        },
+        {
+            "type": "knn",
+            "poi": "hospital",
+            "query_point": {
+                "lat": 12.9566702,
+                "lon": 80.2126521
+            },
+            "k": 2238,
+            "metric": "euclidean",
+            "id": 17
+        },
+        {
+            "type": "knn",
+            "poi": "atm",
+            "query_point": {
+                "lat": 13.1830612,
+                "lon": 80.2204405
+            },
+            "k": 1083,
+            "metric": "euclidean",
+            "id": 18
+        },
+        {
+            "type": "knn",
+            "poi": "petrol station",
+            "query_point": {
+                "lat": 13.0988607,
+                "lon": 80.1877463
+            },
+            "k": 1010,
+            "metric": "euclidean",
+            "id": 19
+        },
+        {
+            "type": "knn",
+            "poi": "hotel",
+            "query_point": {
+                "lat": 13.1147136,
+                "lon": 80.1933241
+            },
+            "k": 1223,
+            "metric": "euclidean",
+            "id": 20
+        },
+        {
+            "type": "knn",
+            "poi": "hospital",
+            "query_point": {
+                "lat": 13.0238045,
+                "lon": 80.2575595
+            },
+            "k": 1184,
+            "metric": "euclidean",
+            "id": 21
+        },
+        {
+            "type": "knn",
+            "poi": "atm",
+            "query_point": {
+                "lat": 13.0921914,
+                "lon": 80.1848508
+            },
+            "k": 2003,
+            "metric": "euclidean",
+            "id": 22
+        },
+        {
+            "type": "knn",
+            "poi": "pharmacy",
+            "query_point": {
+                "lat": 12.9543546,
+                "lon": 80.1877094
+            },
+            "k": 1429,
+            "metric": "euclidean",
+            "id": 23
+        },
+        {
+            "type": "knn",
+            "poi": "atm",
+            "query_point": {
+                "lat": 12.9772893,
+                "lon": 80.257795
+            },
+            "k": 1121,
+            "metric": "euclidean",
+            "id": 24
+        },
+        {
+            "type": "knn",
+            "poi": "restaurant",
+            "query_point": {
+                "lat": 13.1320953,
+                "lon": 80.2254404
+            },
+            "k": 2225,
+            "metric": "euclidean",
+            "id": 25
+        },
+        {
+            "type": "knn",
+            "poi": "pharmacy",
+            "query_point": {
+                "lat": 13.196527,
+                "lon": 80.1996817
+            },
+            "k": 1414,
+            "metric": "euclidean",
+            "id": 26
+        },
+        {
+            "type": "knn",
+            "poi": "hospital",
+            "query_point": {
+                "lat": 12.9692644,
+                "lon": 80.1420668
+            },
+            "k": 173,
+            "metric": "euclidean",
+            "id": 27
+        },
+        {
+            "type": "knn",
+            "poi": "atm",
+            "query_point": {
+                "lat": 13.167567,
+                "lon": 80.2228997
+            },
+            "k": 324,
+            "metric": "euclidean",
+            "id": 28
+        },
+        {
+            "type": "knn",
+            "poi": "pharmacy",
+            "query_point": {
+                "lat": 13.1779488,
+                "lon": 80.1577209
+            },
+            "k": 1051,
+            "metric": "euclidean",
+            "id": 29
+        }
+    ]
+}

@@ -1,0 +1,104 @@
+# OpenEval Studio — reviewer demo (<10 minutes)
+
+Two peer products: **Evaluate** (eval IDE) and **Safety** (runtime gate). This doc is the
+fastest path to prove both without theater.
+
+## 0. Start (2 min)
+
+```bash
+cd openeval-studio
+make install
+# one-shot lock-8 automated checks (CI smoke + hermetic + gate demos):
+bash scripts/lock8_verify.sh
+make serve          # http://127.0.0.1:8000
+# optional UI
+cd ui && npm install && npm run dev
+```
+
+UI nav: **Evaluate** · Overview / Benchmarks / Launch / Runs / Compare / Judges · **Safety** · Control / Sessions / Policy / Hooks. On `/demo`, `Judges → Golden Benchmark` is the first tab (calibration baselines) beside `Session Audit`, `Runs` showcases `eval-build-pov-ray` first, and `Sessions & Firewall` always shows 2 `LIVE` sessions with live `Triage p50` / `Deep p95` / `Gate Blocked` telemetry.
+
+## 1. Safety smoke — no live agent (1 min)
+
+```bash
+./scripts/demo_block.sh
+# or scripted mode contracts + artifact:
+bash scripts/record_gate_demo.sh   # → artifacts/gate-demo.jsonl
+bash scripts/record_antigravity_gate_demo.sh  # → artifacts/antigravity-gate-demo.jsonl
+```
+
+Expect `PASS` / deny-or-escalate for force-push, sudo, curl|bash, IMDS. Gate demo also asserts observe shadow + paused allow.
+
+## 2. Safety live — Antigravity (optional, ~2 min)
+
+```bash
+bash scripts/install_antigravity_watcher_hook.sh
+# Restart Antigravity / new agent chat (hooks reload)
+```
+
+1. UI → **Safety → Policy** → set Bash / `run_command` Auto-deny ≥ 5 → Save  
+2. UI → **Safety → Control** → mode **Enforce**  
+3. In Antigravity, ask the agent to run: `git push --force origin main`  
+4. Expect hard block with `[OPENEVAL …]`; check **Sessions** and Control live stream  
+5. Control → **Observe**: same command should **allow** with `shadow_decision` (hooks obey `decision`)
+
+Safe control: `echo hello` must still allow.
+
+Logs: `~/.openeval/watcher-gate.log`
+
+## 3. Evaluate path (honest) (~3 min)
+
+### Hermetic verifier (no API key)
+
+```bash
+uv run python scripts/hermetic_eval_smoke.py
+# → artifacts/hermetic-eval.json  (nop fail / oracle pass on regex-log)
+```
+
+### Model Launch (needs key)
+
+1. Set `GEMINI_API_KEY` or `OPENAI_API_KEY` in `.env`  
+2. UI → **Evaluate → Launch** → pick a small local task (e.g. `cancel-async-tasks`)  
+3. If the key is missing, the run **fails** (no fake green pass)  
+4. On success: **Runs** → trajectory → **Compare** / annotate via `POST /api/v1/sessions/{id}/annotate` (API-only)
+
+On `/demo`, **Runs** lists the showcase run `eval-build-pov-ray` first, and anonymous visitors can start and stop real evaluations directly from `/demo` under the isolated `demo` tenant (IP rate-limited); only policy, key, and delete mutations return `401`.
+
+## 4. Claude Code / Cursor hooks
+
+```bash
+bash scripts/install_antigravity_watcher_hook.sh
+bash scripts/install_cursor_watcher_hook.sh   # writes .cursor/hooks.json + ~/.cursor/hooks.json
+```
+
+Matcher notes:
+
+- Antigravity PreToolUse matcher must be `.*` (not `*`)  
+- Cursor: `beforeShellExecution` + `preToolUse` → `scripts/cursor_watcher_gate.py`  
+- Fail-open & Circuit Breaker: server down → transient single failure fails open, but 3 consecutive timeouts in 60s trip the local circuit breaker to `force_ask` / `ask` to halt unmonitored loops; local blacklist always denies high-severity commands offline instantly  
+- Local blacklist denies now also **report** to `/api/v1/watcher/evaluate` so Control Live Stream / Sessions show the block  
+
+Verify:
+
+1. API + UI running; Safety → Control → **Enforce**  
+2. `curl` force-push via `./scripts/demo_block.sh` → expect deny; Live Stream shows it  
+3. In Cursor/Antigravity, ask agent to `git push --force origin main` → hard deny + Live Stream row  
+4. Safety → Sessions → refresh → antigravity / cursor rows from disk ingest  
+
+**Restart API after pulling these fixes** (ingest + interceptions seed are server-side). Reload UI.  
+
+## 5. Deploying to Web (Free Hosting)
+
+To share this live portfolio demo with reviewers without running it locally:
+- **Render:** Connect GitHub repo, select Docker environment, pick the Free tier, set `OPENEVAL_DEMO_SEED=1`. The app builds automatically from `Dockerfile` (UI + FastAPI unified). The seeded `demo` tenant serves curated fixtures, keeps 2 `LIVE` sessions, and lets visitors launch real evaluations on an IP rate limit.
+- **Koyeb:** Connect GitHub repo, select Dockerfile build, set `OPENEVAL_DEMO_SEED=1` and port `8000`. Free Nano tier runs continuously without sleep.
+
+## What not to claim
+
+- Not multi-tenant Analyzer SaaS / production SIEM  
+- Transcript search lexical channel is **term-overlap**, not true BM25  
+- `WatcherEngine.evaluate_action` is **legacy unit-test path**; production gate is PolicyGateway + mode  
+
+## Related
+
+- `FINDINGS.md` — FP/FN notes and eval writeup template  
+- `README.md` — architecture honesty and full deployment guide  

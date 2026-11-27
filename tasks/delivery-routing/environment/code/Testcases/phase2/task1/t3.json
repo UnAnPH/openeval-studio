@@ -1,0 +1,98 @@
+{
+    "meta": {
+        "description": "Phase 2.1 Testcase 3",
+        "queries": 10
+    },
+    "events": [
+        {
+            "type": "k_shortest_paths",
+            "id": 0,
+            "k": 14,
+            "source": 873,
+            "target": 2837,
+            "overlap_threshold": 29,
+            "mode": "distance"
+        },
+        {
+            "type": "k_shortest_paths",
+            "id": 1,
+            "k": 6,
+            "source": 2625,
+            "target": 2381,
+            "overlap_threshold": 66,
+            "mode": "distance"
+        },
+        {
+            "type": "k_shortest_paths",
+            "id": 2,
+            "k": 7,
+            "source": 532,
+            "target": 3180,
+            "overlap_threshold": 23,
+            "mode": "distance"
+        },
+        {
+            "type": "k_shortest_paths",
+            "id": 3,
+            "k": 4,
+            "source": 2818,
+            "target": 1428,
+            "overlap_threshold": 59,
+            "mode": "distance"
+        },
+        {
+            "type": "k_shortest_paths",
+            "id": 4,
+            "k": 8,
+            "source": 963,
+            "target": 1839,
+            "overlap_threshold": 37,
+            "mode": "distance"
+        },
+        {
+            "type": "k_shortest_paths",
+            "id": 5,
+            "k": 13,
+            "source": 722,
+            "target": 966,
+            "overlap_threshold": 49,
+            "mode": "distance"
+        },
+        {
+            "type": "k_shortest_paths",
+            "id": 6,
+            "k": 4,
+            "source": 2816,
+            "target": 296,
+            "overlap_threshold": 21,
+            "mode": "distance"
+        },
+        {
+            "type": "k_shortest_paths",
+            "id": 7,
+            "k": 3,
+            "source": 1798,
+            "target": 1128,
+            "overlap_threshold": 36,
+            "mode": "distance"
+        },
+        {
+            "type": "k_shortest_paths",
+            "id": 8,
+            "k": 19,
+            "source": 2649,
+            "target": 2803,
+            "overlap_threshold": 43,
+            "mode": "distance"
+        },
+        {
+            "type": "k_shortest_paths",
+            "id": 9,
+            "k": 10,
+            "source": 286,
+            "target": 1617,
+            "overlap_threshold": 54,
+            "mode": "distance"
+        }
+    ]
+} 

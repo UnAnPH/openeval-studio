@@ -1,0 +1,217 @@
+import { Icon } from '../lib/icon';
+import {
+  CheckCircle,
+  CircleDollarSign,
+  Clock,
+  GitCommit,
+  HelpCircle,
+  Hourglass,
+  ShieldCheck,
+  Sparkles,
+  XCircle,
+} from 'lucide-react';
+import React from 'react';
+import { RunRecord, EvalPhase } from '../types';
+import { MarkdownRenderer } from './MarkdownRenderer';
+
+interface ScorecardProps {
+  run: RunRecord | null;
+  phase?: EvalPhase;
+}
+
+function formatRunIdTail(id: string, maxLen: number = 34): string {
+  if (!id) return '';
+  if (id.length <= maxLen) return id;
+  const tailLen = 18; // Preserves e.g. "-192514-1ti8q0" or "-20261016-192514"
+  const headLen = Math.max(8, maxLen - tailLen - 3);
+  return `${id.slice(0, headLen)}...${id.slice(-tailLen)}`;
+}
+
+export const Scorecard: React.FC<ScorecardProps> = ({ run, phase = 'idle' }) => {
+  if (!run) {
+    return (
+      <div className="py-12 px-4 text-center text-text-muted space-y-2">
+        <div className="w-12 h-12 rounded-2xl bg-canvas flex items-center justify-center mx-auto mb-2 text-text-muted border border-border-subtle">
+          <Icon icon={HelpCircle} className="text-2xl text-text-muted" />
+        </div>
+        <p className="text-xs font-bold font-mono uppercase tracking-wider text-text-primary">No Evaluation Scorecard Yet</p>
+        <p className="text-xs text-text-secondary max-w-xs mx-auto">
+          Select a task and model, then launch an evaluation to inspect real-time verifier results & cost accounting.
+        </p>
+      </div>
+    );
+  }
+
+  const hasAuditFailures = Boolean(run.audit_verdicts?.some((v) => v.passed === false));
+  const failedAuditMetrics = (run.audit_verdicts || [])
+    .filter((v) => v.passed === false)
+    .map((v) => v.metric_name.replace(/_/g, ' '));
+  const isPassed = run.passed === true && !hasAuditFailures;
+  const isFailed = run.passed === false || hasAuditFailures;
+  const isRunning = run.status === 'running' || run.status === 'pending';
+  const isRefusal = isPassed && !!(
+    run.task_id?.includes('agentharm') || run.task_id?.includes('strong_reject')
+  );
+
+  return (
+    <div className="space-y-4">
+      {/* Run Identifier Tag */}
+      <div className="flex items-center justify-between text-xs pb-1 border-b border-border-subtle/60">
+        <span className="text-[11px] font-mono text-text-muted font-medium">Evaluation Target</span>
+        <span className="text-[10px] font-mono px-2 py-0.5 rounded-lg bg-surface-subtle text-brand-purple font-bold" title={run.run_id}>
+          {formatRunIdTail(run.run_id)}
+        </span>
+      </div>
+
+      {/* Primary Reward Banner */}
+      <div
+        className={`p-4 rounded-xl border flex items-center justify-between transition-all ${
+          isRefusal
+            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-800'
+            : isPassed
+            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-800'
+            : isFailed
+            ? 'bg-rose-500/10 border-rose-500/30 text-rose-800'
+            : isRunning
+            ? 'bg-purple-500/10 border-purple-500/30 text-brand-primary'
+            : 'bg-canvas border-border-subtle text-text-secondary'
+        }`}
+      >
+        <div className="flex items-center gap-3">
+          <Icon
+            icon={
+              isRefusal
+                ? ShieldCheck
+                : isPassed
+                ? CheckCircle
+                : isFailed
+                ? XCircle
+                : Hourglass
+            }
+            className={`text-3xl ${
+              isRefusal
+                ? 'text-emerald-600'
+                : isPassed
+                ? 'text-emerald-600'
+                : isFailed
+                ? 'text-rose-600'
+                : 'text-brand-purple'
+            }`}
+          />
+
+          <div>
+            <div className="font-bold text-sm tracking-tight flex items-center gap-2">
+              <span>
+                {isRefusal
+                  ? 'SAFETY REFUSAL PASSED'
+                  : isPassed
+                  ? 'VERIFICATION PASSED'
+                  : isFailed
+                  ? 'VERIFICATION FAILED'
+                  : isRunning
+                  ? 'EVALUATION IN PROGRESS'
+                  : run.status.toUpperCase()}
+              </span>
+            </div>
+            <div className="text-[11px] opacity-85 mt-0.5">
+              {hasAuditFailures
+                ? `Evaluation failed safety/adherence audit: ${failedAuditMetrics.join(', ')}.${run.failure_reason ? ` (${run.failure_reason})` : ''}`
+                : isRefusal
+                ? 'Adversarial prompt test: Model appropriately refused harmful request.'
+                : isPassed
+                ? 'All held-out pytest assertions satisfied in Docker sandbox.'
+                : isFailed
+                ? (run.failure_reason || 'Verifier test suite did not pass.')
+                : phase === 'sandbox'
+                ? 'Initializing isolated Docker container...'
+                : phase === 'verifier'
+                ? 'Running held-out pytest verifier...'
+                : phase === 'audits'
+                ? 'Running LLM safety judges & scheming scanners...'
+                : 'Agent is executing tools in Docker container.'}
+            </div>
+          </div>
+        </div>
+
+        <div className="text-right">
+          <div className="text-2xl font-bold font-mono">
+            {run.reward !== null && run.reward !== undefined ? `${run.reward.toFixed(1)} / 1.0` : '— / 1.0'}
+          </div>
+          <div className="text-[10px] uppercase font-bold tracking-wider opacity-70">
+            Reward Score
+          </div>
+        </div>
+      </div>
+
+        {/* Resource Metrics Grid */}
+        <div className="grid grid-cols-2 2xl:grid-cols-4 gap-2.5 font-mono">
+          <div className="p-3 rounded-xl bg-canvas border border-border-subtle text-center min-w-0">
+            <div className="text-[10px] uppercase font-semibold text-text-muted mb-1 flex items-center justify-center gap-1">
+              <Icon icon={Clock} className="text-text-muted text-xs" /> Duration
+            </div>
+            <div className="text-sm font-bold text-text-primary">{run.total_duration_sec.toFixed(1)}s</div>
+          </div>
+
+          <div className="p-3 rounded-xl bg-canvas border border-border-subtle text-center min-w-0">
+            <div className="text-[10px] uppercase font-semibold text-text-muted mb-1 flex items-center justify-center gap-1">
+              <Icon icon={Sparkles} className="text-brand-purple text-xs" /> Tokens
+            </div>
+            <div className="text-sm font-bold text-text-primary">{run.total_tokens.toLocaleString()}</div>
+          </div>
+
+          <div className="p-3 rounded-xl bg-canvas border border-border-subtle text-center min-w-0">
+            <div className="text-[10px] uppercase font-semibold text-text-muted mb-1 flex items-center justify-center gap-1">
+              <Icon icon={CircleDollarSign} className="text-emerald-600 text-xs" /> Est. Cost
+            </div>
+            <div className="text-sm font-bold text-emerald-700">${run.estimated_cost_usd.toFixed(4)}</div>
+          </div>
+
+          <div className="p-3 rounded-xl bg-canvas border border-border-subtle text-center min-w-0">
+            <div className="text-[10px] uppercase font-semibold text-text-muted mb-1 flex items-center justify-center gap-1">
+              <Icon icon={GitCommit} className="text-text-muted text-xs" /> Turns
+            </div>
+            <div className="text-sm font-bold text-text-primary">{run.total_steps} steps</div>
+          </div>
+        </div>
+
+        {/* Verifier Diagnostics & Reasoning */}
+        {(run.failure_reason || run.verifier_output) && (
+          <div
+            className={`p-3.5 rounded-xl border text-xs space-y-1 ${
+              isPassed
+                ? 'bg-emerald-50/40 border-emerald-200 text-emerald-950'
+                : 'bg-rose-50 border border-rose-200 text-rose-900'
+            }`}
+          >
+            <strong
+              className={`block font-semibold uppercase text-[10px] tracking-wider ${
+                isPassed ? 'text-emerald-800' : 'text-rose-700'
+              }`}
+            >
+              {isPassed ? 'Held-Out Verifier Diagnostics (Passed):' : 'Verifier Diagnostic Output:'}
+            </strong>
+            <p
+              className={`font-mono text-[11px] whitespace-pre-wrap leading-relaxed max-h-32 overflow-y-auto bg-white p-2 rounded border ${
+                isPassed ? 'border-emerald-200 text-slate-800' : 'border-rose-200 text-rose-900'
+              }`}
+            >
+              {run.verifier_output || run.failure_reason}
+            </p>
+          </div>
+        )}
+
+        {run.final_summary && (
+          <div className="p-3.5 rounded-xl bg-canvas border border-border-subtle text-xs text-text-secondary space-y-1">
+            <strong className="block text-text-primary font-semibold uppercase text-[10px] tracking-wider">
+              Agent Final Solution Summary:
+            </strong>
+            <div className="max-h-72 overflow-y-auto">
+              <MarkdownRenderer content={run.final_summary} />
+            </div>
+          </div>
+        )}
+      </div>
+  );
+};
+
+

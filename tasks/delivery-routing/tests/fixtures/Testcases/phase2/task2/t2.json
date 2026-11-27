@@ -1,0 +1,208 @@
+{
+    "meta": {
+        "description": "Phase 2.2 Testcase 2",
+        "queries": 25
+    },
+    "events": [
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 0,
+            "k": 7,
+            "source": 18968,
+            "target": 17031,
+            "overlap_threshold": 31
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 1,
+            "k": 2,
+            "source": 8034,
+            "target": 45705,
+            "overlap_threshold": 59
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 2,
+            "k": 3,
+            "source": 30841,
+            "target": 58871,
+            "overlap_threshold": 37
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 3,
+            "k": 4,
+            "source": 23127,
+            "target": 30918,
+            "overlap_threshold": 49
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 4,
+            "k": 2,
+            "source": 9496,
+            "target": 12256,
+            "overlap_threshold": 48
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 5,
+            "k": 4,
+            "source": 36122,
+            "target": 6865,
+            "overlap_threshold": 61
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 6,
+            "k": 2,
+            "source": 73439,
+            "target": 48705,
+            "overlap_threshold": 45
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 7,
+            "k": 7,
+            "source": 32952,
+            "target": 69898,
+            "overlap_threshold": 51
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 8,
+            "k": 4,
+            "source": 49657,
+            "target": 26714,
+            "overlap_threshold": 28
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 9,
+            "k": 3,
+            "source": 13591,
+            "target": 74306,
+            "overlap_threshold": 35
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 10,
+            "k": 2,
+            "source": 14145,
+            "target": 44119,
+            "overlap_threshold": 48
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 11,
+            "k": 4,
+            "source": 8293,
+            "target": 29262,
+            "overlap_threshold": 60
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 12,
+            "k": 4,
+            "source": 24035,
+            "target": 25476,
+            "overlap_threshold": 21
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 13,
+            "k": 2,
+            "source": 61606,
+            "target": 40452,
+            "overlap_threshold": 44
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 14,
+            "k": 7,
+            "source": 60913,
+            "target": 1264,
+            "overlap_threshold": 41
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 15,
+            "k": 7,
+            "source": 57185,
+            "target": 73293,
+            "overlap_threshold": 36
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 16,
+            "k": 4,
+            "source": 72900,
+            "target": 36228,
+            "overlap_threshold": 37
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 17,
+            "k": 3,
+            "source": 54029,
+            "target": 18960,
+            "overlap_threshold": 22
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 18,
+            "k": 3,
+            "source": 16406,
+            "target": 28926,
+            "overlap_threshold": 32
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 19,
+            "k": 6,
+            "source": 7634,
+            "target": 37861,
+            "overlap_threshold": 64
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 20,
+            "k": 3,
+            "source": 26644,
+            "target": 7082,
+            "overlap_threshold": 24
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 21,
+            "k": 2,
+            "source": 74017,
+            "target": 58208,
+            "overlap_threshold": 62
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 22,
+            "k": 6,
+            "source": 47650,
+            "target": 50529,
+            "overlap_threshold": 52
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 23,
+            "k": 6,
+            "source": 37423,
+            "target": 9892,
+            "overlap_threshold": 31
+        },
+        {
+            "type": "k_shortest_paths_heuristic",
+            "id": 24,
+            "k": 3,
+            "source": 52653,
+            "target": 34265,
+            "overlap_threshold": 45
+        }
+    ]
+}

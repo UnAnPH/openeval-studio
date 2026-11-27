@@ -1,0 +1,1742 @@
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Activity,
+  ArrowRight,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  Code2,
+  Copy,
+  FileText,
+  Folder,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  Terminal,
+  Trash2,
+  Upload,
+  X,
+  Zap,
+} from 'lucide-react';
+import { TranscriptCardView, TranscriptMessage } from './TranscriptCardView';
+import { MarkdownRenderer } from './MarkdownRenderer';
+import { cleanTaskSynopsisText } from '../lib/markdown';
+import { WatcherSession } from '../types';
+import { isBlockedDecisionName, sessionIsBlocked } from '../lib/verdict';
+import { buildAuthHeaders } from '../lib/api';
+
+interface FragmentMatch {
+  session_id: string;
+  project_or_task: string;
+  model: string;
+  turn_start: number;
+  turn_end: number;
+  matched_role: string;
+  matched_span: string;
+  explanation: string;
+  relevance_score: number;
+  match_type?: 'llm' | 'dense' | 'lexical' | 'hybrid';
+  dense_score?: number;
+  lexical_score?: number;
+  combined_score?: number;
+}
+
+// Session is blocked if marked blocked or if any review denied/blocked (accept deny|block|reject vocab) or score ≥ 8, unless operator-allowed.
+export { sessionIsBlocked };
+
+// A session is LIVE if and only if:
+// 1. Not blocked (a blocked session is NEVER classified as live/working)
+// 2. Status is working/active/running
+// 3. Session is fresh (active within the last 15 minutes)
+// Demo seeds can mark a couple of fixtures as `active` so `/demo` exercises the
+// Live tab without pretending stale/completed sessions are running.
+export const sessionIsLive = (s: WatcherSession, _isDemoActive: boolean = false): boolean => {
+  if (sessionIsBlocked(s)) return false;
+  if (s.status !== 'working' && s.status !== 'active' && s.status !== 'running') return false;
+
+  // Staleness check: if last event timestamp is > 15 minutes ago, it's stale (closed)
+  let lastTime = 0;
+  if (s.updated_at) {
+    const t = new Date(s.updated_at).getTime();
+    if (!isNaN(t)) lastTime = Math.max(lastTime, t);
+  }
+  if (s.created_at) {
+    const t = new Date(s.created_at).getTime();
+    if (!isNaN(t)) lastTime = Math.max(lastTime, t);
+  }
+  const msgs = s.trajectory?.messages || [];
+  if (msgs.length > 0 && msgs[msgs.length - 1].timestamp) {
+    const mTs = msgs[msgs.length - 1].timestamp!;
+    const t = mTs > 1e11 ? mTs : mTs * 1000;
+    if (!isNaN(t)) lastTime = Math.max(lastTime, t);
+  }
+  const tcs = s.trajectory?.tool_calls || [];
+  if (tcs.length > 0 && tcs[tcs.length - 1].timestamp) {
+    const cTs = tcs[tcs.length - 1].timestamp!;
+    const t = cTs > 1e11 ? cTs : cTs * 1000;
+    if (!isNaN(t)) lastTime = Math.max(lastTime, t);
+  }
+
+  if (lastTime > 0 && Date.now() - lastTime > 15 * 60 * 1000) {
+    return false;
+  }
+  return true;
+};
+
+export const sessionIsClosed = (s: WatcherSession, isDemoActive: boolean = false): boolean =>
+  !sessionIsBlocked(s) && !sessionIsLive(s, isDemoActive);
+
+export const isDemoSession = (s: WatcherSession): boolean =>
+  (s.session_id || '').includes('demo') ||
+  (s.session_id || '').startsWith('demo-') ||
+  (s as { org_id?: string }).org_id === 'demo' ||
+  (s as { is_demo?: boolean }).is_demo === true;
+
+// Demo guarantee: `/demo` must always surface 2 non-blocked LIVE sessions,
+// regardless of server uptime or 15-minute staleness. Promotes the first 2
+// non-blocked, non-eval sessions with minute-aligned timestamps so repeated
+// 10s polling keeps the session signature (and therefore state) stable.
+export const ensureDemoLiveSessions = (list: WatcherSession[]): WatcherSession[] => {
+  if (list.some((s) => sessionIsLive(s, true))) return list;
+
+  const minuteAlignedNowMs = Math.floor(Date.now() / 60_000) * 60_000;
+  let liveSlotIdx = 0;
+  return list.map((s) => {
+    if (liveSlotIdx >= 2) return s;
+    if (sessionIsBlocked(s) || (s.session_id || '').startsWith('eval-')) return s;
+    const promoted: WatcherSession = {
+      ...s,
+      status: 'active',
+      current_activity:
+        !s.current_activity || s.current_activity === 'completed'
+          ? 'Monitoring active tool calls'
+          : s.current_activity,
+      updated_at: new Date(minuteAlignedNowMs - (liveSlotIdx + 1) * 60_000).toISOString(),
+    };
+    liveSlotIdx += 1;
+    return promoted;
+  });
+};
+
+interface SessionsViewProps {
+  initialSessionId?: string | null;
+  isDemoSeed?: boolean;
+  isDemo?: boolean;
+  onBack?: () => void;
+  demoSessions?: WatcherSession[];
+}
+
+export const SessionsView: React.FC<SessionsViewProps> = ({
+  initialSessionId,
+  isDemoSeed,
+  isDemo: propIsDemo,
+  demoSessions = [],
+}) => {
+  const isDemoActive = Boolean(
+    propIsDemo ?? (isDemoSeed || (typeof window !== 'undefined' && (window.location.pathname.startsWith('/demo') || window.location.hash.startsWith('#/demo'))))
+  );
+  const isLocalEnvironment = typeof window !== 'undefined' && (
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1' ||
+    window.location.hostname === '0.0.0.0' ||
+    window.location.hostname.endsWith('.local')
+  );
+  const [sessions, setSessions] = useState<WatcherSession[]>([]);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(initialSessionId || null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [sessionFilter, setSessionFilter] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'live' | 'blocked' | 'closed'>('all');
+
+  // Transcript Search state
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [isSearching, setIsSearching] = useState<boolean>(false);
+  const [fragmentMatches, setFragmentMatches] = useState<FragmentMatch[]>([]);
+  const [visibleFragmentsCount, setVisibleFragmentsCount] = useState<number>(5);
+  const [targetMessageId, setTargetMessageId] = useState<string | null>(null);
+
+  // Log Ingest Modal state
+  const [showIngestModal, setShowIngestModal] = useState<boolean>(false);
+  const [ingestMode, setIngestMode] = useState<'upload' | 'path'>('upload');
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [ingestFilePath, setIngestFilePath] = useState<string>('');
+  const [isIngesting, setIsIngesting] = useState<boolean>(false);
+  const [ingestStatus, setIngestStatus] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const copyToClipboard = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  // Fetch sessions from Watcher backend (with automatic fallback to bundled demo fixtures on static hosts)
+  const fetchSessions = async (autoSelect = false, isInitial = false) => {
+    if (typeof document !== 'undefined' && document.hidden) return;
+    try {
+      if (isInitial) {
+        setIsLoading(true);
+      }
+      const headers = buildAuthHeaders(
+        isDemoActive ? { 'X-OpenEval-Surface': 'demo' } : {}
+      );
+      const res = await fetch('/api/v1/watcher/sessions?min_messages=1', { headers }).catch(() => null);
+      if (res && res.ok) {
+        const data: WatcherSession[] = await res.json();
+        if (Array.isArray(data)) {
+          const validData = isDemoActive
+            ? ensureDemoLiveSessions(data.filter((s) => isDemoSession(s)))
+            : data.filter((s) => !isDemoSession(s));
+          if (validData.length > 0) {
+            setSessions((prev) => {
+              const prevSig = prev.map((p) => `${p.session_id}:${p.updated_at || p.created_at || ''}:${p.status || ''}`).join(',');
+              const nextSig = validData.map((p) => `${p.session_id}:${p.updated_at || p.created_at || ''}:${p.status || ''}`).join(',');
+              return prevSig === nextSig ? prev : validData;
+            });
+            if (autoSelect || !selectedSessionId) {
+              if (initialSessionId && validData.some((s) => s.session_id === initialSessionId)) {
+                setSelectedSessionId(initialSessionId);
+              } else if (!selectedSessionId && validData.length > 0) {
+                setSelectedSessionId(validData[0].session_id);
+              }
+            }
+            return;
+          } else {
+            if (isDemoActive) {
+              const fallback = ensureDemoLiveSessions((demoSessions || []) as WatcherSession[]);
+              if (fallback.length > 0) {
+                setSessions(fallback);
+                if (autoSelect || !selectedSessionId) {
+                  if (initialSessionId && fallback.some((s) => s.session_id === initialSessionId)) {
+                    setSelectedSessionId(initialSessionId);
+                  } else {
+                    setSelectedSessionId(fallback[0].session_id);
+                  }
+                }
+                return;
+              }
+            }
+            setSessions([]);
+            setSelectedSessionId(null);
+            return;
+          }
+        }
+      }
+      if (isDemoActive) {
+        const fallback = ensureDemoLiveSessions((demoSessions || []) as WatcherSession[]);
+        if (fallback.length > 0) {
+          setSessions(fallback);
+          if (autoSelect || !selectedSessionId) {
+            if (initialSessionId && fallback.some((s) => s.session_id === initialSessionId)) {
+              setSelectedSessionId(initialSessionId);
+            } else {
+              setSelectedSessionId(fallback[0].session_id);
+            }
+          }
+          return;
+        }
+      }
+      setSessions([]);
+      setSelectedSessionId(null);
+    } catch (err) {
+      if (isDemoActive) {
+        console.warn('Backend unavailable, using bundled demo sessions:', err);
+        const fallback = ensureDemoLiveSessions((demoSessions || []) as WatcherSession[]);
+        if (fallback.length > 0) {
+          setSessions(fallback);
+          if (!selectedSessionId) {
+            setSelectedSessionId(fallback[0].session_id);
+          }
+          return;
+        }
+      }
+      setSessions([]);
+      setSelectedSessionId(null);
+    } finally {
+      if (isInitial) {
+        setIsLoading(false);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (isDemoActive && demoSessions && demoSessions.length > 0 && sessions.length === 0) {
+      setSessions(ensureDemoLiveSessions(demoSessions));
+      if (!selectedSessionId) {
+        setSelectedSessionId(demoSessions[0].session_id);
+      }
+    }
+  }, [isDemoActive, demoSessions]);
+
+  useEffect(() => {
+    fetchSessions(true, true);
+    const interval = setInterval(() => {
+      fetchSessions(false, false);
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [initialSessionId, isDemoActive]);
+
+  // Sync selectedSessionId with URL hash
+  const handleSelectSession = (id: string) => {
+    setSelectedSessionId(id);
+    setSearchQuery('');
+    setFragmentMatches([]);
+    const hash = `#sessions/${encodeURIComponent(id)}`;
+    if (window.location.hash !== hash) {
+      window.location.hash = hash;
+    }
+  };
+
+  // Ensure demo mode only ever shows demo sessions (defense in depth)
+  const displaySessions = useMemo(() => {
+    if (isDemoActive) {
+      return sessions.filter((s) => isDemoSession(s));
+    }
+    return sessions;
+  }, [sessions, isDemoActive]);
+
+  const selectedSession = useMemo(
+    () => displaySessions.find((s) => s.session_id === selectedSessionId) || null,
+    [displaySessions, selectedSessionId]
+  );
+
+  // Status predicates bound to current demo mode
+  const isBlocked = (s: WatcherSession) => sessionIsBlocked(s);
+  const isLive = (s: WatcherSession) => sessionIsLive(s, isDemoActive);
+  const isClosed = (s: WatcherSession) => sessionIsClosed(s, isDemoActive);
+
+  // Buckets for filter pills: ALL / LIVE / BLOCKED / CLOSED (strictly mutually exclusive)
+  const totalCount = displaySessions.length;
+  const liveCount = useMemo(
+    () => displaySessions.filter((s) => isLive(s)).length,
+    [displaySessions, isDemoActive]
+  );
+  const blockedCount = useMemo(
+    () => displaySessions.filter((s) => isBlocked(s)).length,
+    [displaySessions]
+  );
+  const closedCount = useMemo(
+    () => displaySessions.filter((s) => isClosed(s)).length,
+    [displaySessions, isDemoActive]
+  );
+
+  // Filter sessions list by query & status (All, Live, Blocked, or Closed)
+  const filteredSessions = useMemo(() => {
+    let list = displaySessions;
+    if (statusFilter === 'live') {
+      list = list.filter((s) => isLive(s));
+    } else if (statusFilter === 'blocked') {
+      list = list.filter((s) => isBlocked(s));
+    } else if (statusFilter === 'closed') {
+      list = list.filter((s) => isClosed(s));
+    }
+
+    if (!sessionFilter.trim()) return list;
+    const q = sessionFilter.toLowerCase();
+    return list.filter(
+      (s) =>
+        s.session_id.toLowerCase().includes(q) ||
+        (s.title && s.title.toLowerCase().includes(q)) ||
+        (s.project_name && s.project_name.toLowerCase().includes(q)) ||
+        (s.agent_type && s.agent_type.toLowerCase().includes(q)) ||
+        (s.model && s.model.toLowerCase().includes(q))
+    );
+  }, [displaySessions, sessionFilter, statusFilter, isDemoActive]);
+
+  // Auto-sync selectedSessionId if current selection is not visible in filtered list
+  useEffect(() => {
+    if (filteredSessions.length > 0) {
+      const exists = filteredSessions.some((s) => s.session_id === selectedSessionId);
+      if (!exists) {
+        setSelectedSessionId(filteredSessions[0].session_id);
+      }
+    }
+  }, [filteredSessions, selectedSessionId]);
+
+  // Handle LLM Fragment Search
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!searchQuery.trim()) {
+      setFragmentMatches([]);
+      return;
+    }
+
+    setIsSearching(true);
+    try {
+      const headers = buildAuthHeaders({
+        'Content-Type': 'application/json',
+        ...(isDemoActive ? { 'X-OpenEval-Surface': 'demo' } : {}),
+      });
+
+      const res = await fetch('/api/v1/search/fragments', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          query: searchQuery,
+          session_id: selectedSessionId,
+          scope: 'session',
+        }),
+      }).catch(() => null);
+
+      if (res && res.ok) {
+        const data: FragmentMatch[] = await res.json();
+        setFragmentMatches(data);
+        setVisibleFragmentsCount(5);
+        return;
+      }
+
+      // Static client-side search fallback (scoped strictly to active session)
+      const q = searchQuery.toLowerCase().trim();
+      const isIssueQuery = /issue|problem|error|block|fail|wrong|what happened|why|bug|fault|crash|leak|violation|where is/i.test(q);
+      const qTerms = q.split(/\s+/).filter(Boolean);
+      const matches: FragmentMatch[] = [];
+
+      const targetSessions = selectedSessionId
+        ? displaySessions.filter((s) => s.session_id === selectedSessionId)
+        : displaySessions.slice(0, 1);
+
+      targetSessions.forEach((s) => {
+        (s.trajectory?.messages || []).forEach((m, idx) => {
+          const msgObj = m as Record<string, any>;
+          const content = m.content || '';
+          const thinking = m.thinking || '';
+          const toolCalls: any[] = msgObj.tool_calls || [];
+          const toolResults: any[] = msgObj.tool_results || [];
+          const toolText = toolCalls
+            .map((tc: any) => `${tc.tool_name || ''} ${JSON.stringify(tc.arguments || {})}`)
+            .join(' ');
+          const resultText = toolResults
+            .map((tr: any) => `${tr.stderr || ''} ${tr.stdout || ''}`)
+            .join(' ');
+          const full = `${content} ${thinking} ${toolText} ${resultText}`.toLowerCase();
+          const hasSecurityBlock = /safety firewall blocked|policy intercept|security warning|blocked by/i.test(full);
+
+          // Word boundary term matching
+          let termMatches = 0;
+          for (const term of qTerms) {
+            const clean = term.replace(/^[.\-_]+/, '');
+            const re = new RegExp(`(^|[\\s_./\\-"'\`])${clean}(s|ed|ing)?($|[\\s_./\\-"'\`])`, 'i');
+            if (re.test(full) || full.includes(term)) {
+              termMatches++;
+            }
+          }
+
+          if (termMatches > 0 || (isIssueQuery && hasSecurityBlock)) {
+            const isExact = full.includes(q);
+            const tokenScore = termMatches / Math.max(1, qTerms.length);
+            let score = Math.min(1.0, tokenScore * 0.7 + (isExact ? 0.3 : 0.1));
+            if (isIssueQuery && hasSecurityBlock) {
+              score = Math.max(score, 0.95);
+            }
+
+            // Centered excerpt extraction
+            let startIdx = 0;
+            const blockIdx = full.indexOf('blocked');
+            const phraseIdx = full.indexOf(q);
+            if (phraseIdx !== -1) {
+              startIdx = Math.max(0, phraseIdx - 30);
+            } else if (isIssueQuery && blockIdx !== -1) {
+              startIdx = Math.max(0, blockIdx - 30);
+            } else if (qTerms.length > 0) {
+              const firstTermIdx = full.indexOf(qTerms[0]);
+              if (firstTermIdx !== -1) {
+                startIdx = Math.max(0, firstTermIdx - 30);
+              }
+            }
+            const rawExcerpt = `${content} ${thinking} ${toolText} ${resultText}`
+              .slice(startIdx, startIdx + 200)
+              .replace(/\n+/g, ' ')
+              .trim();
+            const snippet =
+              startIdx > 0 ? `...${rawExcerpt}...` : `${rawExcerpt}...`;
+
+            const explanation = (isIssueQuery && hasSecurityBlock)
+              ? `Identified as the key issue: action was intercepted and blocked by the safety firewall in Turn #${idx + 1}.`
+              : `Keyword match on "${searchQuery}" in turn #${idx + 1}.`;
+
+            matches.push({
+              session_id: s.session_id,
+              project_or_task: s.project_name || s.session_id,
+              model: s.model || s.agent_type,
+              turn_start: idx + 1,
+              turn_end: idx + 1,
+              matched_role: m.role || 'assistant',
+              matched_span: snippet,
+              explanation,
+              relevance_score: score,
+              match_type: isIssueQuery && hasSecurityBlock ? 'dense' : 'lexical',
+              dense_score: isIssueQuery && hasSecurityBlock ? score : 0.0,
+              lexical_score: score,
+              combined_score: score,
+            });
+          }
+        });
+      });
+
+      matches.sort((a, b) => (b.combined_score ?? b.relevance_score ?? 0) - (a.combined_score ?? a.relevance_score ?? 0));
+      setFragmentMatches(matches);
+      setVisibleFragmentsCount(5);
+    } catch (err) {
+      console.error('Fragment search failed:', err);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Handle Agent Log Ingest (multi-file upload or server CLI path in local mode)
+  const handleIngest = async () => {
+    setIsIngesting(true);
+    setIngestStatus(null);
+    const ingestHeaders = buildAuthHeaders({
+      'Content-Type': 'application/json',
+      ...(isDemoActive ? { 'X-OpenEval-Surface': 'demo' } : {}),
+    });
+    const applyIngestedSession = (session: WatcherSession) => {
+      setSessions((prev) => [
+        session,
+        ...prev.filter((s) => s.session_id !== session.session_id),
+      ]);
+      handleSelectSession(session.session_id);
+    };
+    try {
+      if (ingestMode === 'upload' || !isLocalEnvironment) {
+        if (selectedFiles.length === 0) return;
+        let successCount = 0;
+        let failCount = 0;
+        let lastSession: WatcherSession | null = null;
+        for (let i = 0; i < selectedFiles.length; i++) {
+          const file = selectedFiles[i];
+          if (selectedFiles.length > 1) {
+            setIngestStatus(`Ingesting (${i + 1}/${selectedFiles.length}): ${file.name}...`);
+          }
+          try {
+            const content = await file.text();
+            const res = await fetch('/api/v1/agent-logs/ingest', {
+              method: 'POST',
+              headers: ingestHeaders,
+              body: JSON.stringify({
+                filename: file.name,
+                file_content: content,
+                agent_type: 'auto',
+                is_demo: isDemoActive,
+              }),
+            });
+            if (res.ok) {
+              successCount++;
+              const respData = await res.json().catch(() => ({}));
+              if (respData?.session?.session_id) {
+                lastSession = respData.session as WatcherSession;
+                applyIngestedSession(lastSession);
+              }
+            } else failCount++;
+          } catch {
+            failCount++;
+          }
+        }
+        if (failCount === 0) {
+          setIngestStatus(`Successfully ingested ${successCount} agent session${successCount > 1 ? 's' : ''}!`);
+        } else {
+          setIngestStatus(`Ingested ${successCount} session(s), ${failCount} failed.`);
+        }
+        setSelectedFiles([]);
+        fetchSessions(true);
+        if (lastSession) {
+          applyIngestedSession(lastSession);
+        }
+        setTimeout(() => {
+          setShowIngestModal(false);
+          setIngestStatus(null);
+        }, 1500);
+      } else {
+        if (!ingestFilePath.trim()) return;
+        const res = await fetch('/api/v1/agent-logs/ingest', {
+          method: 'POST',
+          headers: ingestHeaders,
+          body: JSON.stringify({
+            file_path: ingestFilePath.trim(),
+            agent_type: 'auto',
+            is_demo: isDemoActive,
+          }),
+        });
+
+        if (res.ok) {
+          setIngestStatus('Successfully ingested agent log!');
+          setIngestFilePath('');
+          const respData = await res.json().catch(() => ({}));
+          if (respData?.session?.session_id) {
+            applyIngestedSession(respData.session as WatcherSession);
+          }
+          fetchSessions(true);
+          setTimeout(() => {
+            setShowIngestModal(false);
+            setIngestStatus(null);
+          }, 1200);
+        } else {
+          const err = await res.json().catch(() => ({}));
+          setIngestStatus(`Error: ${err.detail || 'Ingestion failed'}`);
+        }
+      }
+    } catch {
+      setIngestStatus('Error: Network or server connection failed');
+    } finally {
+      setIsIngesting(false);
+    }
+  };
+
+  // Handle Clear Sessions
+  const handleClearSessions = async () => {
+    if (!window.confirm('Are you sure you want to clear all monitored sessions?')) return;
+    try {
+      await fetch('/api/v1/watcher/sessions/clear', { method: 'POST' });
+      setSessions([]);
+      setSelectedSessionId(null);
+      setFragmentMatches([]);
+    } catch (err) {
+      console.error('Failed to clear sessions:', err);
+    }
+  };
+
+  // Build clean TranscriptMessage items for TranscriptCardView
+  const transcriptMessages: TranscriptMessage[] = useMemo(() => {
+    if (!selectedSession || !selectedSession.trajectory) return [];
+
+    const msgs = selectedSession.trajectory.messages || [];
+    const tcs = selectedSession.trajectory.tool_calls || [];
+    const trs = selectedSession.trajectory.tool_results || [];
+    const reviews = selectedSession.trajectory.reviews || [];
+
+    // Fallback tool results from reviews if tool_results is empty
+    const fallbackToolResults = trs.length > 0
+      ? trs
+      : reviews.map((r) => ({
+          tool_id: r.id,
+          tool_name: r.tool_name,
+          stdout: r.diff ? `Applied Diff:\n${r.diff}` : `Verdict: ${r.decision}\nExplanation: ${r.explanation || 'Approved operation.'}`,
+          stderr: '',
+          exit_code: isBlockedDecisionName(r.decision) ? 1 : 0,
+          duration_ms: r.latency_ms,
+          is_error: isBlockedDecisionName(r.decision),
+        }));
+
+    // If messages carry individual tool_calls (from updated Antigravity loader)
+    const hasPerMessageTools = msgs.some((m: any) => m.tool_calls && m.tool_calls.length > 0);
+
+    if (hasPerMessageTools) {
+      return msgs.map((m: any, idx: number) => ({
+        id: `msg-${idx}`,
+        role: m.role as 'developer' | 'system' | 'user' | 'assistant',
+        content: m.content || '',
+        thinking: m.thinking || null,
+        tool_calls: (m.tool_calls || []).map((tc: any) => ({
+          tool_id: tc.tool_id,
+          tool_name: tc.tool_name,
+          arguments: tc.arguments || {},
+          raw_input: tc.raw_input || undefined,
+        })),
+        tool_results: (m.tool_results || []).map((tr: any) => ({
+          tool_id: tr.tool_id,
+          tool_name: tr.tool_name,
+          stdout: tr.stdout || '',
+          stderr: tr.stderr || '',
+          exit_code: tr.exit_code ?? 0,
+          duration_ms: tr.duration_ms,
+          is_error: tr.is_error ?? false,
+        })),
+        timestamp: m.timestamp,
+      }));
+    }
+
+    // Otherwise, attach tools to the assistant turns
+    if (msgs.length === 0 && (tcs.length > 0 || fallbackToolResults.length > 0)) {
+      return [
+        {
+          id: 'msg-live-0',
+          role: 'assistant',
+          content:
+            selectedSession.current_activity ||
+            `Live ${selectedSession.agent_type} session (${tcs.length} intercepted tool call${tcs.length === 1 ? '' : 's'}).`,
+          tool_calls: tcs.map((tc) => ({
+            tool_id: tc.tool_id,
+            tool_name: tc.tool_name,
+            arguments: tc.arguments || {},
+            raw_input: tc.raw_input || undefined,
+          })),
+          tool_results: fallbackToolResults.map((tr) => ({
+            tool_id: tr.tool_id,
+            tool_name: tr.tool_name,
+            stdout: tr.stdout || '',
+            stderr: tr.stderr || '',
+            exit_code: tr.exit_code ?? 0,
+            duration_ms: tr.duration_ms,
+            is_error: tr.is_error ?? false,
+          })),
+        },
+      ];
+    }
+
+    const resultMsgs: TranscriptMessage[] = [];
+    const assistantIndices = msgs
+      .map((m, idx) => (m.role === 'assistant' ? idx : -1))
+      .filter((idx) => idx !== -1);
+
+    msgs.forEach((m, idx) => {
+      const isLastAssistant = assistantIndices.length > 0 && idx === assistantIndices[assistantIndices.length - 1];
+
+      resultMsgs.push({
+        id: `msg-${idx}`,
+        role: m.role as 'developer' | 'system' | 'user' | 'assistant',
+        content: m.content || '',
+        thinking: m.thinking || null,
+        tool_calls: isLastAssistant
+          ? tcs.map((tc) => ({
+              tool_id: tc.tool_id,
+              tool_name: tc.tool_name,
+              arguments: tc.arguments || {},
+              raw_input: tc.raw_input || undefined,
+            }))
+          : undefined,
+        tool_results: isLastAssistant
+          ? fallbackToolResults.map((tr) => ({
+              tool_id: tr.tool_id,
+              tool_name: tr.tool_name,
+              stdout: tr.stdout || '',
+              stderr: tr.stderr || '',
+              exit_code: tr.exit_code ?? 0,
+              duration_ms: tr.duration_ms,
+              is_error: tr.is_error ?? false,
+            }))
+          : undefined,
+        timestamp: m.timestamp,
+      });
+    });
+
+    return resultMsgs;
+  }, [selectedSession]);
+
+  // Derived metrics from selectedSession
+  const messagesCount = selectedSession?.trajectory?.messages?.length || 0;
+  const toolCallsCount = selectedSession?.trajectory?.tool_calls?.length || 0;
+
+  // Structured Task Synopsis (what the human actually asked the agent to do)
+  const sessionSynopsis = useMemo(() => {
+    if (!selectedSession) return null;
+    const msgs = selectedSession.trajectory?.messages || [];
+
+    // 1. What the task was: first user prompt, minus captured-prompt wrappers.
+    const firstUserMsg = msgs.find((m) => m.role === 'user');
+    let taskDesc = firstUserMsg?.content ? cleanTaskSynopsisText(firstUserMsg.content) : '';
+
+    // 2. Fall back to the `Task:` field of the final summary, then to the title.
+    const rawSummary = selectedSession.final_summary || (selectedSession as any).summary || '';
+    const parsedTask = rawSummary.includes('Task:')
+      ? rawSummary.split('Task:')[1]?.split('Accomplished:')[0]?.trim() || ''
+      : '';
+
+    if (!taskDesc) {
+      taskDesc = parsedTask || (selectedSession.title && !selectedSession.title.startsWith('Antigravity Session') ? selectedSession.title : 'Autonomous agent software engineering session.');
+    }
+
+    return { task: taskDesc };
+  }, [selectedSession]);
+
+  // Agent badge styling
+  const renderAgentBadge = (agentType: string) => {
+    switch (agentType) {
+      case 'antigravity':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+            <Zap className="w-3 h-3 text-indigo-600" />
+            Antigravity
+          </span>
+        );
+      case 'claude_code':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+            <Terminal className="w-3 h-3 text-amber-600" />
+            Claude Code
+          </span>
+        );
+      case 'cursor':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-teal-50 text-teal-700 border border-teal-200">
+            <Code2 className="w-3 h-3 text-teal-600" />
+            Cursor
+          </span>
+        );
+      case 'codex':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-sky-50 text-sky-700 border border-sky-200">
+            <Activity className="w-3 h-3 text-sky-600" />
+            Codex
+          </span>
+        );
+      case 'opencode':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <Terminal className="w-3 h-3 text-emerald-600" />
+            OpenCode
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+            <Activity className="w-3 h-3 text-slate-500" />
+            {agentType}
+          </span>
+        );
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-full bg-[#fcfcfd] text-[#1e2029] font-sans p-6 space-y-5 overflow-hidden">
+
+      {/* 1. TOP TOOLBAR CARD */}
+      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-border-subtle shadow-sm flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-3">
+          <h1 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
+            <span>Sessions & Firewall</span>
+          </h1>
+        </div>
+
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => setShowIngestModal(true)}
+            className="h-9 px-4 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-slate-900 hover:bg-black text-white shadow-xs"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            <span>Ingest Agent Log</span>
+          </button>
+
+          {!isDemoActive && (
+            <button
+              type="button"
+              onClick={() => fetchSessions(false, true)}
+              disabled={isLoading}
+              className="h-9 w-9 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 shadow-2xs inline-flex items-center justify-center transition-all cursor-pointer disabled:opacity-50"
+              title="Refresh sessions"
+            >
+              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            </button>
+          )}
+
+          {!isDemoActive && sessions.length > 0 && (
+            <button
+              type="button"
+              onClick={handleClearSessions}
+              className="h-9 px-3.5 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-white hover:bg-rose-50 border border-slate-200 hover:border-rose-300 text-rose-700 shadow-2xs"
+              title="Clear all sessions"
+            >
+              <Trash2 className="w-4 h-4 text-rose-600" />
+              <span>Clear Sessions</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 2. MAIN TWO-COLUMN MASTER-DETAIL LAYOUT */}
+      <div className="flex-1 flex gap-5 min-h-0 overflow-hidden">
+        {/* LEFT PART: CARD CONTAINING SESSIONS FILTER & MASTER LIST */}
+        <div className="w-80 bg-white rounded-2xl border border-border-subtle shadow-sm flex flex-col shrink-0 overflow-hidden">
+          {/* Filter & Status Tabs */}
+          <div className="p-3 border-b border-[#e5e7eb] space-y-2">
+            {/* Status Tabs: All, Live, Blocked, and Closed */}
+            <div className="grid grid-cols-4 bg-slate-100 p-1 rounded-xl border border-slate-200/70 gap-1 text-center">
+              <button
+                type="button"
+                onClick={() => setStatusFilter('all')}
+                className={`py-1.5 px-1 rounded-lg transition-all cursor-pointer flex flex-col items-center justify-center ${
+                  statusFilter === 'all'
+                    ? 'bg-white text-slate-900 shadow-xs font-bold'
+                    : 'text-slate-600 hover:text-slate-900 font-medium'
+                }`}
+              >
+                <span className="text-[10px] uppercase tracking-wider font-bold">All</span>
+                <span
+                  className={`font-mono text-xs font-bold tabular-nums px-1.5 py-0.2 rounded-full ${
+                    statusFilter === 'all'
+                      ? 'bg-slate-200 text-slate-900'
+                      : 'bg-slate-200/60 text-slate-600'
+                  }`}
+                >
+                  {totalCount}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatusFilter('live')}
+                className={`py-1.5 px-1 rounded-lg transition-all cursor-pointer flex flex-col items-center justify-center ${
+                  statusFilter === 'live'
+                    ? 'bg-white text-emerald-700 shadow-xs font-bold'
+                    : liveCount > 0
+                    ? 'text-emerald-600 font-bold hover:text-emerald-800'
+                    : 'text-slate-600 hover:text-slate-900 font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-[10px] uppercase tracking-wider font-bold">Live</span>
+                </div>
+                <span
+                  className={`font-mono text-xs font-bold tabular-nums px-1 py-0.2 rounded-full ${
+                    statusFilter === 'live'
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : liveCount > 0
+                      ? 'bg-emerald-50 text-emerald-600'
+                      : 'bg-slate-200/60 text-slate-600'
+                  }`}
+                >
+                  {liveCount}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatusFilter('blocked')}
+                className={`py-1.5 px-1 rounded-lg transition-all cursor-pointer flex flex-col items-center justify-center ${
+                  statusFilter === 'blocked'
+                    ? 'bg-white text-rose-700 shadow-xs font-bold'
+                    : blockedCount > 0
+                    ? 'text-rose-600 font-bold hover:text-rose-800'
+                    : 'text-slate-600 hover:text-slate-900 font-medium'
+                }`}
+              >
+                <span className="text-[10px] uppercase tracking-wider font-bold">Blocked</span>
+                <span
+                  className={`font-mono text-xs font-bold tabular-nums px-1 py-0.2 rounded-full ${
+                    statusFilter === 'blocked'
+                      ? 'bg-rose-100 text-rose-800'
+                      : blockedCount > 0
+                      ? 'bg-rose-50 text-rose-600'
+                      : 'bg-slate-200/60 text-slate-600'
+                  }`}
+                >
+                  {blockedCount}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatusFilter('closed')}
+                className={`py-1.5 px-1 rounded-lg transition-all cursor-pointer flex flex-col items-center justify-center ${
+                  statusFilter === 'closed'
+                    ? 'bg-white text-slate-900 shadow-xs font-bold'
+                    : 'text-slate-600 hover:text-slate-900 font-medium'
+                }`}
+              >
+                <span className="text-[10px] uppercase tracking-wider font-bold">Closed</span>
+                <span
+                  className={`font-mono text-xs font-bold tabular-nums px-1 py-0.2 rounded-full ${
+                    statusFilter === 'closed'
+                      ? 'bg-slate-200 text-slate-900'
+                      : 'bg-slate-200/60 text-slate-600'
+                  }`}
+                >
+                  {closedCount}
+                </span>
+              </button>
+            </div>
+
+            {/* Keyword Filter Input */}
+            <div className="relative flex items-center">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Filter sessions..."
+                value={sessionFilter}
+                onChange={(e) => setSessionFilter(e.target.value)}
+                className="w-full h-9 pl-8 pr-3 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono shadow-2xs"
+              />
+            </div>
+          </div>
+
+          {/* Sessions Scrollable List */}
+          <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
+            {filteredSessions.length === 0 ? (
+              <div className="p-8 text-center text-xs text-slate-500 font-sans space-y-2">
+                {isLoading ? (
+                  <p>Loading monitored sessions...</p>
+                ) : (
+                  <p>No sessions found matching the current filter.</p>
+                )}
+              </div>
+            ) : (
+              filteredSessions.map((s) => {
+                const isSelected = s.session_id === selectedSessionId;
+                const sMsgCount = s.trajectory?.messages?.length || 0;
+                const sToolCount = s.trajectory?.tool_calls?.length || 0;
+                const isBlockedSession = isBlocked(s);
+                const isLiveSession = isLive(s);
+
+                return (
+                  <div
+                    key={s.session_id}
+                    onClick={() => handleSelectSession(s.session_id)}
+                    className={`p-3.5 cursor-pointer transition-all ${
+                      isSelected
+                        ? 'bg-indigo-50/70 border-l-4 border-l-indigo-600'
+                        : 'hover:bg-slate-50/80 border-l-4 border-l-transparent'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-1.5 mb-1.5">
+                      {renderAgentBadge(s.agent_type)}
+                      <span
+                        className={`inline-flex items-center gap-1 text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full ${
+                          isBlockedSession
+                            ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                            : isLiveSession
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : 'bg-slate-100 text-slate-600'
+                        }`}
+                      >
+                        {isBlockedSession ? (
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                        ) : isLiveSession ? (
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        ) : null}
+                        {isBlockedSession ? 'Blocked' : isLiveSession ? 'working' : 'closed'}
+                      </span>
+                    </div>
+
+                    <div
+                      className="text-xs font-bold text-slate-900 truncate mb-1 leading-snug"
+                      title={s.title || s.project_name || s.session_id}
+                    >
+                      {s.title || s.project_name || s.session_id}
+                    </div>
+
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 font-mono">
+                      <span className="truncate max-w-[120px] text-slate-400 font-semibold">{s.session_id}</span>
+                      <span className="text-[10px] text-slate-400 tabular-nums shrink-0">
+                        {sMsgCount} msgs · {sToolCount} tools
+                      </span>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        {/* RIGHT PART: SESSION DETAILS, AUTOMATED ANALYSIS & TRANSCRIPT */}
+        <div className="flex-1 flex flex-col overflow-y-auto space-y-5 pr-1 min-w-0">
+          {!selectedSession ? (
+            sessions.length === 0 && !isDemoActive && !isLoading ? (
+              <div className="flex flex-col items-center justify-center h-full text-center p-10 bg-white rounded-2xl border border-border-subtle shadow-sm space-y-5">
+                <div className="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto shadow-xs border border-indigo-100">
+                  <ShieldCheck className="w-7 h-7" />
+                </div>
+                <div className="space-y-1.5 max-w-md">
+                  <h3 className="text-base font-bold text-slate-900 tracking-tight">No Monitored Sessions Recorded Yet</h3>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    You're logged in to your private workspace. Connect your local or cloud coding agents to start monitoring tool calls and guardrails in real time, or ingest existing agent logs.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                  <button
+                    onClick={() => setShowIngestModal(true)}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors cursor-pointer"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Ingest Agent Log</span>
+                  </button>
+                  <a
+                    href="#hooks"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl border border-slate-200 transition-colors cursor-pointer"
+                  >
+                    <Terminal className="w-3.5 h-3.5" />
+                    <span>Connect Watcher Hook</span>
+                  </a>
+                  <a
+                    href="/demo"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-slate-800 text-xs font-medium rounded-xl border border-dashed border-slate-200 transition-colors"
+                  >
+                    <span>Explore Demo Surface</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+
+                {/* <div className="pt-4 border-t border-slate-100 w-full max-w-lg text-left">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2 text-center">
+                    Supported Coding Agents
+                  </span>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="p-2.5 rounded-xl bg-slate-50/70 border border-slate-100 text-center space-y-1">
+                      <span className="text-xs font-bold text-slate-800 block">Antigravity</span>
+                      <span className="text-[10px] text-slate-400 block font-mono">Hook / Python</span>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-slate-50/70 border border-slate-100 text-center space-y-1">
+                      <span className="text-xs font-bold text-slate-800 block">Claude Code</span>
+                      <span className="text-[10px] text-slate-400 block font-mono">Pre-tool Hook</span>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-slate-50/70 border border-slate-100 text-center space-y-1">
+                      <span className="text-xs font-bold text-slate-800 block">Cursor</span>
+                      <span className="text-[10px] text-slate-400 block font-mono">Telemetry Hook</span>
+                    </div>
+                  </div>
+                </div> */}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full text-center p-8 bg-white rounded-2xl border border-border-subtle shadow-sm">
+                <Folder className="w-10 h-10 text-slate-300 mb-3" />
+                <h3 className="text-sm font-bold text-slate-800">No Session Selected</h3>
+                <p className="text-xs text-slate-500 mt-1 max-w-sm">
+                  Select a session from the list on the left to inspect automated analysis, policy gating, and full transcript.
+                </p>
+              </div>
+            )
+          ) : (
+            <>
+              {/* CARD 1: TOP CARD - AUTOMATED ANALYSIS & SUMMARY */}
+              <div className="bg-white p-5 rounded-2xl border border-border-subtle shadow-sm space-y-3.5 shrink-0">
+                {/* Meta Bar: Chat Title & Session Meta details */}
+                <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                  <div className="flex flex-col gap-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h2 className="text-base font-bold text-slate-900 tracking-tight">
+                        {selectedSession.title || selectedSession.project_name || selectedSession.session_id}
+                      </h2>
+                      {selectedSession.title && (
+                        <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 font-medium">
+                          {selectedSession.session_id}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2.5 text-[11px] text-slate-500 shrink-0 font-mono">
+                    <div className="flex items-center gap-1">
+                      <Clock className="w-3 h-3 text-slate-400" />
+                      <span>{selectedSession.created_at ? new Date(selectedSession.created_at).toLocaleTimeString() : 'Active'}</span>
+                    </div>
+                    <span>·</span>
+                    <span className="font-semibold text-slate-700 tabular-nums">
+                      {messagesCount} messages
+                    </span>
+                    <span>·</span>
+                    <span className="font-semibold text-slate-700 tabular-nums">
+                      {toolCallsCount} tools
+                    </span>
+                    <span
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                        selectedSession && isBlocked(selectedSession)
+                          ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                          : selectedSession && isLive(selectedSession)
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          : 'bg-slate-100 text-slate-700'
+                      }`}
+                    >
+                      {selectedSession && isBlocked(selectedSession) ? (
+                        <>
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                          <span>Policy Intercept (Blocked)</span>
+                        </>
+                      ) : selectedSession && isLive(selectedSession) ? (
+                        <>
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          <span>Live Working</span>
+                        </>
+                      ) : (
+                        <span>Closed</span>
+                      )}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Session Identity Info Pills */}
+                <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-50 border border-slate-200 rounded-lg text-slate-700">
+                    <span className="text-slate-400">Agent:</span>
+                    <strong className="text-slate-900">{selectedSession.agent_type}</strong>
+                    <span className="text-slate-500">({selectedSession.model})</span>
+                  </div>
+
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-50 border border-slate-200 rounded-lg text-slate-700">
+                    <span className="text-slate-400">Activity:</span>
+                    <span className="text-indigo-600 font-semibold truncate max-w-md" title={selectedSession.current_activity || 'Idle'}>
+                      {selectedSession.current_activity || 'Idle'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Full-width Working Directory Card */}
+                <div className="flex items-center justify-between gap-3 p-2.5 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <Folder className="w-4 h-4 text-slate-400 shrink-0" />
+                    <span className="text-slate-500 font-bold shrink-0">Working dir:</span>
+                    <span
+                      className="text-slate-800 font-semibold break-all select-all flex-1"
+                      title={selectedSession.working_dir || '/workspace'}
+                    >
+                      {selectedSession.working_dir || '/workspace'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(selectedSession.working_dir || '/workspace', 'wdir')}
+                    className="h-8 px-2.5 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 shadow-2xs shrink-0 font-mono"
+                    title="Copy working directory"
+                  >
+                    {copiedId === 'wdir' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-400" />}
+                    <span>{copiedId === 'wdir' ? 'Copied' : 'Copy'}</span>
+                  </button>
+                </div>
+
+                {/* Session Narrative / Summary Text (Clean text, not cards) */}
+                {sessionSynopsis && (
+                  <div className="pt-3 text-xs text-slate-700 font-sans leading-relaxed select-text border-t border-slate-100">
+                    <div>
+                      <span className="font-bold font-mono text-[10.5px] uppercase tracking-wider text-indigo-700 mr-2 inline-block">Task:</span>
+                      <div className="mt-1.5 max-h-72 overflow-y-auto p-3.5 rounded-xl bg-slate-50/70 border border-slate-200/80">
+                        <MarkdownRenderer content={cleanTaskSynopsisText(sessionSynopsis.task)} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* CARD 2: RECOMMENDED ACTIONS */}
+              {/* <div className="bg-white p-5 rounded-2xl border border-border-subtle shadow-sm space-y-3 shrink-0">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                        hasViolations
+                          ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                          : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                      }`}
+                    >
+                      {hasViolations ? 'P1 REMEDIATE' : 'VERIFIED SAFE'}
+                    </span>
+                    <h3 className="text-xs font-bold text-slate-900">Recommended Action</h3>
+                  </div>
+                  <span className="text-[10px] font-mono text-slate-400">
+                    {hasViolations ? `cites ${blockedReviews.length} policy alerts` : 'policy gate approved'}
+                  </span>
+                </div>
+
+                {hasViolations ? (
+                  <div className="space-y-2">
+                    {blockedReviews.map((br, idx) => {
+                      const targetMsgIdx = transcriptMessages.findIndex((m) =>
+                        m.tool_calls && m.tool_calls.some((tc) =>
+                          tc.tool_name === br.tool_name &&
+                          (!br.tool_input || !tc.raw_input || tc.raw_input.includes(br.tool_input) || br.tool_input.includes(tc.raw_input))
+                        )
+                      );
+                      const matchedIdx = targetMsgIdx !== -1
+                        ? targetMsgIdx
+                        : transcriptMessages.findIndex((m) => m.tool_calls && m.tool_calls.some((tc) => tc.tool_name === br.tool_name));
+                      const finalIdx = matchedIdx !== -1 ? matchedIdx : Math.max(0, transcriptMessages.findIndex((m) => m.tool_calls && m.tool_calls.length > 0));
+                      const targetMsgId = `msg-${finalIdx >= 0 ? finalIdx : 0}`;
+
+                      return (
+                        <div
+                          key={idx}
+                          onClick={() => {
+                            setTargetMessageId(null);
+                            setTimeout(() => setTargetMessageId(targetMsgId), 50);
+                          }}
+                          className="text-xs text-rose-800 leading-relaxed bg-rose-50/60 hover:bg-rose-100/70 p-3.5 rounded-xl border border-rose-200/80 font-sans space-y-1.5 cursor-pointer transition-all hover:shadow-xs hover:border-rose-300 group select-none"
+                          title={`Click to jump to message #${finalIdx + 1} in transcript`}
+                        >
+                          <div className="font-bold text-rose-950 flex items-center justify-between">
+                            <div className="flex items-center gap-1.5">
+                              <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                              <span>Tool Blocked: <code className="font-mono text-indigo-600">{br.tool_name}</code></span>
+                              {br.rule_name && <span className="font-mono text-[10px] text-rose-600">({br.rule_name})</span>}
+                            </div>
+                            <span className="text-[11px] font-mono text-indigo-600 font-semibold flex items-center gap-1 group-hover:underline">
+                              Jump to message #{finalIdx + 1} &rarr;
+                            </span>
+                          </div>
+                          <div className="text-slate-700">
+                            <strong className="text-slate-900">DO THIS: </strong>
+                            {br.explanation || 'Revert the unauthorized operation or modify execution parameters to satisfy safety gating.'}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-xs text-slate-700 leading-relaxed bg-emerald-50/40 p-3.5 rounded-xl border border-emerald-100 font-sans flex items-start gap-2.5">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-bold text-slate-900">
+                        Safe Execution: Verified against security policies
+                      </div>
+                      <div className="text-slate-600 mt-0.5">
+                        <strong className="text-slate-800">DO THIS: </strong>
+                        No intervention required. All operations comply with execution safety thresholds.
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div> */}
+
+              {/* CARD 3: FULL TRANSCRIPT CARD WITH LLM SEARCH */}
+              <div className="bg-white p-5 rounded-2xl border border-border-subtle shadow-sm space-y-4">
+                {/* Search Bar & Title Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <Code2 className="w-4 h-4 text-indigo-600" />
+                    <h3 className="text-xs font-bold text-slate-900">Full Transcript</h3>
+                    <span className="text-[11px] font-mono text-slate-400">
+                      ({messagesCount} turns · {toolCallsCount} tools)
+                    </span>
+                  </div>
+
+                  {/* LLM Transcript Search Bar */}
+                  <form onSubmit={handleSearch} className="flex flex-wrap items-center gap-1.5 min-w-0 flex-1">
+                    <div className="relative flex items-center min-w-0 flex-1">
+                      <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                      <input
+                        type="text"
+                        placeholder="Search transcript"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="h-8 pl-8 pr-3 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono w-full sm:w-auto sm:flex-1 sm:min-w-[160px] shadow-2xs"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={isSearching}
+                      className="h-8 px-3 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs disabled:opacity-50 shrink-0 whitespace-nowrap"
+                    >
+                      {isSearching ? 'Searching...' : 'Search'}
+                    </button>
+                    {fragmentMatches.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFragmentMatches([]);
+                          setSearchQuery('');
+                        }}
+                        className="h-8 w-8 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 hover:text-slate-700 shadow-2xs inline-flex items-center justify-center transition-all cursor-pointer"
+                        title="Clear search"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </form>
+                </div>
+
+                {/* High-Signal Extracted Fragment Chips */}
+                {fragmentMatches.length > 0 && (
+                  <div className="p-3.5 bg-indigo-50/60 rounded-xl border border-indigo-100 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="text-[11px] font-mono font-bold text-indigo-900">
+                        {fragmentMatches.length} Matching Turn{fragmentMatches.length > 1 ? 's' : ''} in Transcript (Click to jump):
+                      </div>
+                      <span className="text-[10px] font-mono text-indigo-600">
+                        Showing {Math.min(visibleFragmentsCount, fragmentMatches.length)} of {fragmentMatches.length}
+                      </span>
+                    </div>
+
+                    <div className="flex flex-col space-y-2">
+                      {fragmentMatches.slice(0, visibleFragmentsCount).map((m, i) => {
+                        const targetTurnIdx = Math.max(0, m.turn_start - 1);
+                        const targetId = `msg-${targetTurnIdx}`;
+                        return (
+                          <div
+                            key={i}
+                            onClick={() => {
+                              if (m.session_id && m.session_id !== selectedSessionId) {
+                                setSelectedSessionId(m.session_id);
+                              }
+                              setTargetMessageId(null);
+                              setTimeout(() => setTargetMessageId(targetId), 60);
+                            }}
+                            className="p-3 bg-white hover:bg-indigo-50/50 rounded-xl border border-indigo-100 hover:border-indigo-300 text-xs font-sans space-y-1.5 shadow-2xs cursor-pointer transition-all group select-none"
+                            title={`Click to jump to Turn #${m.turn_start} in transcript`}
+                          >
+                            <div className="flex items-center justify-between text-[10px] font-mono text-slate-500">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-bold text-indigo-700">Turn #{m.turn_start}</span>
+                                {m.match_type === 'llm' && (
+                                  <span className="px-1.5 py-0.2 rounded-md bg-purple-100 text-purple-700 font-semibold text-[9px] uppercase">
+                                    LLM Semantic
+                                  </span>
+                                )}
+                                {m.match_type === 'dense' && (
+                                  <span className="px-1.5 py-0.2 rounded-md bg-fuchsia-100 text-fuchsia-700 font-semibold text-[9px] uppercase">
+                                    Vector Match
+                                  </span>
+                                )}
+                                {m.match_type === 'hybrid' && (
+                                  <span className="px-1.5 py-0.2 rounded-md bg-indigo-100 text-indigo-700 font-semibold text-[9px] uppercase">
+                                    Hybrid
+                                  </span>
+                                )}
+                                {m.match_type === 'lexical' && (
+                                  <span className="px-1.5 py-0.2 rounded-md bg-slate-100 text-slate-600 font-semibold text-[9px] uppercase">
+                                    Keyword
+                                  </span>
+                                )}
+                                <span className="text-slate-400">({m.matched_role})</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-slate-700">
+                                  Match: {Math.round((m.combined_score || m.relevance_score) * 100)}%
+                                </span>
+                                <span className="text-[11px] font-mono text-indigo-600 font-semibold group-hover:underline flex items-center gap-0.5">
+                                  Jump &rarr;
+                                </span>
+                              </div>
+                            </div>
+                            <div className="text-xs font-mono text-slate-800 line-clamp-2 bg-slate-50/80 p-2 rounded-lg border border-slate-100">
+                              "{m.matched_span}"
+                            </div>
+                            {m.match_type === 'llm' && m.explanation && (
+                              <div className="text-[11px] text-slate-500">
+                                {m.explanation}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {fragmentMatches.length > 5 && (
+                      <div className="pt-1 flex items-center justify-center">
+                        {visibleFragmentsCount < fragmentMatches.length ? (
+                          <button
+                            type="button"
+                            onClick={() => setVisibleFragmentsCount(fragmentMatches.length)}
+                            className="h-8 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-white hover:bg-indigo-50 border border-indigo-200 text-indigo-700 shadow-2xs"
+                          >
+                            <span>Show More ({fragmentMatches.length - visibleFragmentsCount} more)</span>
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setVisibleFragmentsCount(5)}
+                            className="h-8 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-white hover:bg-indigo-50 border border-indigo-200 text-indigo-700 shadow-2xs"
+                          >
+                            <span>Show Less</span>
+                            <ChevronUp className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Transcript Message Stream via TranscriptCardView */}
+                {transcriptMessages.length === 0 ? (
+                  <div className="p-8 text-center text-xs text-slate-400 font-mono">
+                    No transcript messages recorded for this session.
+                  </div>
+                ) : (
+                  <TranscriptCardView
+                    messages={transcriptMessages}
+                    highlightQuery={searchQuery}
+                    targetMessageId={targetMessageId}
+                    onTargetConsumed={() => setTargetMessageId(null)}
+                  />
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Ingest Agent Log Modal */}
+      {showIngestModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl border border-border-subtle shadow-xl max-w-2xl w-full p-6 space-y-4 max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-purple-50 text-brand-purple flex items-center justify-center shrink-0">
+                  <Upload className="w-4 h-4 text-indigo-600" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Ingest Monitored Agent Log</h3>
+                  <p className="text-[11px] text-slate-500">Claude Code, Cursor, or Antigravity sessions</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowIngestModal(false);
+                  setIngestStatus(null);
+                }}
+                className="h-8 w-8 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 hover:text-slate-700 shadow-2xs inline-flex items-center justify-center transition-all cursor-pointer"
+                title="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+
+
+            {/* Mode Segmented Controls - Only displayed in local development environments */}
+            {isLocalEnvironment ? (
+              <div className="h-9 bg-slate-100 p-1 rounded-xl border border-slate-200/70 inline-flex items-center gap-1 w-full">
+                <button
+                  type="button"
+                  onClick={() => setIngestMode('upload')}
+                  className={`h-7 flex-1 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    ingestMode === 'upload'
+                      ? 'bg-white text-slate-900 shadow-xs font-bold'
+                      : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Upload Files (Cloud-Safe)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIngestMode('path')}
+                  className={`h-7 flex-1 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    ingestMode === 'path'
+                      ? 'bg-white text-slate-900 shadow-xs font-bold'
+                      : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                >
+                  <Terminal className="w-3.5 h-3.5" />
+                  <span>Server Path (CLI)</span>
+                </button>
+              </div>
+            ) : null}
+
+            {ingestMode === 'upload' || !isLocalEnvironment ? (
+              <div className="space-y-3">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  accept=".jsonl,.json,.txt"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files || []);
+                    if (files.length > 0) setSelectedFiles((prev) => [...prev, ...files]);
+                  }}
+                />
+
+                {selectedFiles.length === 0 ? (
+                  <div
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setIsDragging(true);
+                    }}
+                    onDragLeave={() => setIsDragging(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsDragging(false);
+                      const files = Array.from(e.dataTransfer.files || []);
+                      if (files.length > 0) setSelectedFiles((prev) => [...prev, ...files]);
+                    }}
+                    onClick={() => fileInputRef.current?.click()}
+                    className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all ${
+                      isDragging
+                        ? 'border-indigo-500 bg-indigo-50/50'
+                        : 'border-slate-200 hover:border-indigo-400 hover:bg-slate-50/60 bg-slate-50/30'
+                    }`}
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto mb-2.5">
+                      <Upload className="w-5 h-5 text-indigo-600" />
+                    </div>
+                    <div className="text-xs font-semibold text-slate-800">
+                      Click to browse or drag and drop log file(s)
+                    </div>
+                    <div className="text-[11px] text-slate-500 mt-1">
+                      Supports multi-file upload for Claude Code (<span className="font-mono text-indigo-600">.jsonl</span>), Antigravity (<span className="font-mono text-indigo-600">transcript.jsonl</span>), or Cursor (<span className="font-mono text-indigo-600">.json/.jsonl</span>)
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-3 shadow-2xs">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+                          <FileText className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold text-slate-900 truncate font-mono">
+                            {selectedFiles.length === 1
+                              ? selectedFiles[0].name
+                              : `${selectedFiles.length} log files selected`}
+                          </div>
+                          <div className="text-[10px] text-slate-500 font-mono">
+                            {(selectedFiles.reduce((acc, f) => acc + f.size, 0) / 1024).toFixed(1)} KB total · Ready to ingest
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedFiles([])}
+                        className="text-xs text-slate-400 hover:text-slate-600 font-medium px-2 py-1 rounded hover:bg-slate-200/50 cursor-pointer"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                    {selectedFiles.length > 1 && (
+                      <div className="max-h-24 overflow-y-auto space-y-1 pr-1 divide-y divide-slate-100 text-[11px] font-mono text-slate-600 border border-slate-100 rounded-lg p-2 bg-slate-50/40">
+                        {selectedFiles.map((f, i) => (
+                          <div key={i} className="flex items-center justify-between py-0.5">
+                            <span className="truncate max-w-[280px]">{f.name}</span>
+                            <span className="text-[10px] text-slate-400">{(f.size / 1024).toFixed(1)} KB</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Where to find your local agent transcript logs */}
+                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                      <Folder className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Where to find your local agent transcript files</span>
+                    </div>
+                    {/* <span className="text-[10px] font-mono font-medium text-slate-500 bg-white px-2 py-0.5 rounded-md border border-slate-200 inline-flex items-center gap-1 self-start sm:self-auto">
+                      macOS: <kbd className="font-semibold text-slate-700">⌘ + Shift + G</kbd> to paste
+                    </span> */}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {/* Antigravity */}
+                    <div className="bg-white p-2.5 rounded-lg border border-slate-200/80 shadow-2xs space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-slate-900 flex items-center gap-1">
+                          <Zap className="w-3 h-3 text-indigo-500" /> Antigravity
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard('~/.gemini/antigravity/brain/', 'path-ag')}
+                          className="text-[10px] text-indigo-600 hover:text-indigo-800 font-semibold inline-flex items-center gap-1 cursor-pointer"
+                        >
+                          {copiedId === 'path-ag' ? <Check className="w-2.5 h-2.5 text-emerald-600" /> : <Copy className="w-2.5 h-2.5" />}
+                          <span>{copiedId === 'path-ag' ? 'Copied' : 'Copy'}</span>
+                        </button>
+                      </div>
+                      <code className="text-[10px] font-mono text-slate-600 block bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100" title="~/.gemini/antigravity/brain/">
+                        ~/.gemini/antigravity/brain/
+                      </code>
+                      {/* <p className="text-[10px] text-slate-500 leading-tight">
+                        Select <span className="font-mono text-indigo-600 font-semibold">transcript.jsonl</span> inside any session folder.
+                      </p> */}
+                    </div>
+
+                    {/* Cursor */}
+                    <div className="bg-white p-2.5 rounded-lg border border-slate-200/80 shadow-2xs space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-slate-900 flex items-center gap-1">
+                          <Code2 className="w-3 h-3 text-indigo-500" /> Cursor
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard('~/.cursor/projects/', 'path-cursor')}
+                          className="text-[10px] text-indigo-600 hover:text-indigo-800 font-semibold inline-flex items-center gap-1 cursor-pointer"
+                        >
+                          {copiedId === 'path-cursor' ? <Check className="w-2.5 h-2.5 text-emerald-600" /> : <Copy className="w-2.5 h-2.5" />}
+                          <span>{copiedId === 'path-cursor' ? 'Copied' : 'Copy'}</span>
+                        </button>
+                      </div>
+                      <code className="text-[10px] font-mono text-slate-600 block truncate bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100" title="~/.cursor/projects/">
+                        ~/.cursor/projects/
+                      </code>
+                      {/* <p className="text-[10px] text-slate-500 leading-tight">
+                        Select any <span className="font-mono text-indigo-600 font-semibold">.jsonl</span> in <span className="font-mono">agent-transcripts/</span>.
+                      </p> */}
+                    </div>
+
+                    {/* Claude Code */}
+                    <div className="bg-white p-2.5 rounded-lg border border-slate-200/80 shadow-2xs space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-slate-900 flex items-center gap-1">
+                          <Terminal className="w-3 h-3 text-indigo-500" /> Claude Code
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard('~/.claude/projects/', 'path-claude')}
+                          className="text-[10px] text-indigo-600 hover:text-indigo-800 font-semibold inline-flex items-center gap-1 cursor-pointer"
+                        >
+                          {copiedId === 'path-claude' ? <Check className="w-2.5 h-2.5 text-emerald-600" /> : <Copy className="w-2.5 h-2.5" />}
+                          <span>{copiedId === 'path-claude' ? 'Copied' : 'Copy'}</span>
+                        </button>
+                      </div>
+                      <code className="text-[10px] font-mono text-slate-600 block truncate bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100" title="~/.claude/projects/">
+                        ~/.claude/projects/
+                      </code>
+                      {/* <p className="text-[10px] text-slate-500 leading-tight">
+                        Select any session <span className="font-mono text-indigo-600 font-semibold">.jsonl</span> file.
+                      </p> */}
+                    </div>
+                  </div>
+
+                  <div className="text-[11px] text-slate-600 bg-indigo-50/60 border border-indigo-100 rounded-lg p-2 flex items-start gap-2">
+                    <span className="text-indigo-600 text-xs shrink-0 font-bold">💡</span>
+                    <span className="leading-snug">
+                      <strong>Tip:</strong> Press <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[10px] font-mono shadow-2xs font-semibold">⌘ + Shift + G</kbd> on macOS (or <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[10px] font-mono shadow-2xs font-semibold">Ctrl + L</kbd> on Linux) to open the "Go to Folder" prompt, paste the path, and pick your transcript.
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <label className="text-[11px] font-mono font-bold text-slate-700">Server Local File Path</label>
+                <input
+                  type="text"
+                  placeholder="/Users/.../.claude/sessions/session.jsonl"
+                  value={ingestFilePath}
+                  onChange={(e) => setIngestFilePath(e.target.value)}
+                  className="w-full h-9 px-3 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono shadow-2xs"
+                />
+                <p className="text-[10px] text-slate-500">
+                  Direct host filesystem path. Useful when the OpenEval server runs locally on your workstation.
+                </p>
+              </div>
+            )}
+
+            {ingestStatus && (
+              <div
+                className={`p-2.5 rounded-xl text-xs font-mono border ${
+                  ingestStatus.startsWith('Error')
+                    ? 'bg-rose-50 text-rose-700 border-rose-200'
+                    : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                }`}
+              >
+                {ingestStatus}
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowIngestModal(false);
+                  setIngestStatus(null);
+                  setSelectedFiles([]);
+                }}
+                className="h-9 px-3.5 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 shadow-2xs"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleIngest}
+                disabled={
+                  isIngesting ||
+                  (ingestMode === 'upload' || !isLocalEnvironment ? selectedFiles.length === 0 : !ingestFilePath.trim())
+                }
+                className="h-9 px-4 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-slate-900 hover:bg-black text-white shadow-xs disabled:opacity-50"
+              >
+                {isIngesting
+                  ? 'Ingesting...'
+                  : ingestMode === 'upload' || !isLocalEnvironment
+                  ? selectedFiles.length > 1
+                    ? `Ingest ${selectedFiles.length} Logs`
+                    : 'Ingest Log'
+                  : 'Ingest Log'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

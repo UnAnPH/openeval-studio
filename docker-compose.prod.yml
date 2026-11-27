@@ -1,0 +1,93 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: openeval-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: openeval
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_password
+      POSTGRES_DB: openeval
+    secrets:
+      - pg_password
+    volumes:
+      - /var/lib/openeval/pg:/var/lib/postgresql/data
+    networks:
+      - openeval-net
+
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    container_name: openeval-docker-proxy
+    restart: unless-stopped
+    environment:
+      CONTAINERS: "1"
+      IMAGES: "1"
+      EXEC: "${DOCKER_PROXY_EXEC:-1}"
+      POST: "${DOCKER_PROXY_POST:-1}"
+      BUILD: "${DOCKER_PROXY_BUILD:-1}"
+      SESSION: "1"
+      INFO: "1"
+      PING: "1"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - openeval-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: openeval-redis
+    restart: unless-stopped
+    networks:
+      - openeval-net
+
+  app:
+    image: ghcr.io/unanph/openeval-studio:${IMAGE_TAG:-latest}
+    container_name: openeval-studio
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+      - docker-proxy
+    environment:
+      DOCKER_HOST: tcp://docker-proxy:2375
+      REDIS_URL: redis://redis:6379/0
+    env_file:
+      - path: /etc/openeval.env
+        required: false
+      - path: .release-env
+        required: false
+    volumes:
+      - ./server:/app/server:ro
+      - ./engine:/app/engine:ro
+      - ./schemas:/app/schemas:ro
+      - ./sandbox:/app/sandbox:ro
+      - ./alembic:/app/alembic:ro
+      - ./alembic.ini:/app/alembic.ini:ro
+      - ./scripts:/app/scripts:ro
+      - ./tasks:/app/tasks:ro
+      - ./fixtures:/app/fixtures:ro
+    command: >
+      sh -c "uv run alembic upgrade head && uv run uvicorn server.app:app --host 0.0.0.0 --port 8000"
+    networks:
+      - openeval-net
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: openeval-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/lib/openeval/Caddyfile:/etc/caddy/Caddyfile:ro
+      - /var/lib/openeval/caddy_data:/data
+      - /var/lib/openeval/caddy_config:/config
+    networks:
+      - openeval-net
+
+networks:
+  openeval-net:
+    driver: bridge
+
+secrets:
+  pg_password:
+    file: ${POSTGRES_PASSWORD_FILE:-/var/lib/openeval/pg_password}

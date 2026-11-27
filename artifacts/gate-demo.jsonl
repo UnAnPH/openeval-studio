@@ -1,0 +1,5 @@
+{"ts": "2026-11-18T15:46:14.577867+00:00", "event": "evaluate", "mode": "enforce", "decision": "deny", "session_id": "gate-demo-enforce"}
+{"ts": "2026-11-18T15:46:14.643584+00:00", "event": "evaluate", "mode": "observe", "decision": "allow", "shadow_decision": "deny", "session_id": "gate-demo-observe"}
+{"ts": "2026-11-18T15:46:14.657378+00:00", "event": "evaluate", "mode": "paused", "decision": "allow", "session_id": "gate-demo-paused"}
+{"ts": "2026-11-18T15:46:14.742690+00:00", "event": "evaluate", "mode": "enforce", "decision": "allow", "session_id": "gate-demo-allow"}
+{"ts": "2026-11-18T15:46:17.006932+00:00", "event": "sessions", "ids": ["gate-demo-allow", "gate-demo-enforce", "gate-demo-observe"]}

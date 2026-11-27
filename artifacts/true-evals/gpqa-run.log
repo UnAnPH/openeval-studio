@@ -1,0 +1,197 @@
+[09/07/26 23:16:21] WARNING  Control server failed to start (eval server.py:1708
+                             will run without control surface):                 
+                             AF_UNIX path too long                              
+Running 1 tasks...
+--------------------------------------------------------- 
+gpqa_diamond (8 x 4 samples): google/gemini-3.1-flash-lite
+max_connections: 2, epochs: 4, dataset: gpqa_diamond      
+--------------------------------------------------------- 
+                                                          
+                    WARNING  sample=rec06pnAkLOr2t2mp epoch=1 _api_client.py:139
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+                    WARNING  sample=rec06pnAkLOr2t2mp epoch=1     models.py:8422
+                             Direct use of automatic function                   
+                             calling (AFC) in                                   
+                             AsyncModels.generate_content is not                
+                             recommended. Instead, we recommend                 
+                             to use AFC in                                      
+                             AsyncChat.send_message. Similarly,                 
+                             direct use of AFC in                               
+                             AsyncModels.generate_content_stream                
+                             is not recommended. Instead, we                    
+                             recommend to use AFC in                            
+                             AsyncChat.send_message_stream.                     
+                    WARNING  sample=rec0Arme2jcXQZnAW epoch=1 _api_client.py:139
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+[09/07/26 23:16:23] WARNING  sample=rec0wZvZgiz320KRs epoch=1 _api_client.py:139
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+[09/07/26 23:16:24] WARNING  sample=rec0yTRmO1o1xCA6H epoch=1 _api_client.py:139
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+[09/07/26 23:16:26] WARNING  sample=rec1zl5LvaatzGhFt epoch=1 _api_client.py:139
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+                    WARNING  sample=rec260hNUCEj109Dj epoch=1 _api_client.py:139
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+multiple_... | Steps:   4/32  12% | Samples:   4/ 32 | accuracy: 0.00 | google:  2/ 2 | HTTP retries: 0
+[09/07/26 23:16:28] WARNING  sample=rec2UlKqC6RFHdcro epoch=1 _api_client.py:139
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+[09/07/26 23:16:29] WARNING  sample=rec2ZTsqazBZ3LTWZ epoch=1 _api_client.py:139
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+[09/07/26 23:16:30] WARNING  sample=rec06pnAkLOr2t2mp epoch=2 _api_client.py:139
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+[09/07/26 23:16:31] WARNING  sample=rec0Arme2jcXQZnAW epoch=2 _api_client.py:139
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+multiple_... | Steps:   8/32  25% | Samples:   8/ 32 | accuracy: 0.00 | google:  2/ 2 | HTTP retries: 0
+[09/07/26 23:16:33] WARNING  sample=rec0wZvZgiz320KRs epoch=2 _api_client.py:139
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+                    WARNING  sample=rec0yTRmO1o1xCA6H epoch=2 _api_client.py:139
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+[09/07/26 23:16:35] WARNING  sample=rec1zl5LvaatzGhFt epoch=2 _api_client.py:139
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+                    WARNING  sample=rec260hNUCEj109Dj epoch=2 _api_client.py:139
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+multiple_... | Steps:  12/32  37% | Samples:  12/ 32 | accuracy: 0.00 | google:  2/ 2 | HTTP retries: 0
+[09/07/26 23:16:38] WARNING  sample=rec2UlKqC6RFHdcro epoch=2 _api_client.py:139
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+                    WARNING  sample=rec2ZTsqazBZ3LTWZ epoch=2 _api_client.py:139
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+[09/07/26 23:16:41] WARNING  sample=rec06pnAkLOr2t2mp epoch=3 _api_client.py:139
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+                    WARNING  sample=rec0Arme2jcXQZnAW epoch=3 _api_client.py:139
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+multiple_... | Steps:  16/32  50% | Samples:  16/ 32 | accuracy: 0.00 | google:  2/ 2 | HTTP retries: 1  out tok/s: 564
+[09/07/26 23:16:42] WARNING  sample=rec0wZvZgiz320KRs epoch=3 _api_client.py:139
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+multiple_... | Steps:  17/32  53% | Samples:  17/ 32 | accuracy: 0.00 | google:  2/ 2 | HTTP retries: 2  out tok/s: 466
+[09/07/26 23:16:47] WARNING  sample=rec0Arme2jcXQZnAW epoch=3 _api_client.py:139
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+[09/07/26 23:16:48] WARNING  sample=rec0wZvZgiz320KRs epoch=3 _api_client.py:139
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+[09/07/26 23:16:55] WARNING  sample=rec0Arme2jcXQZnAW epoch=3 _api_client.py:139
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+[09/07/26 23:16:57] WARNING  sample=rec0wZvZgiz320KRs epoch=3 _api_client.py:139
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+[09/07/26 23:17:10] WARNING  sample=rec0wZvZgiz320KRs epoch=3 _api_client.py:139
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+[09/07/26 23:17:11] WARNING  sample=rec0Arme2jcXQZnAW epoch=3 _api_client.py:139
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+multiple_... | Steps:  18/32  56% | Samples:  17/ 32 | accuracy: 0.00 | google:  1/ 2 | HTTP retries: 6  out tok/s: 235
+[09/07/26 23:17:12] WARNING  sample=rec0yTRmO1o1xCA6H epoch=3 _api_client.py:139
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+[09/07/26 23:17:14] WARNING  sample=rec1zl5LvaatzGhFt epoch=3 _api_client.py:139
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+                    WARNING  sample=rec260hNUCEj109Dj epoch=3 _api_client.py:139
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+[09/07/26 23:17:16] WARNING  sample=rec2UlKqC6RFHdcro epoch=3 _api_client.py:139
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+                    WARNING  sample=rec2ZTsqazBZ3LTWZ epoch=3 _api_client.py:139
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+multiple_... | Steps:  22/32  68% | Samples:  22/ 32 | accuracy: 0.00 | google:  2/ 2 | HTTP retries: 6  out tok/s: 256
+[09/07/26 23:17:19] WARNING  sample=rec06pnAkLOr2t2mp epoch=4 _api_client.py:139
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+                    WARNING  sample=rec0Arme2jcXQZnAW epoch=4 _api_client.py:139
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+[09/07/26 23:17:20] WARNING  sample=rec0wZvZgiz320KRs epoch=4 _api_client.py:139
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+[09/07/26 23:17:21] WARNING  sample=rec0yTRmO1o1xCA6H epoch=4 _api_client.py:139
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+multiple_... | Steps:  26/32  81% | Samples:  26/ 32 | accuracy: 0.00 | google:  2/ 2 | HTTP retries: 6  out tok/s: 276
+[09/07/26 23:17:23] WARNING  sample=rec1zl5LvaatzGhFt epoch=4 _api_client.py:139
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+                    WARNING  sample=rec260hNUCEj109Dj epoch=4 _api_client.py:139
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+[09/07/26 23:17:25] WARNING  sample=rec2UlKqC6RFHdcro epoch=4 _api_client.py:139
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+                    WARNING  sample=rec2ZTsqazBZ3LTWZ epoch=4 _api_client.py:139
+                             Both GOOGLE_API_KEY and                            
+                             GEMINI_API_KEY are set. Using                      
+                             GOOGLE_API_KEY.                                    
+multiple_... | Steps:  31/32  96% | Samples:  31/ 32 | accuracy: 0.00 | google:  1/ 2 | HTTP retries: 6  out tok/s: 311
+multiple_... | Steps:  32/32 100% | Samples:  32/ 32 | accuracy: 0.00 | google:  0/ 2 | HTTP retries: 6  out tok/s: 321
+
+---------------------------------------------------------                       
+gpqa_diamond (8 x 4 samples): google/gemini-3.1-flash-lite                      
+max_connections: 2, epochs: 4, dataset: gpqa_diamond                            
+                                                                                
+total time:                       0:01:07                                       
+google/gemini-3.1-flash-lite      27,907 tokens [I: 7,604, O: 20,303, R: 0]     
+choice                                                                          
+accuracy  0.000                                                                 
+stderr    0.000                                                                 
+Log:                                                                            
+artifacts/true-evals/gpqa/2026-09-07T21-16-21-00-00_gpqa-diamond_8tNFvgBkgwSjGJ…
+---------------------------------------------------------                       
+                                                                                

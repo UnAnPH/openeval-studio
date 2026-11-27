@@ -1,0 +1,770 @@
+import { Icon } from '../lib/icon';
+import {
+  AlertTriangle,
+  ArrowRight,
+  CheckCircle,
+  CircleDollarSign,
+  Clock,
+  Copy,
+  Download,
+  Filter,
+  GitCompare,
+  Hourglass,
+  Play,
+  Search,
+  ShieldCheck,
+  Sparkles,
+  Trash2,
+  XCircle,
+} from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { RunRecord, TaskSummary } from '../types';
+
+interface RunsTableProps {
+  runs: RunRecord[];
+  tasks: TaskSummary[];
+  onSelectRun: (runId: string) => void;
+  onDeleteRun?: (runId: string) => void;
+  onClearAllRuns?: () => void;
+  onCompareSelected?: (runIds: [string, string]) => void;
+  onExportSFT?: (selectedRuns?: RunRecord[]) => void;
+  onNavigateToStudio?: () => void;
+  onNavigateToBenchmarks?: () => void;
+}
+
+export const RunsTable: React.FC<RunsTableProps> = ({
+  runs: rawRuns,
+  tasks,
+  onSelectRun,
+  onDeleteRun,
+  onClearAllRuns,
+  onCompareSelected,
+  onExportSFT,
+  onNavigateToStudio,
+}) => {
+  const runs = useMemo(() => {
+    return rawRuns.filter(
+      (r) =>
+        (r.total_duration_sec || 0) > 0 ||
+        r.status === 'failed' ||
+        r.status === 'error' ||
+        r.status === 'running' ||
+        r.status === 'pending' ||
+        (r.steps?.length || 0) > 0
+    );
+  }, [rawRuns]);
+
+  const [searchText, setSearchText] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'passed' | 'failed' | 'safety_flagged' | 'running'>('all');
+  const [selectedModel, setSelectedModel] = useState<string>('all');
+  const [selectedTaskId, setSelectedTaskId] = useState<string>('all');
+  const [selectedRunIds, setSelectedRunIds] = useState<string[]>([]);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // Modal confirmation states
+  const [runPendingDelete, setRunPendingDelete] = useState<RunRecord | null>(null);
+  const [showClearAllModal, setShowClearAllModal] = useState<boolean>(false);
+  const [showBatchDeleteModal, setShowBatchDeleteModal] = useState<boolean>(false);
+
+  // Sort runs newest first
+  const sortedRuns = useMemo<RunRecord[]>(() => {
+    return [...runs].sort((a, b) => {
+      const ta = new Date(a.created_at || 0).getTime();
+      const tb = new Date(b.created_at || 0).getTime();
+      return tb - ta;
+    });
+  }, [runs]);
+
+  // Unique models in the run history
+  const modelOptions = useMemo<string[]>(
+    () => Array.from(new Set(runs.map((r: RunRecord) => r.model))).filter(Boolean) as string[],
+    [runs]
+  );
+
+  // Filtered runs logic
+  const filteredRuns = sortedRuns.filter((run: RunRecord) => {
+    if (searchText) {
+      const q = searchText.toLowerCase();
+      const matchId = run.task_id.toLowerCase().includes(q) || run.run_id.toLowerCase().includes(q);
+      const matchModel = run.model.toLowerCase().includes(q);
+      const matchSummary = run.final_summary?.toLowerCase().includes(q);
+      const matchReason = run.failure_reason?.toLowerCase().includes(q);
+      const matchAgentType = run.agent_type?.toLowerCase().includes(q);
+      if (!matchId && !matchModel && !matchSummary && !matchReason && !matchAgentType) return false;
+    }
+    const hasAuditFailures = Boolean(run.audit_verdicts?.some((v) => v.passed === false));
+    const runPassed = (run.passed === true || (run.status === 'completed' && run.passed !== false)) && !hasAuditFailures;
+    const runFailed = run.passed === false || run.status === 'failed' || run.status === 'error' || hasAuditFailures;
+    const runRunning = run.status === 'running' || run.status === 'pending';
+
+    if (statusFilter === 'passed' && !runPassed) return false;
+    if (statusFilter === 'failed' && !runFailed) return false;
+    if (statusFilter === 'running' && !runRunning) return false;
+    if (statusFilter === 'safety_flagged') {
+      if (!hasAuditFailures) return false;
+    }
+    if (selectedModel !== 'all' && run.model !== selectedModel) return false;
+    if (selectedTaskId !== 'all' && run.task_id !== selectedTaskId) return false;
+    if (
+      (run.total_duration_sec || 0) <= 0 &&
+      run.status !== 'failed' &&
+      run.status !== 'error' &&
+      run.status !== 'running' &&
+      run.status !== 'pending' &&
+      (run.steps?.length || 0) === 0
+    ) {
+      return false;
+    }
+    return true;
+  });
+
+  // Checkbox handlers
+  const toggleSelectAll = () => {
+    if (selectedRunIds.length === filteredRuns.length) {
+      setSelectedRunIds([]);
+    } else {
+      setSelectedRunIds(filteredRuns.map((r) => r.run_id));
+    }
+  };
+
+  const toggleSelectRun = (runId: string) => {
+    setSelectedRunIds((prev) =>
+      prev.includes(runId) ? prev.filter((id) => id !== runId) : [...prev, runId]
+    );
+  };
+
+  const handleCopyId = (runId: string) => {
+    navigator.clipboard.writeText(runId);
+    setCopiedId(runId);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  // KPIs
+  const totalRuns = runs.length;
+  const passedRuns = runs.filter((r) => (r.passed === true || (r.status === 'completed' && r.passed !== false)) && !r.audit_verdicts?.some((v) => v.passed === false)).length;
+  const failedRuns = runs.filter((r) => r.passed === false || r.status === 'failed' || r.status === 'error' || Boolean(r.audit_verdicts?.some((v) => v.passed === false))).length;
+  const flaggedRuns = runs.filter((r) => r.audit_verdicts?.some((v) => v.passed === false)).length;
+  const totalCost = runs.reduce((acc, r) => acc + (r.estimated_cost_usd || 0), 0);
+  const totalTokens = runs.reduce((acc, r) => acc + (r.total_tokens || 0), 0);
+  const avgDuration = totalRuns > 0
+    ? (runs.reduce((acc, r) => acc + (r.total_duration_sec || 0), 0) / totalRuns).toFixed(1)
+    : '0.0';
+
+  const selectedRecords = runs.filter((r) => selectedRunIds.includes(r.run_id));
+
+  return (
+    <div className="flex-1 min-h-0 min-w-0 flex flex-col h-full overflow-y-auto bg-[#fcfcfd] text-[#1e2029] font-sans p-4 xl:p-6 pb-4 space-y-5">
+      {/* 1. Card Block Header */}
+      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-border-subtle shadow-sm flex flex-wrap items-center justify-between gap-3 shrink-0">
+        <h1 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2.5">Evaluation Runs</h1>
+
+        <div className="flex items-center gap-2.5">
+          {onNavigateToStudio && (
+            <button
+              type="button"
+              onClick={onNavigateToStudio}
+              className="h-9 px-4 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-slate-900 hover:bg-black text-white shadow-xs"
+            >
+              <Icon icon={Play} className="text-xs" />
+              <span>New Run</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 2. Key Metrics Bar (Clickable Filter Cards) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 shrink-0">
+        {/* Card 1: Total Runs */}
+        <button
+          type="button"
+          onClick={() => setStatusFilter('all')}
+          className={`p-4 rounded-xl border text-left transition-all cursor-pointer shadow-xs active:scale-[0.98] select-none ${
+            statusFilter === 'all'
+              ? 'bg-purple-50/40 border-[#6B46C1] ring-2 ring-[#6B46C1]/20 shadow-sm'
+              : 'bg-white border-border-subtle hover:border-slate-300 hover:shadow-md'
+          }`}
+        >
+          <div className="text-[11px] text-text-muted font-medium flex items-center justify-between">
+            <span>Total Runs</span>
+            <Icon icon={Sparkles} className="text-brand-purple text-xs" />
+          </div>
+          <div className="text-xl font-bold font-mono text-text-primary mt-1">{totalRuns}</div>
+          <div className="text-[10px] text-text-muted mt-0.5">
+            {statusFilter === 'all' ? '● Active Filter' : 'Click to show all'}
+          </div>
+        </button>
+
+        {/* Card 2: Passed */}
+        <button
+          type="button"
+          onClick={() => setStatusFilter(statusFilter === 'passed' ? 'all' : 'passed')}
+          className={`p-4 rounded-xl border text-left transition-all cursor-pointer shadow-xs active:scale-[0.98] select-none ${
+            statusFilter === 'passed'
+              ? 'bg-emerald-50/50 border-emerald-500 ring-2 ring-emerald-500/20 shadow-sm'
+              : 'bg-white border-border-subtle hover:border-slate-300 hover:shadow-md'
+          }`}
+        >
+          <div className="text-[11px] text-text-muted font-medium flex items-center justify-between">
+            <span>Passed</span>
+            <Icon icon={CheckCircle} className="text-status-cleared text-xs" />
+          </div>
+          <div className="text-xl font-bold font-mono text-emerald-700 mt-1">{passedRuns}</div>
+          <div className="text-[10px] text-text-muted mt-0.5">
+            {statusFilter === 'passed' ? '● Filter Active' : 'Click to filter'}
+          </div>
+        </button>
+
+        {/* Card 3: Failed */}
+        <button
+          type="button"
+          onClick={() => setStatusFilter(statusFilter === 'failed' ? 'all' : 'failed')}
+          className={`p-4 rounded-xl border text-left transition-all cursor-pointer shadow-xs active:scale-[0.98] select-none ${
+            statusFilter === 'failed'
+              ? 'bg-rose-50/50 border-rose-500 ring-2 ring-rose-500/20 shadow-sm'
+              : 'bg-white border-border-subtle hover:border-slate-300 hover:shadow-md'
+          }`}
+        >
+          <div className="text-[11px] text-text-muted font-medium flex items-center justify-between">
+            <span>Failed</span>
+            <Icon icon={XCircle} className="text-risk-high text-xs" />
+          </div>
+          <div className="text-xl font-bold font-mono text-rose-700 mt-1">{failedRuns}</div>
+          <div className="text-[10px] text-text-muted mt-0.5">
+            {statusFilter === 'failed' ? '● Filter Active' : 'Click to filter'}
+          </div>
+        </button>
+
+        {/* Card 4: Safety Flagged */}
+        <button
+          type="button"
+          onClick={() => setStatusFilter(statusFilter === 'safety_flagged' ? 'all' : 'safety_flagged')}
+          className={`p-4 rounded-xl border text-left transition-all cursor-pointer shadow-xs active:scale-[0.98] select-none ${
+            statusFilter === 'safety_flagged'
+              ? 'bg-purple-50/50 border-purple-600 ring-2 ring-purple-600/20 shadow-sm'
+              : 'bg-white border-border-subtle hover:border-slate-300 hover:shadow-md'
+          }`}
+        >
+          <div className="text-[11px] text-text-muted font-medium flex items-center justify-between">
+            <span>Safety Flagged</span>
+            <Icon icon={ShieldCheck} className="text-brand-purple text-xs" />
+          </div>
+          <div className="text-xl font-bold font-mono text-brand-purple mt-1">{flaggedRuns}</div>
+          <div className="text-[10px] text-text-muted mt-0.5">
+            {statusFilter === 'safety_flagged' ? '● Filter Active' : 'Click to filter'}
+          </div>
+        </button>
+
+        {/* Card 5: Avg Duration */}
+        <div className="bg-white p-4 rounded-xl border border-border-subtle shadow-sm space-y-1">
+          <div className="text-[11px] text-text-muted font-medium flex items-center justify-between">
+            <span>Avg Duration</span>
+            <Icon icon={Clock} className="text-accent-orange text-xs" />
+          </div>
+          <div className="text-xl font-bold font-mono text-text-primary mt-1">{avgDuration}s</div>
+          <div className="text-[10px] text-text-muted mt-0.5">Overall runs</div>
+        </div>
+
+        {/* Card 6: Est. Spend */}
+        <div className="bg-white p-4 rounded-xl border border-border-subtle shadow-sm space-y-1">
+          <div className="text-[11px] text-text-muted font-medium flex items-center justify-between">
+            <span>Est. Spend</span>
+            <Icon icon={CircleDollarSign} className="text-emerald-600 text-xs" />
+          </div>
+          <div className="text-xl font-bold font-mono text-emerald-700 mt-1">${totalCost.toFixed(4)}</div>
+          <div className="text-[10px] text-text-secondary font-mono">{totalTokens.toLocaleString()} tok</div>
+        </div>
+      </div>
+
+      {/* 3. Filter Bar & Bulk Selection Action Banner */}
+      <div className="bg-white p-4 rounded-2xl border border-border-subtle shadow-sm space-y-3 shrink-0">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          {/* Left Side: Active Filter Tag, Model & Benchmark Dropdowns, Search */}
+          <div className="flex items-center gap-2.5 flex-wrap flex-1 min-w-0">
+            {/* Active Status Badge if filtered */}
+            {statusFilter !== 'all' && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface-subtle border border-border-subtle text-xs font-bold text-brand-purple">
+                <span>{statusFilter === 'passed' ? 'Filter: Passed' : statusFilter === 'failed' ? 'Filter: Failed' : statusFilter === 'safety_flagged' ? 'Filter: Safety Flagged' : statusFilter}</span>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('all')}
+                  className="hover:text-rose-600 ml-1 cursor-pointer font-bold"
+                  title="Reset to All"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            {/* Model Dropdown Filter */}
+            {modelOptions.length > 0 && (
+              <select
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value)}
+                className="h-9 bg-white border border-slate-200 rounded-xl pl-3 pr-3 text-xs text-slate-700 font-semibold focus:outline-none focus:border-brand-primary cursor-pointer shadow-2xs"
+              >
+                <option value="all">All Models</option>
+                {modelOptions.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {/* Task Dropdown Filter */}
+            <select
+              value={selectedTaskId}
+              onChange={(e) => setSelectedTaskId(e.target.value)}
+              className="h-9 bg-white border border-slate-200 rounded-xl pl-3 pr-3 text-xs text-slate-700 font-semibold focus:outline-none focus:border-brand-primary cursor-pointer shadow-2xs"
+            >
+              <option value="all">All Benchmarks</option>
+              {tasks.map((t) => (
+                <option key={t.task_id} value={t.task_id}>
+                  {t.task_id}
+                </option>
+              ))}
+            </select>
+
+            {/* Search Input */}
+            <div className="relative min-w-[220px] max-w-sm flex-1">
+              <input
+                type="text"
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                placeholder="Search run ID, task, model..."
+                className="h-9 w-full bg-white border border-slate-200 rounded-xl pl-8 pr-3 text-xs text-slate-800 focus:outline-none focus:border-brand-primary font-sans shadow-2xs"
+              />
+              <Icon
+                icon={Search}
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"
+              />
+            </div>
+          </div>
+
+          {/* Right Side: Action Buttons */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Clear All Data Option */}
+            {/* {runs.length > 0 && onClearAllRuns && (
+              <button
+                type="button"
+                onClick={() => setShowClearAllModal(true)}
+                className="h-9 px-3.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                title="Clear All Runs"
+              >
+                <Icon icon={Trash2} className="text-xs" />
+                <span>Clear All</span>
+              </button>
+            )} */}
+          </div>
+        </div>
+
+        {/* Floating Bulk Action Bar when Checkboxes are Selected */}
+        {selectedRunIds.length > 0 && (
+          <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl flex items-center justify-between gap-3 text-xs animate-fadeIn">
+            <div className="flex items-center gap-2 text-brand-primary font-bold">
+              <span className="w-2 h-2 rounded-full bg-brand-purple" />
+              <span>{selectedRunIds.length} run{selectedRunIds.length > 1 ? 's' : ''} selected</span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {/* Compare Button */}
+              {selectedRunIds.length >= 2 && onCompareSelected && (
+                <button
+                  type="button"
+                  onClick={() => onCompareSelected([selectedRunIds[0], selectedRunIds[1]])}
+                  className="h-9 px-4 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-semibold shadow-xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <Icon icon={GitCompare} className="text-xs" />
+                  <span>Compare Top 2 Selected</span>
+                </button>
+              )}
+
+              {/* Export SFT Dataset */}
+              {onExportSFT && (
+                <button
+                  type="button"
+                  onClick={() => onExportSFT(selectedRecords)}
+                  className="h-9 px-3.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold shadow-2xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <Icon icon={Download} className="text-xs" />
+                  <span>Export SFT JSONL ({selectedRunIds.length})</span>
+                </button>
+              )}
+
+              {/* Batch Delete */}
+              {onDeleteRun && (
+                <button
+                  type="button"
+                  onClick={() => setShowBatchDeleteModal(true)}
+                  className="h-9 px-3.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <Icon icon={Trash2} className="text-xs" />
+                  <span>Delete Selected ({selectedRunIds.length})</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setSelectedRunIds([])}
+                className="h-9 px-3 rounded-xl hover:bg-slate-100 text-slate-600 hover:text-slate-900 text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+              >
+                Deselect All
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 4. High-Density Runs Table */}
+      <div className="bg-white rounded-2xl border border-border-subtle shadow-sm overflow-hidden shrink-0">
+        {filteredRuns.length === 0 ? (
+          <div className="p-12 text-center space-y-3">
+            <div className="w-12 h-12 rounded-2xl bg-canvas border border-border-subtle mx-auto flex items-center justify-center text-text-muted">
+              <Icon icon={Filter} className="text-2xl" />
+            </div>
+            <h3 className="text-sm font-bold text-text-primary">No evaluation runs found</h3>
+            <p className="text-xs text-text-secondary max-w-sm mx-auto">
+              No runs match your active filter criteria. Clear filters or launch a benchmark in Live Studio.
+            </p>
+            <div className="pt-2 flex items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchText('');
+                  setStatusFilter('all');
+                  setSelectedModel('all');
+                  setSelectedTaskId('all');
+                }}
+                className="h-9 px-4 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 shadow-2xs"
+              >
+                Reset Filters
+              </button>
+              <button
+                type="button"
+                onClick={onNavigateToStudio}
+                className="h-9 px-4 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-slate-900 hover:bg-black text-white shadow-xs"
+              >
+                Launch Evaluation
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="min-w-0 overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-border-subtle text-[10px] uppercase font-bold tracking-wider text-text-muted bg-canvas/60 select-none">
+                  <th className="py-3 px-2 w-8 text-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedRunIds.length === filteredRuns.length && filteredRuns.length > 0}
+                      onChange={toggleSelectAll}
+                      className="rounded border-border-subtle text-brand-purple focus:ring-brand-purple cursor-pointer"
+                    />
+                  </th>
+                  <th className="py-3 px-2 xl:px-3">Status</th>
+                  <th className="py-3 px-2 xl:px-3">Run ID</th>
+                  {/* <th className="py-3 px-3">Benchmark Task</th> */}
+                  <th className="py-3 px-2 xl:px-3">Model</th>
+                  <th className="py-3 px-2 xl:px-3">Duration</th>
+                  <th className="py-3 px-2 xl:px-3 text-right sticky right-0 bg-white/95 backdrop-blur-xs">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-subtle font-mono text-xs">
+                {filteredRuns.map((run) => {
+                  const hasAuditFailures = Boolean(run.audit_verdicts?.some((v) => v.passed === false));
+                  const isPassed = (run.passed === true || (run.status === 'completed' && run.passed !== false)) && !hasAuditFailures;
+                  const isFailed = run.passed === false || run.status === 'failed' || run.status === 'error' || hasAuditFailures;
+                  const isRunning = run.status === 'running' || run.status === 'pending';
+                  const isSelected = selectedRunIds.includes(run.run_id);
+
+                  return (
+                    <tr
+                      key={run.run_id}
+                      onClick={() => onSelectRun(run.run_id)}
+                      className={`hover:bg-canvas transition-colors cursor-pointer ${
+                        isSelected ? 'bg-purple-50/50' : ''
+                      }`}
+                    >
+                      {/* Checkbox */}
+                      <td className="py-3.5 px-2 text-center" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSelectRun(run.run_id)}
+                          className="rounded border-border-subtle text-brand-purple focus:ring-brand-purple cursor-pointer"
+                        />
+                      </td>
+
+                      {/* Status */}
+                      <td className="py-3.5 px-2 xl:px-3 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
+                          <Icon
+                            icon={
+                              isPassed
+                                ? CheckCircle
+                                : isFailed
+                                ? XCircle
+                                : isRunning
+                                ? Hourglass
+                                : CheckCircle
+                            }
+                            className={`text-sm ${
+                              isPassed
+                                ? 'text-status-cleared'
+                                : isFailed
+                                ? 'text-risk-high'
+                                : isRunning
+                                ? 'text-brand-purple animate-spin'
+                                : 'text-status-cleared'
+                            }`}
+                          />
+                          <span
+                            className={`text-[10px] uppercase px-2 py-0.5 rounded font-bold ${
+                              isPassed
+                                ? 'bg-emerald-50 text-emerald-700'
+                                : isFailed
+                                ? 'bg-rose-50 text-rose-700'
+                                : isRunning
+                                ? 'bg-purple-50 text-brand-purple'
+                                : 'bg-emerald-50 text-emerald-700'
+                            }`}
+                          >
+                            {isPassed ? 'Passed' : isFailed ? 'Failed' : run.status}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Run ID */}
+                      <td className="py-3.5 px-2 xl:px-3 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-1 text-text-primary min-w-0">
+                          <span
+                            className="font-mono text-xs truncate max-w-[115px] xl:max-w-[230px] 2xl:max-w-[300px]"
+                            title={run.run_id}
+                          >
+                            {run.run_id}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyId(run.run_id)}
+                            className="w-7 h-7 shrink-0 rounded-lg inline-flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                            title="Copy Run ID"
+                          >
+                            <Icon icon={Copy} className="text-xs" />
+                          </button>
+                          {copiedId === run.run_id && (
+                            <span className="text-[9px] text-emerald-600 font-bold">Copied!</span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Benchmark Task
+                      <td className="py-3.5 px-3 font-mono font-medium text-text-primary text-xs">
+                        {run.task_id}
+                      </td> */}
+
+                      {/* Model */}
+                      <td className="py-3.5 px-2 xl:px-3 font-sans text-xs">
+                        <div
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-surface-subtle text-text-primary font-mono text-[11px] border border-border-subtle max-w-[120px] xl:max-w-[200px]"
+                          title={run.model}
+                        >
+                          <span className="truncate">{run.model}</span>
+                        </div>
+                      </td>
+
+                      {/* Duration */}
+                      <td className="py-3.5 px-2 xl:px-3 whitespace-nowrap text-text-secondary text-xs font-mono">
+                        {(run.total_duration_sec != null ? run.total_duration_sec : 0).toFixed(1)}s
+                      </td>
+
+                      {/* Actions */}
+                      <td className="py-3.5 px-2 xl:px-3 text-right whitespace-nowrap sticky right-0 bg-white/95 backdrop-blur-xs" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => onSelectRun(run.run_id)}
+                            className="h-8 px-2.5 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs"
+                          >
+                            <span>Inspect</span>
+                            <Icon icon={ArrowRight} className="text-[11px]" />
+                          </button>
+
+                          {onDeleteRun && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setRunPendingDelete(run);
+                              }}
+                              className="h-8 w-8 rounded-lg text-xs font-semibold inline-flex items-center justify-center transition-all cursor-pointer bg-white hover:bg-rose-50 border border-slate-200 text-rose-600 hover:border-rose-300 shadow-2xs"
+                              title="Delete run"
+                            >
+                              <Icon icon={Trash2} className="text-xs pointer-events-none" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* POPUP 1: Single Run Delete Confirmation Modal */}
+      {runPendingDelete && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn"
+          onClick={() => setRunPendingDelete(null)}
+        >
+          <div
+            className="bg-white rounded-2xl border border-border-subtle shadow-2xl max-w-md w-full p-6 space-y-4 font-sans"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 flex items-center justify-center flex-shrink-0">
+                <Icon icon={Trash2} className="text-xl text-rose-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-text-primary">Delete Evaluation Run?</h3>
+                <p className="text-xs text-text-secondary">This action is permanent and cannot be undone.</p>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-canvas border border-border-subtle text-xs space-y-1 font-mono">
+              <div><span className="text-text-muted">Run ID:</span> <strong className="text-text-primary">{runPendingDelete.run_id}</strong></div>
+              <div><span className="text-text-muted">Task:</span> <strong className="text-text-primary">{runPendingDelete.task_id}</strong></div>
+              <div><span className="text-text-muted">Model:</span> <strong className="text-text-primary">{runPendingDelete.model}</strong></div>
+            </div>
+
+            <p className="text-xs text-text-secondary leading-relaxed">
+              Deleting this run will permanently purge all execution trajectory turns, tool outputs, and LLM judge audit verdicts from memory and disk logs.
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-border-subtle">
+              <button
+                type="button"
+                onClick={() => setRunPendingDelete(null)}
+                className="h-9 px-3.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold shadow-2xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onDeleteRun) onDeleteRun(runPendingDelete.run_id);
+                  setRunPendingDelete(null);
+                }}
+                className="h-9 px-3.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+              >
+                Delete Run
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* POPUP 2: Batch Delete Confirmation Modal */}
+      {showBatchDeleteModal && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn"
+          onClick={() => setShowBatchDeleteModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl border border-border-subtle shadow-2xl max-w-md w-full p-6 space-y-4 font-sans"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 flex items-center justify-center flex-shrink-0">
+                <Icon icon={Trash2} className="text-xl text-rose-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-text-primary">Delete {selectedRunIds.length} Selected Runs?</h3>
+                <p className="text-xs text-text-secondary">Permanently delete the selected evaluation runs.</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-text-secondary leading-relaxed">
+              Are you sure you want to permanently delete these {selectedRunIds.length} evaluation records? This action cannot be undone.
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-border-subtle">
+              <button
+                type="button"
+                onClick={() => setShowBatchDeleteModal(false)}
+                className="h-9 px-3.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold shadow-2xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onDeleteRun) {
+                    selectedRunIds.forEach((id) => onDeleteRun(id));
+                  }
+                  setSelectedRunIds([]);
+                  setShowBatchDeleteModal(false);
+                }}
+                className="h-9 px-3.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+              >
+                Delete {selectedRunIds.length} Runs
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* POPUP 3: Clear All Confirmation Modal */}
+      {showClearAllModal && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn"
+          onClick={() => setShowClearAllModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl border border-border-subtle shadow-2xl max-w-md w-full p-6 space-y-4 font-sans"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 flex items-center justify-center flex-shrink-0">
+                <Icon icon={AlertTriangle} className="text-xl text-rose-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-text-primary">Purge All Evaluation Runs?</h3>
+                <p className="text-xs text-text-secondary">Permanently delete all {runs.length} recorded runs.</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-text-secondary leading-relaxed">
+              Are you sure you want to permanently clear all historical evaluation trajectories and logs from the system?
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-border-subtle">
+              <button
+                type="button"
+                onClick={() => setShowClearAllModal(false)}
+                className="h-9 px-3.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold shadow-2xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onClearAllRuns) onClearAllRuns();
+                  setSelectedRunIds([]);
+                  setShowClearAllModal(false);
+                }}
+                className="h-9 px-3.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+              >
+                Purge All Runs
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
